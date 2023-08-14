@@ -1,0 +1,37 @@
+name: Integration tests
+
+'on':
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.ref }}-integration-tests
+  cancel-in-progress: true
+
+
+jobs:
+  run-integration-tests:
+    name: Run integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: run servers
+        uses: isbang/compose-action@v1.5.1
+        with:
+          compose-file: "./docker-compose.yml"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Setup poetry
+        run: |
+          pip install poetry
+          poetry --version
+      - name: Run pytests
+        run: |
+          poetry run -- pytest tests
