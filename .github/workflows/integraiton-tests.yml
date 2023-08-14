@@ -17,6 +17,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+      - name: unlock git-crypt
+        run: |
+          echo "${{ secrets.GIT_CRYPT_KEY_BASE64 }}" | base64 -d > crypt.key
+          git crypt unlock crypt.key
       - name: run servers
         uses: isbang/compose-action@v1.5.1
         with:
