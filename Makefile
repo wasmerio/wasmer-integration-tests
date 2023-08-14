@@ -1,5 +1,7 @@
 all: pre-setup-checks setup
 
+test:
+	poetry run -- pytest tests
 
 setup: up wait-for-edge wait-for-backend setup-wasmer install-fixtures
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
