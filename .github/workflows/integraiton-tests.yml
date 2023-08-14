@@ -42,7 +42,7 @@ jobs:
         with:
           compose-file: "./docker-compose.yml"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Setup python environment
         uses: actions/setup-python@v4

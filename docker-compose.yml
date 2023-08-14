@@ -31,7 +31,7 @@ services:
     build:
       context: edge
       args:
-        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+        GITHUB_TOKEN: "${GH_PAT}"
     volumes:
       - "./edge/platform_config_local.yaml:/app/platform_config.yaml"
     ports:
