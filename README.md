@@ -21,7 +21,7 @@ git-crypt unlock git-crypt.key
 
 ### Run setup target
 ```bash
-make setup # this will setup everything to get you ready to run pytest
+make # this will setup everything to get you ready to run pytest
 ```
 
 
