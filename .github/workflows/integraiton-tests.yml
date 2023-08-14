@@ -17,6 +17,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+      - uses: Flydiverny/setup-git-crypt@v1
       - name: unlock git-crypt
         run: |
           echo "${{ secrets.GIT_CRYPT_KEY_BASE64 }}" | base64 -d > crypt.key
