@@ -1,6 +1,6 @@
 [package]
 name = "cypress1/test-app"
-version = "0.2.0"
+version = "0.2.5"
 description = "cypress1/test-app website"
 
 [dependencies]
