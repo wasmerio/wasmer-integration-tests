@@ -1,6 +1,8 @@
 # edge-backend-integration-test
 Integraiton tests between Edge and the backend
 
+(To run a specific tag of the backend, set the `BACKEND_IMAGE_TAG` env var. Right now, Edge always runs the build from it's latest release).
+
 
 ## Setting up the project
 
