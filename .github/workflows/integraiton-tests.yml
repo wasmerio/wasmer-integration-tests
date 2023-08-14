@@ -33,6 +33,10 @@ jobs:
         with:
           version: '410.0.0'
           project_id: wasmer
+      - name: Configure docker
+        run: |-
+          gcloud --quiet auth configure-docker
+
       - name: run servers
         uses: isbang/compose-action@v1.5.1
         with:
