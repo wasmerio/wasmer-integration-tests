@@ -22,6 +22,17 @@ jobs:
           sudo apt-get install git-crypt -y
           echo "${{ secrets.GIT_CRYPT_KEY_BASE64 }}" | base64 -d > crypt.key
           git crypt unlock crypt.key
+      - id: 'auth'
+        name: Install google cloud auth
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_KEY }}'
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          version: '410.0.0'
+          project_id: wasmer
       - name: run servers
         uses: isbang/compose-action@v1.5.1
         with:
