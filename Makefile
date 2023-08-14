@@ -37,11 +37,11 @@ install-fixtures:
 	@echo "setup static-web-server complete"
 
 	@echo "publishing test-app..."
-	cd packages/test-app && wasmer deploy --non-interactive --publish-package
+	cd packages/test-app && cp app.yaml.sample app.yaml && wasmer deploy --non-interactive --publish-package --no-wait
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl -v -H "Host: test-app.wasmer.dev" localhost:9080
+	curl -vvv -H "Host: test-app.wasmer.dev" 127.0.0.1:9080
 
 run:
 	docker-compose up
