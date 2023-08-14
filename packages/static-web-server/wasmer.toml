@@ -1,0 +1,18 @@
+[package]
+name = "cypress1/static-web-server"
+version = "1.0.4"
+description = "Serves static files in response to HTTP GET and HEAD requests."
+license = "MIT"
+repository = "https://github.com/wasmerio/static-web-server"
+wasmer-extra-flags = "--enable-threads --enable-bulk-memory"
+readme = "README.md"
+
+[[module]]
+name = "webserver"
+source = "web-server.wasm"
+abi = "wasi"
+
+[[command]]
+name = "webserver"
+module = "webserver"
+runner = "wasi@unstable_"

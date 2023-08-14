@@ -1,0 +1,43 @@
+services:
+  backend:
+    image: "gcr.io/wasmer/wapm-backend:${BACKEND_IMAGE_TAG:-latest}"
+    command: ["bash", "./docker-entrypoint.sh"]
+    env_file:
+      - backend/env
+    volumes:
+      - "./backend/backend_fixtures.json:/data/fixtures.json"
+      - "./backend/db.sqlite3:/app/db.sqlite3"
+      - "./backend/backend_entrypoint.sh:/app/docker-entrypoint.sh"
+    ports:
+      - "8080:8080"
+    environment:
+      - "DJANGO_LOG_LEVEL=INFO"
+
+  celery:
+    image: "gcr.io/wasmer/wapm-backend:${BACKEND_IMAGE_TAG:-latest}"
+    command: ["bash", "./celery-entrypoint.sh"]
+    env_file:
+      - backend/env
+    volumes:
+      - "./backend/db.sqlite3:/app/db.sqlite3"
+      - "./backend/celery_entrypoint.sh:/app/celery-entrypoint.sh"
+    environment:
+      - "DJANGO_LOG_LEVEL=INFO"
+
+  redis:
+    image: "redis:alpine"
+
+  edge:
+    build:
+      context: edge
+      args:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    volumes:
+      - "./edge/platform_config_local.yaml:/app/platform_config.yaml"
+    ports:
+      - "9080:80"
+      - "9443:443"
+      - "9053:53"
+      - "9022:22"
+      - "9050:9050"
+      - "9051:9051"

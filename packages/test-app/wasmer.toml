@@ -1,0 +1,10 @@
+[package]
+name = "cypress1/test-app"
+version = "0.2.0"
+description = "cypress1/test-app website"
+
+[dependencies]
+"cypress1/static-web-server" = "1"
+
+[fs]
+public = "public"

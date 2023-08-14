@@ -1,0 +1,7 @@
+{
+  getPackage(name:"cypress1/static-web-server") {
+    lastVersion {
+      version
+    }
+  }
+}
