@@ -1,6 +1,8 @@
 # edge-backend-integration-test
 Integraiton tests between Edge and the backend
 
+(To run a specific tag of the backend, set the `BACKEND_IMAGE_TAG` env var. Right now, Edge always runs the build from it's latest release).
+
 
 ## Setting up the project
 
@@ -21,7 +23,7 @@ git-crypt unlock git-crypt.key
 
 ### Run setup target
 ```bash
-make setup # this will setup everything to get you ready to run pytest
+make # this will setup everything to get you ready to run pytest
 ```
 
 
@@ -29,8 +31,7 @@ make setup # this will setup everything to get you ready to run pytest
 
 ```bash
 # Make sure you have python3 installed (^3.10)
-# Make sure you have poetry installed
-(https://python-poetry.org/docs/#installation)
+# Make sure you have poetry installed (https://python-poetry.org/docs/#installation)
 poetry install
 ```
 
