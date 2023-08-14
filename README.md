@@ -29,8 +29,7 @@ make # this will setup everything to get you ready to run pytest
 
 ```bash
 # Make sure you have python3 installed (^3.10)
-# Make sure you have poetry installed
-(https://python-poetry.org/docs/#installation)
+# Make sure you have poetry installed (https://python-poetry.org/docs/#installation)
 poetry install
 ```
 
