@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v3
       - name: unlock git-crypt
         run: |
-          apt-get install git-crypt -y
+          sudo apt-get install git-crypt -y
           echo "${{ secrets.GIT_CRYPT_KEY_BASE64 }}" | base64 -d > crypt.key
           git crypt unlock crypt.key
       - name: run servers
