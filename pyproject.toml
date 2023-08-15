@@ -14,6 +14,7 @@ pytest-lazy-fixtures = "1.0.1"
 pytest-depends = "1.0.1"
 requests = "^2.31.0"
 snapshottest = "^0.6.0"
+toml = "^0.10.2"
 
 
 [tool.poetry.group.dev.dependencies]

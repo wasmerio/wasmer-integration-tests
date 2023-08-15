@@ -1,6 +1,11 @@
 import os
-
+from typing import Optional
+from pprint import pprint
 import requests
+import pathlib
+import toml
+import subprocess
+import re
 
 
 def graphql_query(filename):
@@ -80,6 +85,76 @@ mutation {{
     return res["tokenAuth"]["token"]
 
 
+def get_package_latest_version(name: str) -> Optional[str]:
+    query = """
+query ($name: String!) {
+  getPackage(name: $name) {
+    lastVersion {
+      version
+    }
+  }
+}
+    """
+
+    data = run_graphql_query(
+        query, variables={"name": name}, headers=header_for_wasmer()
+    )
+    pprint(data)
+
+    if data:
+        return data.get("getPackage", {}).get("lastVersion", {}).get("version", None)
+    return None
+
+
+# Type alias
+AppHostName = str
+
+
+# Publish a package and app to the backend.
+#
+# Expects a path to a directory containing a wasmer.toml and app.yaml file.
+def deploy_app(path: pathlib.Path) -> AppHostName:
+    pkgtoml = path / "wasmer.toml"
+    appyaml = path / "app.yaml"
+
+    assert pkgtoml.is_file()
+    assert appyaml.is_file()
+
+    with open(pkgtoml, "r") as f:
+        pkg = toml.load(f)
+
+    pkg_name = pkg["package"]["name"]
+    pkg_version = pkg["package"]["version"]
+
+    with open(appyaml, "r") as f:
+        yaml_content = f.read()
+    app_name = re.search("name:(.*)", yaml_content)[1].strip()
+    if not app_name:
+        raise ValueError("Could not find app name in app.yaml")
+
+    # check if the package is already published
+    latest = get_package_latest_version(pkg_name)
+    if latest != pkg_version:
+        subprocess.run(["wasmer", "publish", path], check=True)
+
+    # execute the "wasmer" command and make sure it returns a success code
+    # TODO: check if app needs an update (compare package version)
+    subprocess.run(
+        [
+            "wasmer",
+            "deploy",
+            "--path",
+            str(path),
+            "--non-interactive",
+            "--no-wait",
+        ],
+        check=True,
+    )
+
+    host = f"{app_name}.wasmer.app"
+    return host
+
+
 def header_for_cypress1():
     return {"Authorization": f"Bearer {get_token_for_user('cypress1', 'Qwe123!@#')}"}
 
@@ -93,4 +168,6 @@ def header_for_wasmer():
 
 
 def header_for_ordinary_user():
-    return {"Authorization": f"Bearer {get_token_for_user('ordinary_user', 'Qwe123!@#')}"}
+    return {
+        "Authorization": f"Bearer {get_token_for_user('ordinary_user', 'Qwe123!@#')}"
+    }
