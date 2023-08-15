@@ -7,10 +7,4 @@ from snapshottest import Snapshot
 
 snapshots = Snapshot()
 
-snapshots['test_fetching_app 1'] = {
-    'getPackage': {
-        'lastVersion': {
-            'version': '1.0.4'
-        }
-    }
-}
+snapshots["test_fetching_app 1"] = {"getPackage": {"lastVersion": {"version": "1.0.4"}}}
