@@ -1,9 +1,9 @@
-all: pre-setup-checks setup
+all: setup
 
 test:
 	poetry run -- pytest tests
 
-setup: up wait-for-edge wait-for-backend setup-wasmer install-fixtures
+setup: pre-setup-checks install-python-depenencies up wait-for-edge wait-for-backend setup-wasmer install-fixtures
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
 	@echo "Also, the test-app is deployed and ready to be used"
 	@echo "You can now run 'make logs' to see the logs of the edge and backend"
@@ -24,6 +24,9 @@ else
 	@echo "GITHUB_TOKEN is set!"
 endif
 
+install-python-depenencies:
+	@echo "Installing python dependencies..."
+	poetry install
 
 setup-wasmer:
 	@echo "Setting up wasmer to use the local registry"
@@ -42,6 +45,13 @@ install-fixtures:
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
 	curl -vvv -H "Host: test-app.wasmer.dev" 127.0.0.1:9080
+
+	@echo "publishing wasix-echo-server..."
+	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && wasmer deploy --non-interactive --publish-package --no-wait
+	@echo "wasix-echo-server deployed!"
+
+	@echo "waiting for the first response from edge for wasix-echo-server (this may take a while)..."
+	curl -vvv -H "Host: wasix-echo-server.wasmer.dev" 127.0.0.1:9080
 
 run:
 	docker-compose up
