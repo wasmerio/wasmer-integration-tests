@@ -83,3 +83,9 @@ wait-for-edge:
 
 logs:
 	docker-compose logs -f
+
+format:
+	poetry run black -- ./tests
+
+# Alias for format
+fmt: format

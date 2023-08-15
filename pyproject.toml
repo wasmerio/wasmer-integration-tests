@@ -16,6 +16,9 @@ requests = "^2.31.0"
 snapshottest = "^0.6.0"
 
 
+[tool.poetry.group.dev.dependencies]
+black = "^23.7.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
