@@ -1,5 +1,6 @@
- # NOTE: Add static local webc packages that you want test below.
+# NOTE: Add static local webc packages that you want test below.
 static_webc:
+  []
   #- full_name: "wasmer/wasmer-sh"
   #  version: 0.2.6
   #  path: "/prog/webc/wasmer-sh-0.2.6-0bda6ea5-3f24-4cd1-a0d6-3c387b78dd70.webc"
@@ -16,13 +17,82 @@ static_webc:
   #  version: 1.0.2
   #  path: "/prog/webc/static-web-server-async-1.0.2-a34ef1c2-99f2-49c4-965f-02b5e2ce61a8.webc"
 
+confdb:
+  fixtures:
+    # Static website - wasmer-docs site
+    - kind: wasmer.io/HttpRouter.v1alpha1
+      meta:
+        name: my-router-localhost
+        annotations:
+          wasmer.io/app_id: da_ynYYILtXU03n
+          wasmer.io/app_version_id: dav_dn73Iatgu1Jn
+      spec:
+        domains:
+          - localhost
+        routes:
+          - handler:
+              spawn:
+                source: wasmer/docs@0.55.1
+
+    - kind: wasmer.io/HttpRouter.v1alpha1
+      meta:
+        name: my-router2
+        annotations:
+          wasmer.io/app_id: da_r2yGI9trU8Nn
+          wasmer.io/app_version_id: dav_pKWgIvtguO1K
+      spec:
+        domains:
+          - get.wasmer.io
+        routes:
+          - handler:
+              spawn:
+                source: wasmer/get-wasmer-io@0.5.5
+    - kind: wasmer.io/HttpRouter.v1alpha1
+      meta:
+        name: python-env-dump
+      spec:
+        domains:
+          - python-env-dump.AUTO
+        routes:
+          - handler:
+              spawn:
+                source: wasmer-tests/python-env-dump
+                capabilities:
+                  wasi:
+                    cli_args:
+                      - "/src/main.py"
+
+    - kind: wasmer.io/HttpRouter.v1alpha1
+      meta:
+        name: my-wasmer-test
+      spec:
+        domains:
+          - wasmer.test
+        routes:
+          - handler:
+              spawn:
+                source: wasmer/wasmer-sh@0.4.17
+
+  # - kind: wasmer.io/CronJob.v1-alpha1
+  #   meta:
+  #     name: my-cron
+  #   spec:
+  #     schedule: 1min
+  #     invoke:
+  #       spawn:
+  #         source: wasmer/python
+  #         capabilities:
+  #           wasi:
+  #             cli_args: ["-c", "print('hello')"]
+
 package_registries:
-  - url: https://wapm.io
-    api_endpoint: http://backend:8080/graphql
-    auth_token: null
+  - url: https://wasmer.io
+    api_endpoint: http://localhost:8080/graphql
+    auth_token: "wap_default_token"
     is_default: true
 
 module_cache:
+  {}
   # s3:
   #   endpoint: http://localhost:9000
   #   bucket: "deploy"
@@ -31,42 +101,48 @@ module_cache:
 
 auto_hostnames:
   - hostname: .app.wapm.dev
-    registry: https://wapm.io
+    registry: http://localhost:8080
     runner: WCgi
   - hostname: .proxy.wapm.dev
-    registry: https://wapm.io
+    registry: http://localhost:8080
     runner: WebProxy
   - hostname: .ws.wapm.dev
-    registry: https://wapm.dev
+    registry: http://localhost:8080
     runner: TcpProxy
 
 runtime:
   min_blocking_thread_count: 4
-  max_blocking_thread_count: 500
+  max_blocking_thread_count: 4000
   default_thread_parallelism: 2
+  enable_panic_tainting: true
 
-geo_tls: 120
+geo_ttl: 120
 
 gateway:
   limits:
-    concurrency: 1000
-    request_timeout_secs: 180
+    concurrency: 2000
+    request_timeout_secs: 140
     cname_recursive_limit: 5
-    max_backlog: 500
+    max_connection_backlog: 500
+    max_buffered_requests: 100
+    connection_ip_rate_limit:
+      per_second: 100
+      burst: 500
   acme:
     enabled: true
     # prod: https://acme-v02.api.letsencrypt.org/directory
     # test: https://acme-staging-v02.api.letsencrypt.org/directory
     # Local ACME Pebble server - https://github.com/letsencrypt/pebble
     url: https://localhost:14000/dir
-    # storage:
-    #   path_fallback: data/tls
+    storage:
+      path_fallback: data/tls
+  network_domains:
+    - domain: wasmer.network
+      registry: http://localhost:8080/graphql
+      admin_auth_token: "wap_default_token"
   deployment_domains:
     - domain: wasmer.app
-      registry: http://backend:8080/graphql
-      admin_auth_token: "wap_default_token"
-    - domain: wasmer.dev
-      registry: http://backend:8080/graphql
+      registry: http://localhost:8080/graphql
       admin_auth_token: "wap_default_token"
 
 geolite_token: "PUT_TOKEN_HERE"
@@ -96,30 +172,31 @@ socket:
   reuse_instance_socket_pool_size: 128
   # number of connections to reusable instances before they start scaling
   # out to multiple instances per node. this number should be the optimal
-  # connection count for best latest
+  # connection count for best latency
   reuse_instance_scale_out_threshold: 96
   # maximum number of permits to an instance before it starts throttling. this
   # number should be the maximum connections before degradation in performance
   # starts to kick in
-  reuse_instance_max_permits_per_instance: 128
+  reuse_instance_max_permits_per_instance: 512
   # maximum number of reusable instances per node. this number should be
   # an upper bound on density
-  reuse_instance_max_instances_per_node: 3
+  reuse_instance_max_instances_per_node: 1
   # timeout when the instance has never been connected to before
   proxy_connect_init_timeout_secs: 15
   # timeout after the instance has successfully had a connection in the past
-  proxy_connect_nominal_timeout_secs: 5
+  proxy_connect_nominal_timeout_secs: 3
   # number of attempts to make connection attempts before another
   # reusable instance is attempted
   proxy_connect_retries: 3
   proxy_send_timeout_secs: 8
-  proxy_recv_timeout_secs: 10
+  proxy_recv_timeout_secs: 20
   # Tainting will automatically shutdown instances if connection attempts
   # fail to the instance
-  enable_tainting: true
+  enable_socket_tainting: false
 
 dns_server:
   storage:
+    {}
     # path_fallback: data/dns_store
 
 metering:
@@ -129,18 +206,16 @@ metering:
   #   url: http://localhost:8123
   #   database: default
 
-
 api:
   http_port: 9050
   grpc_port: 9051
   gateway_hostname: node-api.internal.wasmer.app
 
 observability:
+  tracing: {}
 
 instance_logging:
-  default_capabilities:
-    enabled: true
-    capture_stderr: true
+  default_receiver: tracing
 
 token_public_keys:
   - |
@@ -169,23 +244,25 @@ token_public_keys:
     mwIDAQAB
     -----END PUBLIC KEY-----
 
+workloads: {}
+
 static_domains:
--
-  domain: "localhost"
-  registry: https://wasmer.io
-  namespace: wasmer
-  package: python-sh
-  runner: WebProxy
+  - domain: "localhost"
+    registry: https://wasmer.io
+    namespace: wasmer
+    package: python-sh
+    runner: WebProxy
 
 cluster:
+  default_density: 1
   regions:
-  -
-    identifier: "local"
-    region_index: 0
-    description: "devserver"
-    nodes:
-    - description: "devserver-1"
-      node_index: 0
-      global_ip4: 0.0.0.0
-      internal_ip4: 0.0.0.0
-      active: true
+    - identifier: "local"
+      region_index: 0
+      description: "devserver"
+      nodes:
+        - description: "devserver-1"
+          node_index: 0
+          global_ip4: 127.0.0.1
+          global_ip6: "::1"
+          internal_ip4: 127.0.0.1
+          active: true

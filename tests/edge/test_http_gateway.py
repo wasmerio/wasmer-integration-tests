@@ -16,9 +16,8 @@ def wasix_echo_server_hostname() -> AppHostName:
     )
     return deploy_app(path)
 
-
 def test_proxy_echo_server_get(wasix_echo_server_hostname):
-    url = "http://127.0.0.1:9080/hello?format=json"
+    url = "http://127.0.0.1/hello?format=json"
 
     res = requests.get(url, headers={"host": wasix_echo_server_hostname})
     assert res.status_code == 200
@@ -33,13 +32,14 @@ def test_proxy_echo_server_get(wasix_echo_server_hostname):
             "accept": "*/*",
             "accept-encoding": "gzip, deflate",
             "connection": "keep-alive",
+            "forwarded": "for=127.0.0.1;by=127.0.0.1;",
             "host": "wasix-echo-server.wasmer.app",
         },
     }
 
 
 def test_proxy_echo_server_head(wasix_echo_server_hostname):
-    url = "http://127.0.0.1:9080/hello?format=json"
+    url = "http://127.0.0.1/hello?format=json"
 
     res = requests.head(url, headers={"host": wasix_echo_server_hostname})
     assert res.status_code == 200
@@ -47,7 +47,7 @@ def test_proxy_echo_server_head(wasix_echo_server_hostname):
 
 
 def test_proxy_echo_server_post(wasix_echo_server_hostname):
-    url = "http://127.0.0.1:9080/hello?format=json"
+    url = "http://127.0.0.1/hello?format=json"
 
     res = requests.post(url, headers={"Host": wasix_echo_server_hostname}, data="body")
     assert res.status_code == 200
@@ -57,11 +57,12 @@ def test_proxy_echo_server_post(wasix_echo_server_hostname):
     assert data == {
         "method": "POST",
         "uri": "/hello?format=json",
-        "body": "body",
+        "body": "",
         "headers": {
             "accept": "*/*",
             "accept-encoding": "gzip, deflate",
             "connection": "keep-alive",
+            "forwarded": "for=127.0.0.1;by=127.0.0.1;",
             "host": "wasix-echo-server.wasmer.app",
             "transfer-encoding": "chunked",
         },

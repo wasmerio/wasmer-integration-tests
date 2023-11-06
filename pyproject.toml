@@ -16,10 +16,6 @@ requests = "^2.31.0"
 snapshottest = "^0.6.0"
 toml = "^0.10.2"
 
-
-[tool.poetry.group.dev.dependencies]
-black = "^23.7.0"
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

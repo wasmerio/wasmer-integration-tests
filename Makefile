@@ -1,13 +1,13 @@
 all: setup
 
 test:
-	poetry run -- pytest tests
+	poetry run -- pytest tests -vv
 
 setup: pre-setup-checks install-python-depenencies up wait-for-edge wait-for-backend setup-wasmer install-fixtures
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
 	@echo "Also, the test-app is deployed and ready to be used"
 	@echo "You can now run 'make logs' to see the logs of the edge and backend"
-	@echo "You can now run 'curl -H \"Host: test-app.wasmer.dev\" localhost:9080' to see the test-app running."
+	@echo "You can now run 'curl -H \"Host: test-app.wasmer.app\" localhost:80' to see the test-app running."
 
 pre-setup-checks:
 	@echo "Checking if docker is installed..."
@@ -16,13 +16,6 @@ pre-setup-checks:
 	@docker-compose --version
 	@echo "Checking if wasmer is installed..."
 	@wasmer --version
-	@echo "Checking if GITHUB_TOKEN env var is setup..."
-ifeq ($(GITHUB_TOKEN),)
-	@echo "GITHUB_TOKEN is not set."
-	exit 1
-else
-	@echo "GITHUB_TOKEN is set!"
-endif
 
 install-python-depenencies:
 	@echo "Installing python dependencies..."
@@ -44,14 +37,14 @@ install-fixtures:
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl -vvv -H "Host: test-app.wasmer.dev" 127.0.0.1:9080
+	curl -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
 
 	@echo "publishing wasix-echo-server..."
 	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && wasmer deploy --non-interactive --publish-package --no-wait
 	@echo "wasix-echo-server deployed!"
 
 	@echo "waiting for the first response from edge for wasix-echo-server (this may take a while)..."
-	curl -vvv -H "Host: wasix-echo-server.wasmer.dev" 127.0.0.1:9080
+	curl -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80
 
 run:
 	docker-compose up
@@ -69,15 +62,13 @@ wait-for-backend:
 	@while ! nc -z localhost 8080; do sleep 1; done
 	@echo "Waiting for backend to start accepting queries (this may take a while)..."
 	@echo "You can run 'make logs' to see the logs of the edge and backend"
-	@while ! curl -s http://localhost:8080/ > /dev/null; do \
-		sleep 1; \
-	done
+	@while ! curl -fs http://localhost:8080 --max-time 10 > /dev/null; do sleep 1; done # connect-timeout is needed, because when backend starts, first curl request gets stuck
 	@echo "Backend is up!"
 
 
 wait-for-edge:
 	@echo "Waiting for edge to start..."
-	@while ! nc -z localhost 9080; do sleep 1; done
+	@while ! nc -z localhost 80; do sleep 1; done
 	@echo "Edge started"
 
 
