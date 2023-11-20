@@ -3,7 +3,7 @@ all: setup
 test:
 	poetry run -- pytest tests -vv
 
-setup: pre-setup-checks install-python-depenencies up wait-for-edge wait-for-backend setup-wasmer install-fixtures
+setup: pre-setup-checks install-python-depenencies up wait-for-edge wait-for-backend setup-wasmer 
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
 	@echo "Also, the test-app is deployed and ready to be used"
 	@echo "You can now run 'make logs' to see the logs of the edge and backend"
@@ -33,18 +33,30 @@ install-fixtures:
 	@echo "setup static-web-server complete"
 
 	@echo "publishing test-app..."
-	cd packages/test-app && cp app.yaml.sample app.yaml && wasmer deploy --non-interactive --publish-package --no-wait
+	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --publish-package --no-wait || true)
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
+	
+	export counter=0; \
+	export max_attempts=3; \
+	until curl -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80; do \
+		[[ $$counter -eq $%max_attempts ]] && echo "test app failed"; exit 1; \
+		counter=$$((counter+1)); \
+	done;
 
 	@echo "publishing wasix-echo-server..."
-	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && wasmer deploy --non-interactive --publish-package --no-wait
+	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --publish-package --no-wait || true)
 	@echo "wasix-echo-server deployed!"
 
-	@echo "waiting for the first response from edge for wasix-echo-server (this may take a while)..."
-	curl -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80
+
+	@echo "waiting for the first response from edge for test-app (this may take a while)..."
+	export counter=0; \
+	export max_attempts=3; \
+	until curl -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80; do \
+		[[ $$counter -eq $%max_attempts ]] && echo "test app failed"; exit 1; \
+		counter=$$((counter+1)); \
+	done;
 
 run:
 	docker-compose up
