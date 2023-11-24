@@ -34,6 +34,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      minio:
+        condition: service_started
+      pebble:
+        condition: service_started
     privileged: true
     network_mode: host
     image: gcr.io/wasmer/edge:latest
@@ -51,3 +55,31 @@ services:
     environment:
       RUST_LOG: "wasmer_server=trace,wasmer_wasix=trace"
       RUST_BACKTRACE: "full"
+
+  minio:
+    image: "minio/minio"
+    command: ["server", "/data", "--address=:11000", "--console-address=:11001"]
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      # minio API
+      - "11000:11000"
+      # minio web UI
+      - "11001:11001"
+    volumes:
+      - minio-data:/data
+
+  # ACME TLS certificate issuance test server
+  # aka: local LetsEncrypt server
+  pebble:
+    image: "letsencrypt/pebble"
+    command: ["pebble", "-dnsserver", ":9053", "-config", "/config.json"]
+    volumes:
+      - "./edge/pebble-config.json:/config.json"
+    # pebble needs to be on the host network to contact the Edge server for
+    # validations.
+    network_mode: host
+
+volumes:
+  minio-data:
