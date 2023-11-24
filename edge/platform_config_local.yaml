@@ -92,11 +92,12 @@ package_registries:
     is_default: true
 
 module_cache:
-  s3:
-    endpoint: http://minio:11000
-    bucket: "deploy"
-    access_key_id: "minioadmin"
-    secret_access_key: "minioadmin"
+  {}
+  # s3:
+  #   endpoint: http://minio:11000
+  #   bucket: "deploy"
+  #   access_key_id: "minioadmin"
+  #   secret_access_key: "minioadmin"
 
 auto_hostnames:
   - hostname: .app.wapm.dev
