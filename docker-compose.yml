@@ -41,7 +41,7 @@ services:
     privileged: true
     network_mode: host
     image: gcr.io/wasmer/edge:latest
-    command: ["wasmer-edge", "serve", "-c", "/app/platform_config.yaml", "--ssh-port", "9022"] # ssh port change is needed because github runners have port 22 allocated
+    command: ["wasmer-server", "serve", "-c", "/app/platform_config.yaml", "--ssh-port", "9022"] # ssh port change is needed because github runners have port 22 allocated
     volumes:
       - "./edge/platform_config_local.yaml:/app/platform_config.yaml"
     devices:
