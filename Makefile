@@ -23,29 +23,29 @@ install-python-depenencies:
 
 setup-wasmer:
 	@echo "Setting up wasmer to use the local registry"
-	@wasmer config set registry.url http://localhost:8080
+	@wasmer config set registry.url http://localhost:8080/graphql
 	@wasmer login "wap_default_token"
 	@wasmer whoami
 
 install-fixtures:
 	@echo "publishing static-web-server..."
-	cd packages/static-web-server && wasmer publish || true
+	cd packages/static-web-server && wasmer publish --wait --registry "http://localhost:8080/graphql" || true
 	@echo "setup static-web-server complete"
 
 	@echo "publishing test-app..."
-	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --publish-package --no-wait || true)
+	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --publish-package --registry "http://localhost:8080/graphql" || true)
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80 
+	curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
 
 	@echo "publishing wasix-echo-server..."
-	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --publish-package --no-wait || true)
+	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --publish-package --registry "http://localhost:8080/graphql" || true)
 	@echo "wasix-echo-server deployed!"
 
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80 
+	curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80
 
 run:
 	docker-compose up
