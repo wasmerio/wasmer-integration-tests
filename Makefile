@@ -33,14 +33,14 @@ install-fixtures:
 	@echo "setup static-web-server complete"
 
 	@echo "publishing test-app..."
-	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --publish-package --registry "http://localhost:8080/graphql" || true)
+	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --no-wait --publish-package --registry "http://localhost:8080/graphql" || true)
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
 	curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
 
 	@echo "publishing wasix-echo-server..."
-	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --publish-package --registry "http://localhost:8080/graphql" || true)
+	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --no-wait --publish-package --registry "http://localhost:8080/graphql" || true)
 	@echo "wasix-echo-server deployed!"
 
 
