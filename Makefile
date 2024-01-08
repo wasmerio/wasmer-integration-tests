@@ -27,31 +27,46 @@ setup-wasmer:
 	@wasmer login "wap_default_token"
 	@wasmer whoami
 
-install-fixtures:
+install-static-web-server:
 	@echo "publishing static-web-server..."
-	cd packages/static-web-server && wasmer publish --wait --registry "http://localhost:8080/graphql" || true
+	@(cd packages/static-web-server && \
+	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql"  || true)
 	@echo "setup static-web-server complete"
 
+install-test-app: install-static-web-server
 	@echo "publishing test-app..."
-	cd packages/test-app && wasmer publish --wait --registry "http://localhost:8080/graphql"
-	cd packages/test-app && cp app.yaml.sample app.yaml && (wasmer deploy --non-interactive --no-wait --registry "http://localhost:8080/graphql" || true)
+	@(cd packages/test-app && \
+	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql")
+
+	@echo "deploying test-app..."
+	@(cd packages/test-app && \
+	  cp app.yaml.sample app.yaml && \
+	  wasmer deploy --non-interactive --no-wait --registry "http://localhost:8080/graphql" || true)
 	@echo "test-app deployed!"
 
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
+	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" 127.0.0.1:80
+	@echo "test-app is up!"
 
+install-wasix-echo-server: install-static-web-server
 	@echo "publishing wasix-echo-server..."
-	cd packages/wasix-echo-server && wasmer publish --wait --registry "http://localhost:8080/graphql"
-	cd packages/wasix-echo-server && cp app.yaml.sample app.yaml && (wasmer deploy -v --non-interactive --no-wait --registry "http://localhost:8080/graphql" || true)
+	@(cd packages/wasix-echo-server && \
+	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql")
+
+	@echo "deploying wasix-echo-server..."
+	@(cd packages/wasix-echo-server && \
+	  cp app.yaml.sample app.yaml && \
+	  wasmer deploy -v --non-interactive --no-wait --registry "http://localhost:8080/graphql" || true)
 	@echo "wasix-echo-server deployed!"
 
-
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80
+	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" 127.0.0.1:80
+	@echo "wasix-echo-server is up!"
+
+install-fixtures: install-test-app install-wasix-echo-server
 
 run:
 	docker-compose up
-
 
 up:
 	docker-compose up -d
