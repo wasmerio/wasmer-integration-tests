@@ -58,11 +58,12 @@ def test_proxy_echo_server_post(wasix_echo_server_hostname):
     assert data == {
         "method": "POST",
         "uri": "http://localhost/hello?format=json",
-        "body": "",
+        "body": "body",
         "headers": {
             "accept": "*/*",
             "accept-encoding": "gzip, deflate",
             "connection": "keep-alive",
+            "content-length": "4",
             "forwarded": "for=127.0.0.1;by=127.0.0.1;",
             "host": "wasix-echo-server.wasmer.app",
             "transfer-encoding": "chunked",
