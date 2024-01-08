@@ -66,6 +66,5 @@ def test_proxy_echo_server_post(wasix_echo_server_hostname):
             "content-length": "4",
             "forwarded": "for=127.0.0.1;by=127.0.0.1;",
             "host": "wasix-echo-server.wasmer.app",
-            "transfer-encoding": "chunked",
         },
     }
