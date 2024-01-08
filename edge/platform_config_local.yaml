@@ -18,6 +18,7 @@ static_webc:
   #  path: "/prog/webc/static-web-server-async-1.0.2-a34ef1c2-99f2-49c4-965f-02b5e2ce61a8.webc"
 
 confdb:
+  sync_backend: https://wasmer.io
   fixtures:
     # Static website - wasmer-docs site
     - kind: wasmer.io/HttpRouter.v1alpha1
