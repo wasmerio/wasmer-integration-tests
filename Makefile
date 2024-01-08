@@ -6,7 +6,7 @@ test:
 setup: pre-setup-checks install-python-depenencies up wait-for-edge wait-for-backend setup-wasmer install-fixtures
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
 	@echo "Also, the test-app is deployed and ready to be used"
-	@echo "You can now run 'make logs' to see the logs of the edge and backend"
+	@echo "You can now run 'make logs' to see the logs from Edge and the backend"
 	@echo "You can now run 'curl -H \"Host: test-app.wasmer.app\" localhost:80' to see the test-app running."
 
 pre-setup-checks:
