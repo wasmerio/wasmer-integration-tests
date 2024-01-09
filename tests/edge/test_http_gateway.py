@@ -16,6 +16,7 @@ def wasix_echo_server_hostname() -> AppHostName:
     )
     return deploy_app(path)
 
+
 def test_proxy_echo_server_get(wasix_echo_server_hostname):
     url = "http://127.0.0.1/hello?format=json"
 
@@ -26,7 +27,7 @@ def test_proxy_echo_server_get(wasix_echo_server_hostname):
     del data["headers"]["user-agent"]
     assert data == {
         "method": "GET",
-        "uri": "/hello?format=json",
+        "uri": "http://localhost/hello?format=json",
         "body": "",
         "headers": {
             "accept": "*/*",
@@ -56,14 +57,14 @@ def test_proxy_echo_server_post(wasix_echo_server_hostname):
     del data["headers"]["user-agent"]
     assert data == {
         "method": "POST",
-        "uri": "/hello?format=json",
-        "body": "",
+        "uri": "http://localhost/hello?format=json",
+        "body": "body",
         "headers": {
             "accept": "*/*",
             "accept-encoding": "gzip, deflate",
             "connection": "keep-alive",
+            "content-length": "4",
             "forwarded": "for=127.0.0.1;by=127.0.0.1;",
             "host": "wasix-echo-server.wasmer.app",
-            "transfer-encoding": "chunked",
         },
     }
