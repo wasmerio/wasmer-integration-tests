@@ -16,6 +16,12 @@ services:
       test: ["CMD", "curl", "-f", "localhost:8080"]
       start_period: 3m
 
+  postgres:
+    image: "postgres:15-alpine"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: wasmer
+
   celery:
     image: "gcr.io/wasmer/wapm-backend:${BACKEND_IMAGE_TAG:-latest}"
     command: ["bash", "./celery-entrypoint.sh"]
