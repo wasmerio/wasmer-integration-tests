@@ -36,7 +36,7 @@ install-static-web-server:
 install-test-app: install-static-web-server
 	@echo "publishing test-app..."
 	@(cd packages/test-app && \
-	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql")
+	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql" || true)
 
 	@echo "deploying test-app..."
 	@(cd packages/test-app && \
@@ -51,7 +51,7 @@ install-test-app: install-static-web-server
 install-wasix-echo-server: install-static-web-server
 	@echo "publishing wasix-echo-server..."
 	@(cd packages/wasix-echo-server && \
-	  wasmer publish --wait --timeout 300s --registry "http://localhost:8080/graphql")
+	  wasmer publish --wait --timeout 600s --registry "http://localhost:8080/graphql" || true)
 
 	@echo "deploying wasix-echo-server..."
 	@(cd packages/wasix-echo-server && \
