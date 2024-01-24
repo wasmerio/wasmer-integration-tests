@@ -12,6 +12,9 @@ git clone https://github.com/wasmerio/edge-backend-integration-test.git
 cd edge-backend-integration-test
 ```
 
+> [!NOTE]
+> Make sure to add your token for the registry to `.env.dev` before running tests against dev server.
+
 ### unlock git-crypt secrets
 
 Get the git-crypt key from 1password and store it  in a file called `git-crypt.key` in the root of the project.
@@ -21,24 +24,23 @@ git-crypt unlock git-crypt.key
 ```
 
 
-### Run setup target
-```bash
-make # this will setup everything to get you ready to run pytest
+## How to run tests against the dev server?
+```shell
+make setup DEV=true  # setup things to run the tests; just `make DEV=true` will also work
+make test DEV=true # run the tests on dev server
 ```
 
+> [!CAUTION]
+> `make setup DEV=true` changes the `wasmer.toml` and `app.yaml` files for packages in `packages/` directory.
+> So running local tests right after running tests on dev breaks. To fix, run `make clear` before running local tests.
 
-### Install and setup pytest
-
-```bash
-# Make sure you have python3 installed (^3.10)
-# Make sure you have poetry installed (https://python-poetry.org/docs/#installation)
-poetry install
+## How to run tests locally?
+```shell
+make setup
+make test
 ```
 
-Finally, you can run the pytest tests with:
-```bash
-make test  # make sure docker-compose is running
-```
+config vars for dev and local are in `.env.dev` and `.env.local` respectively.
 
 
 ### Stopping the servers
