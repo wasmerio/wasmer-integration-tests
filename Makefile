@@ -26,6 +26,8 @@ BYPASS_EDGE ?=
 BYPASS_SWE ?=
 
 
+all: setup
+
 test:
 	@export $$(cat .env.$(TEST_ENV) | xargs) && poetry run -- pytest tests -vv
 
