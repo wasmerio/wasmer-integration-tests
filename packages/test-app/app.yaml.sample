@@ -1,6 +1,0 @@
-# Sample file is used because `wasmer deploy` will inject the app id into the
-# file, which will mess up testing.
----
-kind: wasmer.io/App.v0
-name: test-app
-package: cypress1/test-app@0.2.0
