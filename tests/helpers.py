@@ -4,8 +4,16 @@ from pprint import pprint
 import requests
 import pathlib
 import toml
+import yaml
 import subprocess
 import re
+
+REGISTRY_HOST = os.environ.get("REGISTRY_HOST", "127.0.0.1")
+REGISTRY_PORT = os.environ.get("REGISTRY_PORT", "8080")
+REGISTRY_SCHEME = os.environ.get("REGISTRY_SCHEME", "http")
+registry = os.environ.get(
+    "REGISTRY", f"{REGISTRY_SCHEME}://{REGISTRY_HOST}:{REGISTRY_PORT}/graphql"
+)
 
 
 def graphql_query(filename):
@@ -21,7 +29,7 @@ def graphql_query(filename):
 
 def run_graphql_query(
     query,
-    url="http://localhost:8080/graphql",
+    url=registry,
     variables=None,
     headers=None,
 ):
@@ -97,7 +105,7 @@ query ($name: String!) {
     """
 
     data = run_graphql_query(
-        query, variables={"name": name}, headers=header_for_wasmer()
+        query, variables={"name": name}, headers=header_for_cypress1()
     )
     pprint(data)
 
@@ -127,8 +135,12 @@ def deploy_app(path: pathlib.Path) -> AppHostName:
     pkg_version = pkg["package"]["version"]
 
     with open(appyaml, "r") as f:
-        yaml_content = f.read()
-    app_name = re.search("name:(.*)", yaml_content)[1].strip()
+        yaml_data = yaml.load(f, yaml.Loader)
+    app_name = yaml_data.get("name")
+    if "app_id" in yaml_data.keys():
+        yaml_data.pop("app_id")
+    with open(appyaml, "w") as f:
+        yaml.dump(yaml_data, f)
     if not app_name:
         raise ValueError("Could not find app name in app.yaml")
 
