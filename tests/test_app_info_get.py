@@ -1,11 +1,11 @@
 from subprocess import check_call, check_output, run
 from shlex import split
 from yaml import safe_load
-from time import time_ns
 from re import search, MULTILINE
+from uuid import uuid4
 
 def test_app_info_get(tmpdir):
-    app_name = f"test_app_info_get-{time_ns()}"
+    app_name = f"app-info-get-{uuid4()}"
     app_create_output = run(split(f"wasmer app create --non-interactive --type http --package cypress1/test-app@0.2.0 --owner cypress1 --name {app_name} --no-wait"), cwd=tmpdir, capture_output=True).stderr.decode()
 
     app_url = search("App URL: (.*)", app_create_output, flags=MULTILINE).group(1)
