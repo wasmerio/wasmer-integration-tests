@@ -62,10 +62,20 @@ services:
       - "NET_ADMIN"
       - "NET_RAW"
       - "NET_BIND_SERVICE"
-    environment:
-      RUST_LOG: "wasmer_server=trace,wasmer_wasix=trace"
-      RUST_BACKTRACE: "full"
+    # environment:
+      # RUST_LOG: "wasmer_server=trace,wasmer_wasix=trace"
+      # RUST_BACKTRACE: "full"
 
+  loki: 
+    image: grafana/loki
+    ports: 
+    - 3100:3100
+
+  vector: 
+    image: timberio/vector:0.35.0-debian
+    volumes: ["./vector.yaml:/etc/vector/vector.yaml"]
+    ports: 
+      - "9089:9089"
   # minio:
   #   image: "minio/minio"
   #   command: ["server", "/data", "--address=:11000", "--console-address=:11001"]

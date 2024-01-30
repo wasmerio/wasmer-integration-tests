@@ -216,7 +216,19 @@ observability:
   tracing: {}
 
 instance_logging:
-  default_receiver: tracing
+  default_receiver: 
+    vector_http:
+      endpoint: "http://127.0.0.1:9089"
+
+workloads:
+  default_capabilities:
+    memory:
+      limit: 256Mb
+    logging:
+      enabled: true
+      capture_stdout: true
+      capture_stderr: true
+      capture_trap: true
 
 token_public_keys:
   - |
@@ -244,8 +256,6 @@ token_public_keys:
     cKWTjpBP2dPwVZ4WWC+9aGVd+Gyn1o0CLelf4rEjGoXbAAEgAqeGUxrcIlbjXfbc
     mwIDAQAB
     -----END PUBLIC KEY-----
-
-workloads: {}
 
 static_domains:
   - domain: "localhost"
