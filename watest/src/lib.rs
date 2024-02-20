@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::path::{Path, PathBuf};
 
 use wasmer_api::backend::BackendClient;
