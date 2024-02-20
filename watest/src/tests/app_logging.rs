@@ -1,7 +1,7 @@
 use futures::stream::TryStreamExt;
 use test_log;
 
-use watest::{api_client, ensure_clean_dir, http_client, test_app_tmp_dir, test_namespace};
+use crate::{api_client, ensure_clean_dir, http_client, test_app_tmp_dir, test_namespace};
 
 #[test_log::test(tokio::test)]
 async fn test_python_logging() {
@@ -19,37 +19,37 @@ async fn test_python_logging() {
 
     tracing::debug!(local_path=%dir.display(), "creating app with cli");
 
-        let status = std::process::Command::new("wasmer")
-            .args(&[
-                "app",
-                "create",
-                "-t",
-                "py-application",
-                "--non-interactive",
-                "--offline",
-                "--owner",
-                &namespace,
-                "--new-package-name",
-                &name,
-                "--name",
-                &name,
-                "--path",
-                dir.to_str().unwrap(),
-            ])
-            .spawn()
-            .expect("Failed to invoke 'wasmer app create'")
-            .wait()
-            .expect("'wasmer app create' command failed");
-        if !status.success() {
-            panic!(
-                "'wasmer app create' command failed with status: {:?}",
-                status
-            );
-        }
+    let status = std::process::Command::new("wasmer")
+        .args(&[
+            "app",
+            "create",
+            "-t",
+            "py-application",
+            "--non-interactive",
+            "--offline",
+            "--owner",
+            &namespace,
+            "--new-package-name",
+            &name,
+            "--name",
+            &name,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .spawn()
+        .expect("Failed to invoke 'wasmer app create'")
+        .wait()
+        .expect("'wasmer app create' command failed");
+    if !status.success() {
+        panic!(
+            "'wasmer app create' command failed with status: {:?}",
+            status
+        );
+    }
 
-        // Update the code to add some logging.
+    // Update the code to add some logging.
 
-        let code = r#"
+    let code = r#"
     import os
     import json
     import urllib.parse
@@ -90,24 +90,24 @@ async fn test_python_logging() {
         server.serve_forever()
         "#;
 
-        fs_err::write(&main_py, code).expect("Failed to write to main.py");
+    fs_err::write(&main_py, code).expect("Failed to write to main.py");
 
-        let status = std::process::Command::new("wasmer")
-            .args(&[
-                "deploy",
-                "--publish-package",
-                "--no-persist-id",
-                "--path",
-                dir.to_str().unwrap(),
-            ])
-            .spawn()
-            .expect("Failed to invoke 'wasmer deploy'")
-            .wait()
-            .expect("'wasmer deploy' command failed");
+    let status = std::process::Command::new("wasmer")
+        .args(&[
+            "deploy",
+            "--publish-package",
+            "--no-persist-id",
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .spawn()
+        .expect("Failed to invoke 'wasmer deploy'")
+        .wait()
+        .expect("'wasmer deploy' command failed");
 
-        if !status.success() {
-            panic!("'wasmer deploy' command failed with status: {:?}", status);
-        }
+    if !status.success() {
+        panic!("'wasmer deploy' command failed with status: {:?}", status);
+    }
 
     // Query the app.
 
