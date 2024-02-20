@@ -21,15 +21,21 @@ REGISTRY_PORT ?= 8080
 
 REGISTRY_ENDPOINT ?= "/graphql"
 REGISTRY ?= $(REGISTRY_SCHEME)://$(REGISTRY_HOST):$(REGISTRY_PORT)$(REGISTRY_ENDPOINT)
+WASMER_REGISTRY ?= $(REGISTRY_SCHEME)://$(REGISTRY_HOST):$(REGISTRY_PORT)$(REGISTRY_ENDPOINT)
 TOKEN ?= "wap_default_token"
+WASMER_TOKEN ?= "wap_default_token"
 BYPASS_EDGE ?=
 BYPASS_SWE ?=
 
 
 all: setup
 
-test:
+test: test-rust
 	@export $$(cat .env.$(TEST_ENV) | xargs) && poetry run -- pytest tests -vv
+
+test-rust:
+	@export $$(cat .env.$(TEST_ENV) | xargs) && cd watest && RUST_LOG=logging=trace,info cargo test
+
 
 setup: $(SETUP_PREREQ)
 	@echo "both backend and edge are up, and wasmer is configured to use the local registry"
