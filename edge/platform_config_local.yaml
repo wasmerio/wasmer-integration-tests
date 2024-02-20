@@ -167,7 +167,7 @@ socket:
   # the amount of time to keep the last instance active before its shutdown
   # which will cause everything including its module to be unloaded. higher
   # values here will reduce latency but increase memory pressure
-  reuse_last_instance_ttl_secs: 300
+  reuse_last_instance_ttl_secs: 30
   # connections are reused when calling instances with a maximum pool
   # size that prevents them from being overloaded excessively
   reuse_instance_socket_pool_size: 128
