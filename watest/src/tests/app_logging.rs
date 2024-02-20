@@ -114,7 +114,7 @@ async fn test_python_logging() {
 
     // Query the app.
 
-    let app = wasmer_api::backend::get_app(&client, namespace.clone(), name.clone())
+    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
         .await
         .expect("could not query app")
         .expect("queried app is None");
@@ -136,7 +136,7 @@ async fn test_python_logging() {
         .error_for_status()
         .expect("Failed to get response");
 
-    let stream = wasmer_api::backend::get_app_logs_paginated(
+    let stream = wasmer_api::query::get_app_logs_paginated(
         &client,
         name.clone(),
         namespace.clone(),

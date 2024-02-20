@@ -48,7 +48,7 @@ async fn test_app_creation_and_deletion_through_cli() {
 
     // Query the app.
 
-    let app = wasmer_api::backend::get_app(&client, namespace.clone(), name.clone())
+    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
         .await
         .expect("could not query app")
         .expect("queried app is None");
@@ -160,7 +160,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
     }
 
     // Query the app.
-    let app = wasmer_api::backend::get_app(&client, namespace.clone(), name.clone())
+    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
         .await
         .expect("could not query app")
         .expect("queried app is None");
