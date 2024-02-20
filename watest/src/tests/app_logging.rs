@@ -1,7 +1,7 @@
 use futures::stream::TryStreamExt;
 use test_log;
 
-use crate::{api_client, ensure_clean_dir, http_client, test_app_tmp_dir, test_namespace};
+use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace};
 
 #[test_log::test(tokio::test)]
 async fn test_python_logging() {
@@ -13,8 +13,7 @@ async fn test_python_logging() {
     // Create Python app.
     let client = api_client();
 
-    let dir = test_app_tmp_dir().join(&name);
-    ensure_clean_dir(&dir).expect("Failed to ensure clean dir");
+    let dir = build_clean_test_app_dir(&name);
     let main_py = dir.join("src/main.py");
 
     tracing::debug!(local_path=%dir.display(), "creating app with cli");
@@ -89,6 +88,10 @@ async fn test_python_logging() {
         print(f"Starting server on http://{host}:{port}")
         server.serve_forever()
         "#;
+
+    if !main_py.exists() {
+        panic!("main.py does not exist: {}", main_py.display());
+    }
 
     fs_err::write(&main_py, code).expect("Failed to write to main.py");
 
