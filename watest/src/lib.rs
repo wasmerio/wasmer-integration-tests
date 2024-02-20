@@ -1,4 +1,4 @@
-mod util;
+pub mod util;
 
 #[cfg(test)]
 mod tests;
