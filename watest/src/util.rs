@@ -28,6 +28,11 @@ pub fn test_namespace() -> String {
     std::env::var("WASMER_TEST_NAMESPACE").unwrap_or_else(|_| "wasmer-tests".to_string())
 }
 
+// Create a clean directory for a test app.
+// Will purge the directory if it already exists.
+//
+// NOTE: not using tempfile::tempdir to make it easier to inspect the directory
+// if tests fail.
 pub fn build_clean_test_app_dir(name: &str) -> PathBuf {
     let dir = test_app_tmp_dir().join(name);
     ensure_clean_dir(&dir).expect("Failed to ensure clean dir");
@@ -117,14 +122,11 @@ pub async fn mirror_package(
 
     // Extract.
     tracing::debug!(path=%tmp_dir.display(), "Extracting package archive");
-    let status = std::process::Command::new("tar")
+    std::process::Command::new("tar")
         .args(&["-xzf", archive_path.to_str().unwrap()])
         .current_dir(&tmp_dir)
-        .status()
-        .context("Failed to extract package archive")?;
-    if !status.success() {
-        bail!("Failed to extract package archive");
-    }
+        .status_success()
+        .unwrap();
 
     let wapm_path = tmp_dir.join("wapm.toml");
     if wapm_path.exists() {
@@ -176,5 +178,31 @@ pub async fn mirror_package(
         }
 
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+pub trait CommandExt {
+    /// Run the command and return an error if the result status is not 0.
+    fn status_success(&mut self) -> Result<(), std::io::Error>;
+}
+
+impl CommandExt for std::process::Command {
+    fn status_success(&mut self) -> Result<(), std::io::Error> {
+        let status = self.status()?;
+        if !status.success() {
+            let cmd = self.get_program().to_string_lossy();
+            let args = self
+                .get_args()
+                .map(|a| a.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Command '{cmd} {args}' failed with status: {:?}", status),
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
