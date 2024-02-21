@@ -1,6 +1,6 @@
 use test_log;
 
-use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace};
+use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace, CommandExt};
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
 #[test_log::test(tokio::test)]
@@ -237,4 +237,100 @@ async fn test_cli_app_create_and_delete() {
             break;
         }
     }
+}
+
+#[test_log::test(tokio::test)]
+async fn test_cli_app_with_private_package() {
+    let name = format!(
+        "test-appprivpkg-{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")
+    );
+    let namespace = test_namespace();
+
+    // Create static site app.
+    let client = api_client();
+
+    let dir = build_clean_test_app_dir(&name);
+
+    tracing::debug!(local_path=%dir.display(), "creating app with cli");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "app",
+            "create",
+            "-t",
+            "static-website",
+            "--non-interactive",
+            "--offline",
+            "--owner",
+            &namespace,
+            "--new-package-name",
+            &name,
+            "--name",
+            &name,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    // Mark package as private.
+
+    let toml_path = dir.join("wasmer.toml");
+    let toml_contents = fs_err::read_to_string(&toml_path).expect("Failed to read wasmer.toml");
+    let mut manifest =
+        toml::from_str::<toml::Value>(&toml_contents).expect("Failed to parse wasmer.toml");
+    manifest
+        .get_mut("package")
+        .expect("no 'package' in toml")
+        .as_table_mut()
+        .expect("package is not a table")
+        .insert("private".to_string(), toml::Value::Boolean(true));
+    let toml_contents = toml::to_string(&manifest).expect("Failed to serialize wasmer.toml");
+    fs_err::write(&toml_path, toml_contents).expect("Failed to write wasmer.toml");
+
+    // Now publish.
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "deploy",
+            "--publish-package",
+            "--no-persist-id",
+            "--owner",
+            &namespace,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    let full_pkg_name = format!("{}/{}", namespace, name);
+
+    // Query the package, make sure it is private.
+    let pkg = wasmer_api::query::get_package(&client, full_pkg_name)
+        .await
+        .expect("could not query package")
+        .expect("queried package is None");
+    assert_eq!(pkg.private, true, "package should be private");
+
+    // Query the app.
+
+    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
+        .await
+        .expect("could not query app")
+        .expect("queried app is None");
+    tracing::debug!("app deployed, sending request");
+
+    let url = app
+        .url
+        .parse::<url::Url>()
+        .expect("Failed to parse app URL");
+
+    let _res = http_client()
+        .get(url.clone())
+        .send()
+        .await
+        .expect("Failed to send request")
+        .error_for_status()
+        .expect("Failed to get response");
 }
