@@ -334,3 +334,134 @@ async fn test_cli_app_with_private_package() {
         .error_for_status()
         .expect("Failed to get response");
 }
+
+/// Test the output of CLI `wasmer app {get,info}`.
+#[test_log::test(tokio::test)]
+async fn test_cli_app_get_and_info() {
+    let name = format!("test-app-cli-info",);
+    let namespace = test_namespace();
+
+    // Create static site app.
+    let client = api_client();
+
+    let dir = build_clean_test_app_dir(&name);
+
+    tracing::debug!(local_path=%dir.display(), "creating app with cli");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "app",
+            "create",
+            "-t",
+            "static-website",
+            "--non-interactive",
+            "--owner",
+            &namespace,
+            "--new-package-name",
+            &name,
+            "--name",
+            &name,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    // Query the app.
+
+    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
+        .await
+        .expect("could not query app")
+        .expect("queried app is None");
+    tracing::debug!("app deployed, sending request");
+
+    let full_name = format!("{}/{}", namespace, name);
+
+    // Check "wasmer app info"
+
+    // With full name.
+    let info_output = std::process::Command::new("wasmer")
+        .args(&["app", "info", &full_name])
+        .output_success()
+        .unwrap();
+
+    // With id.
+    let info_output2 = std::process::Command::new("wasmer")
+        .args(&["app", "info", &app.id.clone().into_inner()])
+        .output_success()
+        .unwrap();
+
+    assert_eq!(
+        info_output.stdout, info_output2.stdout,
+        "info output should be the same for full name and id",
+    );
+
+    dbg!(&info_output);
+    assert!(
+        info_output.stdout.contains(&name),
+        "info output should contain the app name",
+    );
+    assert!(
+        info_output.stdout.contains(&name),
+        "info output should contain the app name",
+    );
+
+    // Check "wasmer app get" with default format
+
+    // With full name.
+    let get_output = std::process::Command::new("wasmer")
+        .args(&["app", "get", &full_name])
+        .output_success()
+        .expect("could not run 'wasmer app get'");
+    dbg!(&get_output);
+
+    // With id.
+    let get_output2 = std::process::Command::new("wasmer")
+        .args(&["app", "get", &app.id.clone().into_inner()])
+        .output_success()
+        .expect("could not run 'wasmer app get'");
+    assert_eq!(
+        get_output.stdout, get_output2.stdout,
+        "get output should be the same for full name and id",
+    );
+
+    assert!(
+        get_output.stdout.contains(&name),
+        "get output should contain the app name",
+    );
+    assert!(
+        get_output.stdout.contains(&namespace),
+        "get output should contain the app namespace",
+    );
+
+    // Check "wasmer app get" with JSON format
+
+    let get_output_json = std::process::Command::new("wasmer")
+        .args(&["app", "get", "-f", "json", &full_name])
+        .output_success()
+        .expect("could not run 'wasmer app get'");
+    assert!(
+        get_output.stdout.contains(&name),
+        "get output should contain the app name",
+    );
+    assert!(
+        get_output.stdout.contains(&namespace),
+        "get output should contain the app namespace",
+    );
+
+    let json = serde_json::from_str::<serde_json::Value>(&get_output_json.stdout)
+        .expect("could not parse 'wasmer app get' output as JSON");
+
+    assert_eq!(
+        json.get("id"),
+        Some(serde_json::Value::String(app.id.into_inner())).as_ref(),
+    );
+    assert_eq!(
+        json.get("name"),
+        Some(serde_json::Value::String(name.clone())).as_ref(),
+    );
+    assert_eq!(
+        json.pointer("/owner/global_name"),
+        Some(serde_json::Value::String(namespace.clone())).as_ref(),
+    );
+}

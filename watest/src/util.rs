@@ -184,6 +184,15 @@ pub async fn mirror_package(
 pub trait CommandExt {
     /// Run the command and return an error if the result status is not 0.
     fn status_success(&mut self) -> Result<(), std::io::Error>;
+
+    fn output_success(&mut self) -> Result<CommandOutput, std::io::Error>;
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct CommandOutput {
+    pub status: std::process::ExitStatus,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 impl CommandExt for std::process::Command {
@@ -203,6 +212,36 @@ impl CommandExt for std::process::Command {
             ))
         } else {
             Ok(())
+        }
+    }
+
+    fn output_success(&mut self) -> Result<CommandOutput, std::io::Error> {
+        let output = self.output()?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        if !output.status.success() {
+            let cmd = self.get_program().to_string_lossy();
+            let args = self
+                .get_args()
+                .map(|a| a.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Command '{cmd} {args}' failed with status: {:?}\nSTDOUT: {}\n\nSTDERR: {}",
+                    output.status, stdout, stderr,
+                ),
+            ))
+        } else {
+            Ok(CommandOutput {
+                status: output.status,
+                stdout,
+                stderr,
+            })
         }
     }
 }
