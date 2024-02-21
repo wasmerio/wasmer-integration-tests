@@ -2257,6 +2257,7 @@ dependencies = [
  "fs-err",
  "futures",
  "reqwest",
+ "serde_json",
  "test-log",
  "time",
  "tokio",
