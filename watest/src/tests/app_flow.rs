@@ -465,3 +465,98 @@ async fn test_cli_app_get_and_info() {
         Some(serde_json::Value::String(namespace.clone())).as_ref(),
     );
 }
+
+#[test_log::test(tokio::test)]
+async fn test_app_python_wcgi() {
+    let name = format!("test-app-cli-info",);
+    let namespace = test_namespace();
+    let dir = build_clean_test_app_dir(&name);
+
+    let pkg_manifest = format!(
+        r#"
+[package]
+name = "{namespace}/{name}"
+version = "0.1.0"
+description = "WCGI test"
+
+[dependencies]
+"wasmer/python" = "^3.12.6"
+
+[fs]
+"/src" = "./src"
+
+[[command]]
+name = "script"
+module = "wasmer/python:python"
+runner = "https://webc.org/runner/wcgi"
+[command.annotations.wasi]
+main-args = ["/src/main.py"]
+    "#
+    );
+
+    std::fs::write(dir.join("wasmer.toml"), pkg_manifest).expect("Failed to write wasmer.toml");
+
+    let app_yaml = format!(
+        r#"
+kind: wasmer.io/App.v0
+name: {namespace}-{name}
+package: {namespace}/{name}
+cli_args:
+  - /src/main.py
+debug: false
+    "#
+    );
+
+    std::fs::write(dir.join("app.yaml"), app_yaml).expect("Failed to write app.yaml");
+
+    let main_py = r#"
+print("HTTP/1.1 200 OK\r")
+print("Content-Type: text/html\r")
+print("\r")
+print("<html><body><h1>Hello, World!</h1></body></html>\r")
+print("\r")
+    "#;
+
+    let src_dir = dir.join("src");
+    std::fs::create_dir(&src_dir).expect("Failed to create src dir");
+    std::fs::write(src_dir.join("main.py"), main_py).expect("Failed to write main.py");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "deploy",
+            "--publish-package",
+            "--no-persist-id",
+            "--owner",
+            &namespace,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    let app = wasmer_api::query::get_app(&api_client(), namespace.clone(), name.clone())
+        .await
+        .expect("could not query app")
+        .expect("queried app is None");
+
+    let url = app
+        .url
+        .parse::<url::Url>()
+        .expect("Failed to parse app URL");
+
+    let body = http_client()
+        .get(url.clone())
+        .send()
+        .await
+        .expect("Failed to send request")
+        .error_for_status()
+        .expect("Failed to get response")
+        .text()
+        .await
+        .expect("Failed to get response body");
+
+    assert!(
+        body.contains("Hello, World!"),
+        "response should contain 'Hello, World!'"
+    );
+}
