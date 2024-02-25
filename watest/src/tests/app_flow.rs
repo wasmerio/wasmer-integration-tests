@@ -531,3 +531,108 @@ print("\r")
         "response should contain 'Hello, World!'"
     );
 }
+
+// Make sure "wasmer deploy" works even if the package version in wasmer.toml
+// is outdated.
+// The command is expected to auto-bump the package version based on the current
+// version.
+#[test_log::test(tokio::test)]
+async fn test_deploy_app_with_outdated_wasmer_toml_package_version() {
+    let name = format!(
+        "outdatedpkg-{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")
+    );
+    let namespace = test_namespace();
+    let dir = build_clean_test_app_dir(&name);
+
+    let toml_path = dir.join("wasmer.toml");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "app",
+            "create",
+            "-t",
+            "static-website",
+            "--non-interactive",
+            "--owner",
+            &namespace,
+            "--new-package-name",
+            &name,
+            "--name",
+            &name,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .expect("Failed to invoke 'wasmer app create'");
+
+    let original_manifest = fs_err::read_to_string(&toml_path).expect("Failed to read wasmer.toml");
+
+    // Replace the version with an outdated one.
+    let mut parsed = toml::from_str::<toml::Value>(&original_manifest)
+        .expect("Failed to parse wasmer.toml as TOML");
+    parsed
+        .get_mut("package")
+        .unwrap()
+        .as_table_mut()
+        .unwrap()
+        .insert("version".to_string(), "33.2.7".into());
+    let new_manifest = toml::to_string(&parsed).expect("Failed to serialize wasmer.toml");
+    fs_err::write(dir.join("wasmer.toml"), new_manifest).expect("Failed to write wasmer.toml");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "deploy",
+            "--publish-package",
+            "--no-persist-id",
+            "--owner",
+            &namespace,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    let pkg = wasmer_api::query::get_package_version(
+        &api_client(),
+        format!("{}/{}", namespace, name),
+        "*".to_string(),
+    )
+    .await
+    .expect("could not query package")
+    .expect("queried package is None");
+    assert_eq!(
+        pkg.version, "0.1.1",
+        "package version should be updated to the latest"
+    );
+
+    // And try again.
+
+    fs_err::write(&toml_path, original_manifest).expect("Failed to write wasmer.toml");
+
+    std::process::Command::new("wasmer")
+        .args(&[
+            "deploy",
+            "--publish-package",
+            "--no-persist-id",
+            "--owner",
+            &namespace,
+            "--path",
+            dir.to_str().unwrap(),
+        ])
+        .status_success()
+        .unwrap();
+
+    let pkg = wasmer_api::query::get_package_version(
+        &api_client(),
+        format!("{}/{}", namespace, name),
+        "*".to_string(),
+    )
+    .await
+    .expect("could not query package")
+    .expect("queried package is None");
+    assert_eq!(
+        pkg.version, "0.1.2",
+        "package version should be updated to the latest"
+    );
+}
