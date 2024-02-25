@@ -18,7 +18,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
 
     tracing::debug!(local_path=%dir.display(), "creating app with cli");
 
-    let status = std::process::Command::new("wasmer")
+    std::process::Command::new("wasmer")
         .args(&[
             "app",
             "create",
@@ -34,16 +34,8 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
             "--path",
             dir.to_str().unwrap(),
         ])
-        .spawn()
-        .expect("Failed to invoke 'wasmer app create'")
-        .wait()
-        .expect("'wasmer app create' command failed");
-    if !status.success() {
-        panic!(
-            "'wasmer app create' command failed with status: {:?}",
-            status
-        );
-    }
+        .status_success()
+        .expect("Failed to invoke 'wasmer app create'");
 
     let html_path = dir.join("public").join("index.html");
     if !html_path.exists() {
@@ -86,7 +78,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
         let content = format!("v{}", index);
         std::fs::write(&html_path, &content).expect("Failed to write to index.html");
 
-        let status = std::process::Command::new("wasmer")
+        std::process::Command::new("wasmer")
             .args(&[
                 "deploy",
                 "--publish-package",
@@ -94,13 +86,8 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
                 "--path",
                 dir.to_str().unwrap(),
             ])
-            .spawn()
-            .expect("Failed to invoke 'wasmer deploy'")
-            .wait()
-            .expect("'wasmer deploy' command failed");
-        if !status.success() {
-            panic!("'wasmer deploy' command failed with status: {:?}", status);
-        }
+            .status_success()
+            .expect("Failed to invoke 'wasmer deploy'");
 
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -147,7 +134,7 @@ async fn test_cli_app_create_and_delete() {
 
     tracing::debug!(local_path=%dir.display(), "creating app with cli");
 
-    let status = std::process::Command::new("wasmer")
+    std::process::Command::new("wasmer")
         .args(&[
             "app",
             "create",
@@ -163,16 +150,8 @@ async fn test_cli_app_create_and_delete() {
             "--path",
             dir.to_str().unwrap(),
         ])
-        .spawn()
-        .expect("Failed to invoke 'wasmer app create'")
-        .wait()
-        .expect("'wasmer app create' command failed");
-    if !status.success() {
-        panic!(
-            "'wasmer app create' command failed with status: {:?}",
-            status
-        );
-    }
+        .status_success()
+        .expect("Failed to invoke 'wasmer app create'");
 
     // Query the app.
 
@@ -196,23 +175,15 @@ async fn test_cli_app_create_and_delete() {
         .expect("Failed to get response");
 
     // Delete the app.
-    let status = std::process::Command::new("wasmer")
+    std::process::Command::new("wasmer")
         .args(&[
             "app",
             "delete",
             "--non-interactive",
             format!("{}/{}", namespace, name).as_str(),
         ])
-        .spawn()
-        .expect("Failed to invoke 'wasmer app delete'")
-        .wait()
-        .expect("'wasmer app delete' command failed");
-    if !status.success() {
-        panic!(
-            "'wasmer app delete' command failed with status: {:?}",
-            status
-        );
-    }
+        .status_success()
+        .expect("Failed to invoke 'wasmer app delete'");
 
     // Wait for app to stop working.
     loop {

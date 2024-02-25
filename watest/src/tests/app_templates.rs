@@ -1,6 +1,6 @@
 use test_log;
 
-use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace};
+use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace, CommandExt};
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
 #[test_log::test(tokio::test)]
@@ -31,7 +31,7 @@ async fn test_cli_app_create_winterjs() {
 
     tracing::debug!(local_path=%dir.display(), "creating app with cli");
 
-    let status = std::process::Command::new("wasmer")
+    std::process::Command::new("wasmer")
         .args(&[
             "app",
             "create",
@@ -47,16 +47,8 @@ async fn test_cli_app_create_winterjs() {
             "--path",
             dir.to_str().unwrap(),
         ])
-        .spawn()
-        .expect("Failed to invoke 'wasmer app create'")
-        .wait()
-        .expect("'wasmer app create' command failed");
-    if !status.success() {
-        panic!(
-            "'wasmer app create' command failed with status: {:?}",
-            status
-        );
-    }
+        .status_success()
+        .expect("Failed to invoke 'wasmer app create'");
 
     // Query the app.
     let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
