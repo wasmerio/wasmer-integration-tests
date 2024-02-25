@@ -33,8 +33,13 @@ pub fn test_namespace() -> String {
 //
 // NOTE: not using tempfile::tempdir to make it easier to inspect the directory
 // if tests fail.
-pub fn build_clean_test_app_dir(name: &str) -> PathBuf {
-    let dir = test_app_tmp_dir().join(name);
+pub fn build_clean_test_app_dir(test_name: &str) -> PathBuf {
+    if test_name.len() > 50 {
+        panic!(
+            "name '{test_name}' too long - the backend limits package/app names to length of 50"
+        );
+    }
+    let dir = test_app_tmp_dir().join(test_name);
     ensure_clean_dir(&dir).expect("Failed to ensure clean dir");
     dir
 }
