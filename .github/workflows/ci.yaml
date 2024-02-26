@@ -1,0 +1,58 @@
+name: "Edge↔Backend Integration tests"
+'on':
+  push:
+    branches:
+      - '**'
+
+# Automatically cancel previous workflow runs when a new commit is pushed.
+concurrency:
+  group: ${{ github.ref }}-integration-test
+  cancel-in-progress: true
+
+jobs:
+  integration-test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v3
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_KEY }}'
+      - uses: google-github-actions/setup-gcloud@v1
+        with:
+          version: '410.0.0'
+          project_id: ${{ secrets.GKE_PROJECT }}
+      - run: |-
+          gcloud --quiet auth configure-docker
+      - name: Setup python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Setup poetry
+        run: |
+          pip install poetry
+          poetry --version
+      - name: Setup Wasmer
+        uses: wasmerio/setup-wasmer@v2
+
+      - name: unlock backend with git-crypt
+        run: |
+          sudo apt install -y git-crypt
+          echo $GIT_CRYPT_KEY | base64 -d > git-crypt.key
+          git crypt unlock git-crypt.key
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY_BASE64 }}
+
+      - name: setup intergation tests
+        run: |
+          make
+
+      - name: Run intergation tests
+        run: |
+          make test
+        env:
+          WASMER_TOKEN: wap_default_token
+          WASMER_REGISTRY: "http://localhost:8000/graphql"
+          WASMER_TEST_NAMESPACE: "wasmer-tests"

@@ -1999,7 +1999,7 @@
     "model": "registry.namespace",
     "pk": 1,
     "fields": {
-      "name": "wasmer-test",
+      "name": "wasmer-tests",
       "display_name": "wasmer test",
       "description": "wasmer test namespace",
       "avatar": "",
