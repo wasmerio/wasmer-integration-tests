@@ -1,5 +1,5 @@
 [package]
-name = "cypress1/static-web-server"
+name = "wasmer/static-web-server"
 version = "1.0.4"
 description = "Serves static files in response to HTTP GET and HEAD requests."
 license = "MIT"

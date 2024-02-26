@@ -1900,7 +1900,7 @@
       "password": "pbkdf2_sha512$320000$TKpDBfr7exaKBJeA1iJObw$fZGjOroHi6JfR711RgtYSvWPEwa7g6EoVohMhWCOWL4i4jrsZl1y8wvU0dES4yHBbWUpq9WEFESvhvdq2BAEyQ==",
       "twitter_handle": null,
       "user_permissions": [],
-      "username": "wasmer",
+      "username": "wasmer_user",
       "website_url": null
     },
     "model": "users.user",
@@ -1999,7 +1999,7 @@
     "model": "registry.namespace",
     "pk": 1,
     "fields": {
-      "name": "wasmer-test",
+      "name": "wasmer-tests",
       "display_name": "wasmer test",
       "description": "wasmer test namespace",
       "avatar": "",
@@ -2009,6 +2009,20 @@
       "updated_at": "2023-03-29T13:01:00.254Z"
     }
   },
+{
+    "model": "registry.namespace",
+    "pk": 2,
+    "fields": {
+      "name": "wasmer",
+      "display_name": "wasmer test",
+      "description": "wasmer test namespace",
+      "avatar": "",
+      "default_avatar": "avatars/2888706b9870f20798c210c4343ee630699b7f3414f97c6f9b4c817d89d6759d.png",
+      "avatar_updated_at": null,
+      "created_at": "2023-03-29T13:01:00.254Z",
+      "updated_at": "2023-03-29T13:01:00.254Z"
+    }
+},
   {
     "model": "registry.namespacemaintainer",
     "pk": 1,
@@ -2022,11 +2036,33 @@
   },
   {
     "model": "registry.namespacemaintainer",
-    "pk": 1,
+    "pk": 2,
     "fields": {
       "user": 5,
       "role": "ADMIN",
       "namespace": 1,
+      "created_at": "2023-03-29T13:01:26.625Z",
+      "updated_at": "2023-03-29T13:01:26.625Z"
+    }
+  },
+{
+    "model": "registry.namespacemaintainer",
+    "pk": 3,
+    "fields": {
+      "user": 2,
+      "role": "ADMIN",
+      "namespace": 2,
+      "created_at": "2023-03-29T13:01:26.625Z",
+      "updated_at": "2023-03-29T13:01:26.625Z"
+    }
+  },
+  {
+    "model": "registry.namespacemaintainer",
+    "pk": 4,
+    "fields": {
+      "user": 5,
+      "role": "ADMIN",
+      "namespace": 2,
       "created_at": "2023-03-29T13:01:26.625Z",
       "updated_at": "2023-03-29T13:01:26.625Z"
     }

@@ -1,5 +1,5 @@
 {
-  getPackage(name:"cypress1/static-web-server") {
+  getPackage(name:"wasmer/static-web-server") {
     lastVersion {
       version
     }
