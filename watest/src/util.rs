@@ -1,17 +1,22 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
+use tracing::info;
 use url::Url;
 use wasmer_api::WasmerClient;
+
+pub fn registry_endpoint() -> url::Url {
+    std::env::var("WASMER_REGISTRY")
+        .expect("WASMER_REGISTRY env var is not set")
+        .parse::<url::Url>()
+        .expect("WASMER_REGISTRY env var is not a valid URL")
+}
 
 pub fn api_client() -> WasmerClient {
     const USERAGENT: &str = "wasmer-integration-tests-";
     let token = std::env::var("WASMER_TOKEN").expect("WASMER_TOKEN env var is not set");
 
-    let graphql_endpoint = std::env::var("WASMER_REGISTRY")
-        .expect("WASMER_REGISTRY env var is not set")
-        .parse::<url::Url>()
-        .expect("WASMER_REGISTRY env var is not a valid URL");
+    let graphql_endpoint = registry_endpoint();
     WasmerClient::new(graphql_endpoint, USERAGENT)
         .expect("Failed to create a new WasmerClient")
         .with_auth_token(token)
@@ -26,6 +31,88 @@ pub fn http_client() -> reqwest::Client {
 
 pub fn test_namespace() -> String {
     std::env::var("WASMER_TEST_NAMESPACE").unwrap_or_else(|_| "wasmer-tests".to_string())
+}
+
+pub fn edge_server_url() -> Url {
+    let raw =
+        std::env::var("WASMER_EDGE_SERVER_URL").expect("WASMER_EDGE_SERVER_URL env var is not set");
+    let full = if !raw.starts_with("http") {
+        format!("http://{}", raw)
+    } else {
+        raw
+    };
+    full.parse()
+        .expect("WASMER_EDGE_SERVER_URL env var is not a valid URL")
+}
+
+pub fn build_app_request(
+    client: &reqwest::Client,
+    app: &wasmer_api::types::DeployApp,
+    url: Url,
+    method: reqwest::Method,
+) -> reqwest::RequestBuilder {
+    let app_host = app
+        .url
+        .parse::<Url>()
+        .unwrap()
+        .host()
+        .expect("app url has no host")
+        .to_string();
+
+    let mut target_url = edge_server_url();
+    target_url.set_path(url.path());
+    target_url.set_query(url.query());
+
+    client
+        .request(method, target_url)
+        .header(reqwest::header::HOST, app_host)
+}
+
+pub fn build_app_request_get(
+    client: &reqwest::Client,
+    app: &wasmer_api::types::DeployApp,
+    url: Url,
+) -> reqwest::RequestBuilder {
+    build_app_request(client, app, url, reqwest::Method::GET)
+}
+
+/// Wait for an app to be at the latest version.
+pub async fn wait_app_latest_version(
+    client: &reqwest::Client,
+    app: &wasmer_api::types::DeployApp,
+) -> Result<reqwest::Response, anyhow::Error> {
+    let latest_version = app.active_version.id.inner();
+    info!("waiting for app to be at version {}", latest_version);
+
+    let start = std::time::Instant::now();
+    loop {
+        if start.elapsed() > std::time::Duration::from_secs(120) {
+            bail!("Timed out waiting for app to be available");
+        }
+
+        let url = "http://test.com".parse().unwrap();
+        let req = build_app_request_get(client, app, url);
+        tracing::debug!(?req, "Sending request to app to check version");
+
+        let res = req.send().await.context("Failed to send request to app")?;
+
+        if res.status().is_success() {
+            let version = res
+                .headers()
+                .get("X-Edge-App-Version-Id")
+                .and_then(|v| v.to_str().ok());
+            if version == Some(latest_version) {
+                break Ok(res);
+            }
+        } else {
+            tracing::debug!(
+                status = res.status().as_u16(),
+                "request to app failed with non-success status"
+            );
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 }
 
 // Create a clean directory for a test app.
@@ -65,6 +152,26 @@ pub fn ensure_clean_dir(path: &Path) -> Result<(), std::io::Error> {
     fs_err::create_dir_all(path)
 }
 
+pub async fn mirror_package_prod_to_local(
+    namespace: impl Into<String>,
+    name: impl Into<String>,
+) -> Result<wasmer_api::types::PackageVersionWithPackage, anyhow::Error> {
+    let namespace = namespace.into();
+    let name = name.into();
+
+    let source_backend = "https://registry.wasmer.io/graphql".parse().unwrap();
+    let target_backend = registry_endpoint();
+    let target_token = std::env::var("WASMER_TOKEN").expect("WASMER_TOKEN env var is not set");
+    mirror_package(
+        namespace,
+        name,
+        source_backend,
+        target_backend,
+        target_token,
+    )
+    .await
+}
+
 pub async fn mirror_package(
     namespace: String,
     name: String,
@@ -72,12 +179,9 @@ pub async fn mirror_package(
     target_backend: Url,
     target_token: String,
 ) -> Result<wasmer_api::types::PackageVersionWithPackage, anyhow::Error> {
-    tracing::info!(
+    info!(
         "Mirroring package {}/{} from {} to {}",
-        namespace,
-        name,
-        source_backend,
-        target_backend
+        namespace, name, source_backend, target_backend
     );
 
     let source_client = WasmerClient::new(source_backend, "wasmer-integration-tests")?;
@@ -140,7 +244,12 @@ pub async fn mirror_package(
 
     tracing::debug!("Publishing package to target registry");
     let status = std::process::Command::new("wasmer")
-        .args(&["publish", "--registry", target_backend.as_str()])
+        .args(&[
+            "publish",
+            "--registry",
+            target_backend.as_str(),
+            "--no-validate",
+        ])
         .env("WASMER_TOKEN", target_token)
         .current_dir(&tmp_dir)
         .status()
