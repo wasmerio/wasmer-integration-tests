@@ -9,15 +9,9 @@ async fn test_cli_app_create_winterjs() {
 
     // Make sure the WinterJS package is on the registry.
 
-    crate::util::mirror_package(
-        "wasmer".to_string(),
-        "winterjs".to_string(),
-        wasmer_api::ENDPOINT_PROD.parse().unwrap(),
-        client.graphql_endpoint().clone(),
-        client.auth_token().expect("no auth token set").to_owned(),
-    )
-    .await
-    .unwrap();
+    crate::util::mirror_package_prod_to_local("wasmer", "winterjs")
+        .await
+        .unwrap();
 
     let name = format!(
         "test-winterjs-{}",
@@ -38,6 +32,7 @@ async fn test_cli_app_create_winterjs() {
             "-t",
             "js-worker",
             "--non-interactive",
+            "--no-wait",
             "--owner",
             &namespace,
             "--new-package-name",
@@ -61,8 +56,12 @@ async fn test_cli_app_create_winterjs() {
         .expect("Failed to parse app URL");
     tracing::debug!(?app, "app deployed, sending request");
 
-    let body = http_client()
-        .get(url.clone())
+    let client = http_client();
+    crate::util::wait_app_latest_version(&client, &app)
+        .await
+        .unwrap();
+
+    let body = crate::util::build_app_request_get(&client, &app, url.clone())
         .send()
         .await
         .expect("Failed to send request")

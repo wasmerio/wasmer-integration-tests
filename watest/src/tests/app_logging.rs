@@ -1,17 +1,22 @@
 use futures::stream::TryStreamExt;
 use test_log;
 
-use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace, CommandExt};
+use crate::util::{
+    api_client, build_clean_test_app_dir, http_client, mirror_package_prod_to_local,
+    test_namespace, wait_app_latest_version, CommandExt,
+};
 
 #[test_log::test(tokio::test)]
 async fn test_python_logging() {
+    mirror_package_prod_to_local("wasmer", "python").await.unwrap();
+
     let name = "wasmer-test-logging-python".to_string();
     let namespace = test_namespace();
 
     let now = time::OffsetDateTime::now_utc();
 
     // Create Python app.
-    let client = api_client();
+    let api = api_client();
 
     let dir = build_clean_test_app_dir(&name);
     let main_py = dir.join("src/main.py");
@@ -41,19 +46,20 @@ async fn test_python_logging() {
     // Update the code to add some logging.
 
     let code = r#"
-    import os
-    import json
-    import urllib.parse
-    import sys
-    from http.server import SimpleHTTPRequestHandler, HTTPServer
+import os
+import json
+import urllib.parse
+import sys
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
 
-    class CustomHandler(SimpleHTTPRequestHandler):
-        def do_GET(self):
+class CustomHandler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        try:
             # get invocation id query param
             url = urllib.parse.urlparse(self.path)
-            query = urllib.parse.parse_qs(url.query)
-            request_id = query.get('request-id', ['<no-request-id>']).pop()
+            # query = urllib.parse.parse_qs(url.query)
+            # request_id = query.get('request-id', ['<no-request-id>']).pop()
 
             # print to stdout
             print(f"GET {self.path}")
@@ -65,20 +71,28 @@ async fn test_python_logging() {
             self.end_headers()
 
             data = {
-                "message": "wasmer-tests/wasmer-tests-python-logging is running on Python!"
+                "message": "wasmer-tests/wasmer-tests-python-logging is running on Python!",
+                "url" : self.path,
+            }
+            self.wfile.write(json.dumps(data).encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            data = {
+                "error": str(e)
             }
             self.wfile.write(json.dumps(data).encode('utf-8'))
 
+if __name__ == "__main__":
+    host = os.environ.get('HOST', '127.0.0.1')
 
-    if __name__ == "__main__":
-        host = os.environ.get('HOST', '127.0.0.1')
+    # Get the PORT environment variable if it's present; otherwise, default to 8000
+    port = int(os.environ.get('PORT', 80))
 
-        # Get the PORT environment variable if it's present; otherwise, default to 8000
-        port = int(os.environ.get('PORT', 8080))
-
-        server = HTTPServer((host, port), CustomHandler)
-        print(f"Starting server on http://{host}:{port}")
-        server.serve_forever()
+    server = HTTPServer((host, port), CustomHandler)
+    print(f"Starting server on http://{host}:{port}")
+    server.serve_forever()
         "#;
 
     if !main_py.exists() {
@@ -90,7 +104,10 @@ async fn test_python_logging() {
     std::process::Command::new("wasmer")
         .args(&[
             "deploy",
+            "--no-wait",
             "--publish-package",
+            "--owner",
+            &namespace,
             "--no-persist-id",
             "--path",
             dir.to_str().unwrap(),
@@ -100,10 +117,16 @@ async fn test_python_logging() {
 
     // Query the app.
 
-    let app = wasmer_api::query::get_app(&client, namespace.clone(), name.clone())
+    let app = wasmer_api::query::get_app(&api, namespace.clone(), name.clone())
         .await
         .expect("could not query app")
         .expect("queried app is None");
+
+    let client = http_client();
+    wait_app_latest_version(&client, &app)
+        .await
+        .expect("Failed to wait for app latest version");
+
     tracing::debug!("app deployed, sending request");
 
     let id = uuid::Uuid::new_v4();
@@ -114,8 +137,7 @@ async fn test_python_logging() {
     url.query_pairs_mut()
         .append_pair("request-id", &id.to_string());
 
-    let _res = http_client()
-        .get(url)
+    let _res = crate::util::build_app_request_get(&client, &app, url)
         .send()
         .await
         .expect("Failed to send request")
@@ -123,7 +145,7 @@ async fn test_python_logging() {
         .expect("Failed to get response");
 
     let stream = wasmer_api::query::get_app_logs_paginated(
-        &client,
+        &api,
         name.clone(),
         namespace.clone(),
         None,
