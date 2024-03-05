@@ -1,0 +1,137 @@
+name: "Run integration tests against latest commit of wasmer-cli"
+on:
+  schedule:
+    - cron: 0 0 * * * 
+jobs:
+  build-wasmer:
+    name: Build on linux-x64
+    runs-on:  ubuntu-20.04
+    env:
+      SCCACHE_AZURE_BLOB_CONTAINER: wasmerstoragesccacheblob
+      SCCACHE_AZURE_CONNECTION_STRING: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
+      RUST_BACKTRACE: 1
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: git
+      MSRV: "1.73"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'wasmerio/wasmer'
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.MSRV }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install LLVM
+        shell: bash
+        run: |
+          LLVM_DIR=$(pwd)/${{ env.LLVM_DIR }}
+          mkdir -p ${LLVM_DIR}
+          curl --proto '=https' --tlsv1.2 -sSf "https://github.com/wasmerio/llvm-custom-builds/releases/download/15.x/llvm-linux-amd64.tar.xz" -L -o - | tar xJv -C ${LLVM_DIR}
+          echo "${LLVM_DIR}/bin" >> $GITHUB_PATH
+        env:
+          LLVM_DIR: .llvm
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: linux-x64-cargo-${{ hashFiles('Cargo.lock') }}-v1
+      - name: Build C API headless
+        shell: bash
+        run: |
+          make package-capi-headless
+      - name: Build C API
+        shell: bash
+        run: |
+          make build-capi
+      - name: Build Wasmer binary with LLVM
+        shell: bash
+        run: |
+          make build-wasmer
+        env:
+          ENABLE_LLVM: 1
+      - name: Install Nightly Rust for Headless
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "nightly-2023-10-05"
+          components: "rust-src"
+      - name: Build Minimal Wasmer Headless
+        run: |
+          cargo install xargo
+          echo "" >> Cargo.toml
+          echo "[profile.release]" >> Cargo.toml
+          echo "opt-level = 'z'" >> Cargo.toml
+          echo "debug = false" >> Cargo.toml
+          echo "debug-assertions = false" >> Cargo.toml
+          echo "overflow-checks = false" >> Cargo.toml
+          echo "lto = true" >> Cargo.toml
+          echo "panic = 'abort'" >> Cargo.toml
+          echo "incremental = false" >> Cargo.toml
+          echo "codegen-units = 1" >> Cargo.toml
+          echo "rpath = false" >> Cargo.toml
+          make build-wasmer-headless-minimal
+      - name: Dist
+        run: |
+          make distribution
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasmer-linux-amd64
+          path: dist
+          if-no-files-found: error
+          retention-days: 2
+  integration-test:
+    name: test
+    runs-on: ubuntu-latest
+    needs: [build-wasmer]
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v3
+      - name: Download wasmer build
+        uses: actions/download-artifact@v3
+        with:
+          name: wasmer-linux-amd64
+      - name: Add wasmer executable to PATH
+        run: |-
+          tar -xvf wasmer.tar.gz
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+      - run: |-
+          wasmer --version
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_KEY }}'
+      - uses: google-github-actions/setup-gcloud@v1
+        with:
+          version: '410.0.0'
+          project_id: ${{ secrets.GKE_PROJECT }}
+      - run: |-
+          gcloud --quiet auth configure-docker
+      - name: Setup python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Setup poetry
+        run: |
+          pip install poetry
+          poetry --version
+
+      - name: unlock backend with git-crypt
+        run: |
+          sudo apt install -y git-crypt
+          echo $GIT_CRYPT_KEY | base64 -d > git-crypt.key
+          git crypt unlock git-crypt.key
+        env:
+          GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY_BASE64 }}
+
+      - name: setup intergation tests
+        run: |
+          make
+
+      - name: Run intergation tests
+        run: |
+          make test
+        env:
+          WASMER_TOKEN: wap_default_token
+          WASMER_REGISTRY: "http://localhost:8000/graphql"
+          WASMER_TEST_NAMESPACE: "wasmer-tests"
