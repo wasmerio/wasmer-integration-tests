@@ -141,10 +141,18 @@ gateway:
     - domain: wasmer.network
       registry: http://localhost:8080/graphql
       admin_auth_token: "wap_default_token"
+      # NOTE: field is misspelled, will be fixed upstream in the future, so it is
+      # duplicated with the correct spelling
+      acme_use_widlcard_certs: true
+      acme_use_wilcard_certs: true
   deployment_domains:
     - domain: wasmer.app
       registry: http://localhost:8080/graphql
       admin_auth_token: "wap_default_token"
+      # NOTE: field is misspelled, will be fixed upstream in the future, so it is
+      # duplicated with the correct spelling
+      acme_use_widlcard_certs: true
+      acme_use_wilcard_certs: true
 
 geolite_token: "PUT_TOKEN_HERE"
 master_network_key: "PUT_KEY_HERE"
