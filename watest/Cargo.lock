@@ -2256,6 +2256,7 @@ dependencies = [
  "clap",
  "fs-err",
  "futures",
+ "rand",
  "reqwest",
  "serde_json",
  "test-log",

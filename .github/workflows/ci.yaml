@@ -36,7 +36,11 @@ jobs:
           poetry --version
       - name: Setup Wasmer
         uses: wasmerio/setup-wasmer@v2
-
+      - name: Setup k6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+          sudo mv k6 /usr/bin
+          k6 --version
       - name: unlock backend with git-crypt
         run: |
           sudo apt install -y git-crypt
