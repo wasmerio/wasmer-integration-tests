@@ -57,6 +57,7 @@ async fn create_app(name: String) {
         app_create_status
     );
     tracing::debug!("Testing if app {} is functional", name);
+    thread::sleep(Duration::from_secs(35));
     let app_hostname = format!("{}.wasmer.app", name);
     let edge_url = env::var("EDGE_URL").unwrap_or("http://localhost".to_string());
     let app_response = reqwest::Client::new()

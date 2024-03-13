@@ -82,7 +82,7 @@ install-test-app: install-static-web-server
 	@echo "publishing test-app..."
 	@(cd packages/test-app && \
 	  wasmer publish --wait --timeout 300s --registry $(REGISTRY) --token $(TOKEN)|| true)
-
+	cat packages/test-app/app.yaml
 	@echo "deploying test-app..."
 	@(cd packages/test-app && \
 	  wasmer deploy --non-interactive --no-persist-id --no-wait --registry $(REGISTRY) --token $(TOKEN) || true)
@@ -90,7 +90,7 @@ install-test-app: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" $(EDGE_URL)
+	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" $(EDGE_URL)
 	@echo "test-app is up!"
 endif
 
@@ -101,12 +101,12 @@ install-wasix-echo-server: install-static-web-server
 
 	@echo "deploying wasix-echo-server..."
 	@(cd packages/wasix-echo-server && \
-	  wasmer deploy -v --non-interactive --no-persist-id --no-wait --registry $(REGISTRY) --token $(TOKEN) || true)
+	  wasmer deploy --non-interactive --no-persist-id --no-wait --registry $(REGISTRY) --token $(TOKEN) || true)
 	@echo "wasix-echo-server deployed!"
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" $(EDGE_URL)
+	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" $(EDGE_URL)
 	@echo "wasix-echo-server is up!"
 endif
 

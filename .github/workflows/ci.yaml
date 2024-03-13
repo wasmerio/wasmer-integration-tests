@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout backend
         uses: actions/checkout@v3
+      - run: |
+          cat packages/test-app/app.yaml
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
         with:
@@ -56,7 +58,3 @@ jobs:
       - name: Run intergation tests
         run: |
           make test
-        env:
-          WASMER_TOKEN: wap_default_token
-          WASMER_REGISTRY: "http://localhost:8000/graphql"
-          WASMER_TEST_NAMESPACE: "wasmer-tests"

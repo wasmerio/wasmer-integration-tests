@@ -11,7 +11,7 @@ def test_app_info_get(tmpdir):
     app_url = search("App URL: (.*)", app_create_output, flags=MULTILINE).group(1)
     versioned_url = search("Versioned URL: (.*)", app_create_output, flags=MULTILINE).group(1)
     
-    info_output = run(split(f"wasmer app info {app_name}"), capture_output=True).stderr.decode()
+    info_output = run(split(f"wasmer app info {app_name}"), capture_output=True).stdout.decode()
     assert app_name == search("App Name: (.*)", info_output, flags=MULTILINE).group(1)
     assert app_url == search("App URL: (.*)", info_output, flags=MULTILINE).group(1)
     assert versioned_url == search("Versioned URL: (.*)", info_output, flags=MULTILINE).group(1)

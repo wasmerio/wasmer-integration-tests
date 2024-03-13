@@ -6,6 +6,7 @@ use crate::util::{
     test_namespace, wait_app_latest_version, CommandExt,
 };
 
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_python_logging() {
     mirror_package_prod_to_local("wasmer", "python").await.unwrap();

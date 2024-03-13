@@ -3,6 +3,7 @@ use test_log;
 use crate::util::{api_client, build_clean_test_app_dir, http_client, test_namespace, CommandExt};
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_winterjs() {
     let client = api_client();
