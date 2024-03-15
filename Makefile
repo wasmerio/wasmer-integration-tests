@@ -90,7 +90,7 @@ install-test-app: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" $(EDGE_URL)
+	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: test-app-cypress1.wasmer.app" $(EDGE_URL)
 	@echo "test-app is up!"
 endif
 
