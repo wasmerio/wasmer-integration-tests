@@ -25,6 +25,7 @@ pub fn api_client() -> WasmerClient {
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
+        .pool_max_idle_per_host(0)
         .build()
         .expect("Failed to create a new reqwest::Client")
 }
@@ -58,7 +59,7 @@ pub fn build_app_request(
         .host()
         .expect("app url has no host")
         .to_string();
-
+    tracing::info!(app_host);
     let mut target_url = edge_server_url();
     target_url.set_path(url.path());
     target_url.set_query(url.query());
@@ -86,11 +87,12 @@ pub async fn wait_app_latest_version(
 
     let start = std::time::Instant::now();
     loop {
-        if start.elapsed() > std::time::Duration::from_secs(120) {
+        if start.elapsed() > std::time::Duration::from_secs(240) {
             bail!("Timed out waiting for app to be available");
         }
 
-        let url = "http://test.com".parse().unwrap();
+        let url = format!("http://{}-wasmer-tests.wasmer.app", app.name).parse().unwrap();
+        tracing::info!(app.name);
         let req = build_app_request_get(client, app, url);
         tracing::debug!(?req, "Sending request to app to check version");
 

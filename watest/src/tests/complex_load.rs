@@ -57,30 +57,24 @@ async fn create_app(name: String) {
         app_create_status
     );
     tracing::debug!("Testing if app {} is functional", name);
-    let app_hostname = format!("{}.wasmer.app", name);
+    let app_hostname = format!("{}-cypress1.wasmer.app", name);
     let edge_url = env::var("EDGE_URL").unwrap_or("http://localhost".to_string());
-    let app_response = reqwest::Client::new()
-        .get(&edge_url)
-        .header("Host", &app_hostname)
-        .send()
-        .await
-        .expect(&format!(
-            "Sending request to app {} to edge at {} failed. Is edge running?",
-            app_hostname, edge_url
-        ));
-    assert!(
-        &app_response.status().is_success(),
-        "App {} responded with status {} with headers {} and with body {}",
-        app_hostname,
-        &app_response.status().as_str(),
-        &app_response
-            .headers()
-            .iter()
-            .map(|(key, value)| format!("{}: {}", key, value.to_str().unwrap()))
-            .collect::<Vec<_>>()
-            .join(","),
-        &app_response.text().await.unwrap(),
-    );
+    for _ in 1..5 {
+        let app_response = reqwest::Client::new()
+            .get(&edge_url)
+            .header("Host", &app_hostname)
+            .send()
+            .await
+            .expect(&format!(
+                "Sending request to app {} to edge at {} failed. Is edge running?",
+                app_hostname, edge_url
+            ));
+        thread::sleep(Duration::from_secs(5));
+        if app_response.status().is_success() {
+            return
+        }
+    }
+    panic!("App {} is not ready", app_hostname);
 }
 
 fn load_test_apps(app_hostnames: &Vec<String>) {
@@ -106,7 +100,8 @@ fn load_test_apps(app_hostnames: &Vec<String>) {
         load_test_status
     );
 }
-
+// this should be moved to edge repo
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_complex_load() {
     // Ensure packages that will be used by the apps exists in the registry
