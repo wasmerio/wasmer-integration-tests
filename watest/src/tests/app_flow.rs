@@ -9,7 +9,7 @@ use crate::util::{
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_static_site_and_update_multiple_times() {
     let name = format!(
-        "test-staticsite-{}",
+        "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
     );
     let namespace = test_namespace();
@@ -136,7 +136,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_and_delete() {
     let name = format!(
-        "test-app-deletion-{}",
+        "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
     );
     let namespace = test_namespace();
@@ -549,7 +549,7 @@ print("\r")
 #[test_log::test(tokio::test)]
 async fn test_deploy_app_with_outdated_wasmer_toml_package_version() {
     let name = format!(
-        "outdatedpkg-{}",
+        "o-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
     );
     let namespace = test_namespace();
