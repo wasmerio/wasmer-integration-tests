@@ -117,7 +117,7 @@ runtime:
   default_thread_parallelism: 2
   enable_panic_tainting: true
 
-geo_ttl: 120
+geo_ttl: 120s
 
 gateway:
   limits:
@@ -204,6 +204,7 @@ socket:
   enable_socket_tainting: false
 
 dns_server:
+  default_contact_email: "admin@wasmer.io"
   storage:
     {}
     # path_fallback: data/dns_store
@@ -281,6 +282,7 @@ cluster:
       nodes:
         - description: "devserver-1"
           node_index: 0
+          hostname: "localhost"
           global_ip4: 127.0.0.1
           global_ip6: "::1"
           internal_ip4: 127.0.0.1

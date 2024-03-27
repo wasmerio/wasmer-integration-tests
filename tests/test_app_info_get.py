@@ -8,7 +8,7 @@ def test_app_info_get(tmpdir):
     app_name = f"{uuid4()}"
     app_create_output = run(split(f"wasmer app create --non-interactive --type http --package cypress1/test-app@0.2.0 --owner cypress1 --name {app_name} --no-wait"), cwd=tmpdir, capture_output=True).stderr.decode()
 
-    app_url = search("App URL: (.*)", app_create_output, flags=MULTILINE).group(1)
+    app_url = search("^> App URL: (.*)$", app_create_output, flags=MULTILINE).group(1)
     versioned_url = search("Versioned URL: (.*)", app_create_output, flags=MULTILINE).group(1)
     
     info_output = run(split(f"wasmer app info cypress1/{app_name}"), capture_output=True).stdout.decode()

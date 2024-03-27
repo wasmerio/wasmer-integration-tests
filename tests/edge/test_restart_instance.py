@@ -16,6 +16,7 @@ def wait_until_app_ready(appname):
         status = get("http://localhost", headers={"Host": app_hostname(appname)}, timeout=30).status_code
         if status == 200:
             return
+        sleep(3)
         i -= 1
     assert False
 

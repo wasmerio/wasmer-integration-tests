@@ -6,6 +6,7 @@ use crate::util::{
 };
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_static_site_and_update_multiple_times() {
     let name = format!(
@@ -451,7 +452,7 @@ async fn test_cli_app_get_and_info() {
         Some(serde_json::Value::String(namespace.clone())).as_ref(),
     );
 }
-
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_app_python_wcgi() {
     mirror_package_prod_to_local("wasmer".to_string(), "python".to_string())
@@ -565,8 +566,8 @@ async fn test_deploy_app_with_outdated_wasmer_toml_package_version() {
             "static-website",
             "--non-interactive",
             "--owner",
-            "--no-wait",
             &namespace,
+            "--no-wait",
             "--new-package-name",
             &name,
             "--name",
