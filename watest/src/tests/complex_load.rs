@@ -118,7 +118,7 @@ async fn test_complex_load() {
     let mut apps = Vec::new();
     for i in 0..4 {
         let name = format!(
-            "complex-load-{}-{}",
+            "t-{}-{}",
             i,
             uuid::Uuid::new_v4().to_string().replace("-", "")
         );
@@ -130,7 +130,7 @@ async fn test_complex_load() {
     // load test the apps
     let app_hostnames = names
         .iter()
-        .map(|i| format!("{}.wasmer.app", i))
+        .map(|i| format!("{}-cypress1.wasmer.app", i))
         .collect::<Vec<_>>();
     load_test_apps(&app_hostnames);
     // test random apps

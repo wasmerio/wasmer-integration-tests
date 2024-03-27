@@ -90,7 +90,7 @@ install-test-app: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app.wasmer.app" $(EDGE_URL)
+	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: test-app-cypress1.wasmer.app" $(EDGE_URL)
 	@echo "test-app is up!"
 endif
 
@@ -106,7 +106,7 @@ install-wasix-echo-server: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server.wasmer.app" $(EDGE_URL)
+	@curl --retry 3 --retry-all-errors -vvv -f -H "Host: wasix-echo-server-cypress1.wasmer.app" $(EDGE_URL)
 	@echo "wasix-echo-server is up!"
 endif
 

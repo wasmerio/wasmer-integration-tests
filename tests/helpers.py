@@ -163,7 +163,7 @@ def deploy_app(path: pathlib.Path) -> AppHostName:
         check=True,
     )
 
-    host = f"{app_name}.wasmer.app"
+    host = f"{app_name}-cypress1.wasmer.app"
     return host
 
 
