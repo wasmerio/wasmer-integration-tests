@@ -8,7 +8,9 @@ use crate::util::{
 #[ignore]
 #[test_log::test(tokio::test)]
 async fn test_python_logging() {
-    mirror_package_prod_to_local("wasmer", "python").await.unwrap();
+    mirror_package_prod_to_local("wasmer", "python")
+        .await
+        .unwrap();
 
     let name = "wasmer-test-logging-python".to_string();
     let namespace = test_namespace();

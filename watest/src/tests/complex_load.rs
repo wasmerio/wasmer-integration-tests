@@ -71,7 +71,7 @@ async fn create_app(name: String) {
             ));
         thread::sleep(Duration::from_secs(5));
         if app_response.status().is_success() {
-            return
+            return;
         }
     }
     panic!("App {} is not ready", app_hostname);

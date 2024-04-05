@@ -9,10 +9,7 @@ use crate::util::{
 #[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_static_site_and_update_multiple_times() {
-    let name = format!(
-        "t-{}",
-        uuid::Uuid::new_v4().to_string().replace("-", "")
-    );
+    let name = format!("t-{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
     let namespace = test_namespace();
 
     // Create static site app.
@@ -136,10 +133,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
 /// ensure it stops working.
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_and_delete() {
-    let name = format!(
-        "t-{}",
-        uuid::Uuid::new_v4().to_string().replace("-", "")
-    );
+    let name = format!("t-{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
     let namespace = test_namespace();
 
     // Create static site app.
@@ -549,10 +543,7 @@ print("\r")
 // version.
 #[test_log::test(tokio::test)]
 async fn test_deploy_app_with_outdated_wasmer_toml_package_version() {
-    let name = format!(
-        "o-{}",
-        uuid::Uuid::new_v4().to_string().replace("-", "")
-    );
+    let name = format!("o-{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
     let namespace = test_namespace();
     let dir = build_clean_test_app_dir(&name);
 

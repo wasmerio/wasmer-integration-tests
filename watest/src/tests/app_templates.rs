@@ -14,10 +14,7 @@ async fn test_cli_app_create_winterjs() {
         .await
         .unwrap();
 
-    let name = format!(
-        "t-{}",
-        uuid::Uuid::new_v4().to_string().replace("-", "")
-    );
+    let name = format!("t-{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
     let namespace = test_namespace();
 
     // Create static site app.
