@@ -1,0 +1,8 @@
+---
+kind: wasmer.io/App.v0
+name: wasmer-tests-winterjs-proxy-worker
+owner: wasmer-tests
+package: wasmer-tests/winterjs-proxy@0.1.0
+cli_args:
+  - /src/index.js
+debug: false

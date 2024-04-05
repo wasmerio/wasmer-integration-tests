@@ -87,11 +87,13 @@ pub async fn wait_app_latest_version(
 
     let start = std::time::Instant::now();
     loop {
-        if start.elapsed() > std::time::Duration::from_secs(240) {
+        if start.elapsed() > std::time::Duration::from_secs(360) {
             bail!("Timed out waiting for app to be available");
         }
 
-        let url = format!("http://{}-wasmer-tests.wasmer.app", app.name).parse().unwrap();
+        let url = format!("http://{}-wasmer-tests.wasmer.app", app.name)
+            .parse()
+            .unwrap();
         tracing::info!(app.name);
         let req = build_app_request_get(client, app, url);
         tracing::debug!(?req, "Sending request to app to check version");
@@ -295,6 +297,45 @@ pub async fn mirror_package(
 
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
+}
+
+/// Ensure a package in a given directory is published.
+pub async fn ensure_package_in_dir(path: &Path) -> Result<(), anyhow::Error> {
+    // Load the version from wasmer.toml.
+    let toml_path = path.join("wasmer.toml");
+    let toml_raw = fs_err::read_to_string(&toml_path).context("Failed to read wasmer.toml")?;
+    let toml = toml::from_str::<toml::Value>(&toml_raw).context("Failed to parse wasmer.toml")?;
+    let pkg = toml
+        .get("package")
+        .and_then(|p| p.as_table())
+        .context("Failed to get package from wasmer.toml")?;
+    let version = pkg
+        .get("version")
+        .and_then(|v| v.as_str())
+        .context("Failed to get version from wasmer.toml")?;
+    let full_name = pkg
+        .get("name")
+        .and_then(|n| n.as_str())
+        .context("Failed to get name from wasmer.toml")?;
+
+    // Load the package from the registry.
+    let api = api_client();
+    let pkg_opt =
+        wasmer_api::query::get_package_version(&api, full_name.to_string(), version.to_string())
+            .await?;
+
+    if pkg_opt.is_none() {
+        tracing::info!(package=%full_name, %version, "package not found in registry, publishing...");
+        std::process::Command::new("wasmer")
+            .args(&["publish", "--no-validate"])
+            .current_dir(path)
+            .status_success()
+            .context("Failed to publish package")?;
+    } else {
+        tracing::info!(package=%full_name, %version, "package version already exists in registry");
+    }
+
+    Ok(())
 }
 
 pub trait CommandExt {
