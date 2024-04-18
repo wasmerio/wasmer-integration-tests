@@ -62,7 +62,7 @@ async fn test_dns() {
     for _ in 1..20 {
         let response = http_client
             .get("http://127.0.0.1")
-            .header("Host", format!("{}-cypress1.wasmer.app", app_name))
+            .header("Host", format!("{}-wasmer-tests.wasmer.app", app_name))
             .send()
             .await
             .unwrap();

@@ -71,7 +71,7 @@ install-static-web-server:
 ifndef BYPASS_SWE
 	@echo "publishing static-web-server..."
 	@(cd packages/static-web-server && \
-	  wasmer publish --wait --timeout 300s --registry $(REGISTRY) --token $(TOKEN) || true)
+	  wasmer publish --timeout 300s --registry $(REGISTRY) --token $(TOKEN) || true)
 	@echo "setup static-web-server complete"
 else
 	@echo "Not publishing static-web-server because BYPASS_SWE was set."
@@ -81,8 +81,7 @@ endif
 install-test-app: install-static-web-server
 	@echo "publishing test-app..."
 	@(cd packages/test-app && \
-	  wasmer publish --wait --timeout 300s --registry $(REGISTRY) --token $(TOKEN)|| true)
-
+	  wasmer publish --timeout 300s --registry $(REGISTRY) --token $(TOKEN)|| true)
 	@echo "deploying test-app..."
 	@(cd packages/test-app && \
 	  wasmer deploy --non-interactive --no-persist-id --no-wait --registry $(REGISTRY) --token $(TOKEN) || true)
@@ -90,15 +89,14 @@ install-test-app: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 5 --retry-all-errors -vvv -f -H "Host: test-app-cypress1.wasmer.app" $(EDGE_URL)
+	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: test-app-cypress1.wasmer.app" $(EDGE_URL)
 	@echo "test-app is up!"
 endif
 
 install-wasix-echo-server: install-static-web-server
 	@echo "publishing wasix-echo-server..."
 	@(cd packages/wasix-echo-server && \
-	  wasmer publish --wait --timeout 600s --registry $(REGISTRY) --token $(TOKEN) || true)
-
+	  wasmer publish --timeout 600s --registry $(REGISTRY) --token $(TOKEN) || true)
 	@echo "deploying wasix-echo-server..."
 	@(cd packages/wasix-echo-server && \
 	  wasmer deploy -v --non-interactive --no-persist-id --no-wait --registry $(REGISTRY) --token $(TOKEN) || true)
@@ -106,7 +104,7 @@ install-wasix-echo-server: install-static-web-server
 
 ifndef BYPASS_EDGE
 	@echo "waiting for the first response from edge for test-app (this may take a while)..."
-	@curl --retry 5 --retry-all-errors -vvv -f -H "Host: wasix-echo-server-cypress1.wasmer.app" $(EDGE_URL)
+	@curl --retry 10 --retry-all-errors -vvv -f -H "Host: wasix-echo-server-cypress1.wasmer.app" $(EDGE_URL)
 	@echo "wasix-echo-server is up!"
 endif
 
