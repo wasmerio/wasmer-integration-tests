@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{bail, Context};
 use tracing::info;
@@ -91,7 +92,9 @@ pub async fn wait_app_latest_version(
             bail!("Timed out waiting for app to be available");
         }
 
-        let url = format!("http://{}-wasmer-tests.wasmer.app", app.name).parse().unwrap();
+        let url = format!("http://{}-wasmer-tests.wasmer.app", app.name)
+            .parse()
+            .unwrap();
         tracing::info!(app.name);
         let req = build_app_request_get(client, app, url);
         tracing::debug!(?req, "Sending request to app to check version");
@@ -360,4 +363,26 @@ impl CommandExt for std::process::Command {
             })
         }
     }
+}
+
+pub fn publish_local_package(package_path: &str) {
+    let result = Command::new("wasmer")
+        .arg("publish")
+        .current_dir(package_path)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success()
+            || String::from_utf8(result.stderr.clone())
+                .unwrap()
+                .contains("already exists")
+            || String::from_utf8(result.stderr.clone())
+                .unwrap()
+                .contains("Could not create package"),
+        "Publishing local package at {} failed. status={}, stdout={}, stderr={}",
+        package_path,
+        result.status.code().unwrap(),
+        String::from_utf8(result.stdout).unwrap(),
+        String::from_utf8(result.stderr).unwrap()
+    );
 }

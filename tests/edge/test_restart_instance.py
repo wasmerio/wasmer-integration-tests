@@ -3,22 +3,10 @@ from uuid import uuid4
 from subprocess import run
 from requests import get
 from time import sleep
-
-def app_hostname(appname):
-    return f"{appname}-cypress1.wasmer.app"
+from ..conftest import wait_until_app_ready, app_hostname
 
 def app_ping(appname):
     assert 200 == get("http://localhost", headers={"Host": app_hostname(appname)}).status_code
-
-def wait_until_app_ready(appname):
-    i = 5
-    while i > 0: 
-        status = get("http://localhost", headers={"Host": app_hostname(appname)}, timeout=30).status_code
-        if status == 200:
-            return
-        sleep(3)
-        i -= 1
-    assert False
 
 @fixture
 def app_package():

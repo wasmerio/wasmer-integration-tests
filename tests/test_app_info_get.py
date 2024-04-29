@@ -4,7 +4,7 @@ from yaml import safe_load
 from re import search, MULTILINE
 from uuid import uuid4
 
-def test_app_info_get(tmpdir):
+def test_app_info_get(publish_test_app, tmpdir):
     app_name = f"{uuid4()}"
     app_create_output = run(split(f"wasmer app create --non-interactive --type http --package cypress1/test-app@0.2.0 --owner cypress1 --name {app_name} --no-wait"), cwd=tmpdir, capture_output=True).stderr.decode()
 

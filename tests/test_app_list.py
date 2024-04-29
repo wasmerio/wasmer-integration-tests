@@ -4,7 +4,7 @@ from json import loads
 from os import mkdir
 from uuid import uuid4
 
-def test_app_listing(tmpdir):
+def test_app_listing(publish_test_app, tmpdir):
     app_names = []
     # until the wasmer cli is fixed to enable muliple page response on app list, this test only tests with 1 app
     for i in range(1):

@@ -1,8 +1,7 @@
 use test_log;
 
 use crate::util::{
-    api_client, build_app_request_get, build_clean_test_app_dir, http_client,
-    mirror_package_prod_to_local, test_namespace, wait_app_latest_version, CommandExt,
+    api_client, build_app_request_get, build_clean_test_app_dir, http_client, mirror_package_prod_to_local, publish_local_package, test_namespace, wait_app_latest_version, CommandExt
 };
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
@@ -136,6 +135,8 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
 /// ensure it stops working.
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_and_delete() {
+    publish_local_package("../packages/static-web-server");
+
     let name = format!(
         "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
@@ -324,6 +325,7 @@ async fn test_cli_app_with_private_package() {
 /// Test the output of CLI `wasmer app {get,info}`.
 #[test_log::test(tokio::test)]
 async fn test_cli_app_get_and_info() {
+    publish_local_package("../packages/static-web-server");
     let name = format!("test-app-cli-info",);
     let namespace = test_namespace();
 
@@ -549,6 +551,7 @@ print("\r")
 // version.
 #[test_log::test(tokio::test)]
 async fn test_deploy_app_with_outdated_wasmer_toml_package_version() {
+    publish_local_package("../packages/static-web-server");
     let name = format!(
         "o-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")

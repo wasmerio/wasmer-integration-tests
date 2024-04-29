@@ -8,7 +8,7 @@ import re
 import pytest
 
 
-def test_proxy_echo_server_get(wasix_echo_server_hostname, edge_url):
+def test_proxy_echo_server_get(echo_server, wasix_echo_server_hostname, edge_url):
     url = f"{edge_url}/hello?format=json"
 
     res = requests.get(url, headers={"host": wasix_echo_server_hostname})
@@ -30,7 +30,7 @@ def test_proxy_echo_server_get(wasix_echo_server_hostname, edge_url):
     }
 
 
-def test_proxy_echo_server_head(wasix_echo_server_hostname, edge_url):
+def test_proxy_echo_server_head(echo_server, wasix_echo_server_hostname, edge_url):
     url = f"{edge_url}/hello?format=json"
 
     res = requests.head(url, headers={"host": wasix_echo_server_hostname})
@@ -38,7 +38,7 @@ def test_proxy_echo_server_head(wasix_echo_server_hostname, edge_url):
     assert res.text == ""
 
 
-def test_proxy_echo_server_post(wasix_echo_server_hostname, edge_url):
+def test_proxy_echo_server_post(echo_server, wasix_echo_server_hostname, edge_url):
     url = f"{edge_url}/hello?format=json"
 
     res = requests.post(url, headers={"Host": wasix_echo_server_hostname}, data="body")
