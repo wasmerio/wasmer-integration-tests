@@ -14,7 +14,7 @@ setup:
 	@export $$(cat .env.$(TEST_ENV) | xargs) && wasmer config set registry.url $$WASMER_REGISTRY
 	@export $$(cat .env.$(TEST_ENV) | xargs) && wasmer login $$WASMER_TOKEN
 test: test-rust
-	@export $$(cat .env.$(TEST_ENV) | xargs) && poetry run -- pytest tests -vv --ignore=tests/edge/test_ssh.py
+	@export $$(cat .env.$(TEST_ENV) | xargs) && poetry run -- pytest tests -vv
 
 test-rust:
 	@export $$(cat .env.$(TEST_ENV) | xargs) && cd watest && RUST_LOG=logging=trace,info cargo test

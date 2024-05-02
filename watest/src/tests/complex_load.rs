@@ -57,9 +57,9 @@ async fn create_app(name: String) {
         app_create_status
     );
     tracing::debug!("Testing if app {} is functional", name);
-    let app_hostname = format!("{}-cypress1.wasmer.app", name);
+    let app_hostname = format!("{}-wasmer-tests.wasmer.app", name);
     let edge_url = env::var("EDGE_URL").unwrap_or("http://localhost".to_string());
-    for _ in 1..5 {
+    for _ in 1..100 {
         let app_response = reqwest::Client::new()
             .get(&edge_url)
             .header("Host", &app_hostname)
@@ -69,7 +69,7 @@ async fn create_app(name: String) {
                 "Sending request to app {} to edge at {} failed. Is edge running?",
                 app_hostname, edge_url
             ));
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(1));
         if app_response.status().is_success() {
             return
         }
@@ -101,7 +101,6 @@ fn load_test_apps(app_hostnames: &Vec<String>) {
     );
 }
 // this should be moved to edge repo
-#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_complex_load() {
     // Ensure packages that will be used by the apps exists in the registry
@@ -125,7 +124,7 @@ async fn test_complex_load() {
     // load test the apps
     let app_hostnames = names
         .iter()
-        .map(|i| format!("{}-cypress1.wasmer.app", i))
+        .map(|i| format!("{}-wasmer-tests.wasmer.app", i))
         .collect::<Vec<_>>();
     load_test_apps(&app_hostnames);
     // test random apps

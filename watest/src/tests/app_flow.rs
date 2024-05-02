@@ -8,6 +8,7 @@ use crate::util::{
 #[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_static_site_and_update_multiple_times() {
+    publish_local_package("../packages/static-web-server");
     let name = format!(
         "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
@@ -222,12 +223,10 @@ async fn test_cli_app_create_and_delete() {
     }
 }
 
-// FIXME remove the ignore, currently failing
-#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_with_private_package() {
     let name = format!(
-        "test-appprivpkg-{}",
+        "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
     );
     let namespace = test_namespace();
