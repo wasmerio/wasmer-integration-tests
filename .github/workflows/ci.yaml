@@ -56,7 +56,3 @@ jobs:
       - name: Run intergation tests
         run: |
           make test
-        env:
-          WASMER_TOKEN: wap_default_token
-          WASMER_REGISTRY: "http://localhost:8000/graphql"
-          WASMER_TEST_NAMESPACE: "wasmer-tests"

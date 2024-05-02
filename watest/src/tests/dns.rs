@@ -11,19 +11,7 @@ use rustdns::clients::Exchanger;
 use rustdns::types::*;
 use uuid::Uuid;
 
-fn publish_local_package(package_path: &str) {
-    let result = Command::new("wasmer")
-        .arg("publish")
-        .current_dir(package_path)
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success()
-            || String::from_utf8(result.stderr)
-                .unwrap()
-                .contains("already exists")
-    );
-}
+use crate::util::publish_local_package;
 
 #[test_log::test(tokio::test)]
 async fn test_dns() {
