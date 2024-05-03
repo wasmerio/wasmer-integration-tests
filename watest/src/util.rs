@@ -85,6 +85,7 @@ pub async fn wait_app_latest_version(
 ) -> Result<reqwest::Response, anyhow::Error> {
     let latest_version = app.active_version.id.inner();
     info!("waiting for app to be at version {}", latest_version);
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
     let start = std::time::Instant::now();
     loop {
@@ -254,6 +255,8 @@ pub async fn mirror_package(
             "--registry",
             target_backend.as_str(),
             "--no-validate",
+            "--timeout",
+            "600sec",
         ])
         .env("WASMER_TOKEN", target_token)
         .current_dir(&tmp_dir)
@@ -276,11 +279,11 @@ pub async fn mirror_package(
             tracing::debug!("Package was published by someone else in the meantime.");
         }
     }
-
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     // Wait for webc availability
     let start = std::time::Instant::now();
     loop {
-        if start.elapsed() > std::time::Duration::from_secs(120) {
+        if start.elapsed() > std::time::Duration::from_secs(600) {
             bail!("Timed out waiting for package to be available in target registry");
         }
 

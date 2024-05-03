@@ -5,7 +5,6 @@ use crate::util::{
 };
 
 /// Create a new static site app, update it and ensure the updated app is deployed.
-#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_static_site_and_update_multiple_times() {
     publish_local_package("../packages/static-web-server");
@@ -98,7 +97,7 @@ async fn test_cli_app_create_static_site_and_update_multiple_times() {
             ])
             .status_success()
             .expect("Failed to invoke 'wasmer deploy'");
-
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         let app = wasmer_api::query::get_app(&api, namespace.clone(), name.clone())
             .await
             .expect("could not query app")
@@ -225,6 +224,7 @@ async fn test_cli_app_create_and_delete() {
 
 #[test_log::test(tokio::test)]
 async fn test_cli_app_with_private_package() {
+    publish_local_package("../packages/static-web-server");
     let name = format!(
         "t-{}",
         uuid::Uuid::new_v4().to_string().replace("-", "")
