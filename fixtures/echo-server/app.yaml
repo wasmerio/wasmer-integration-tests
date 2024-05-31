@@ -1,0 +1,5 @@
+kind: wasmer.io/App.v0
+name: echo-server
+owner: wasmer-tests
+package: .
+app_id: da_ynYYILtXULen

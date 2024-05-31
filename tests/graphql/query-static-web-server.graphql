@@ -1,7 +1,0 @@
-{
-  getPackage(name:"wasmer/static-web-server") {
-    lastVersion {
-      version
-    }
-  }
-}

@@ -1,4 +1,0 @@
----
-kind: wasmer.io/App.v0
-name: test-app
-package: cypress1/test-app@0.2.0

@@ -1,0 +1,17 @@
+name: "Run tests with new tests pushed on main branch"
+'on':
+  push:
+    branches:
+      - 'main'
+
+concurrency:
+  group: push-to-main
+  cancel-in-progress: true
+
+jobs:
+  default:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: wasmerio/setup-wasmer@v2
+      - run: cargo test
