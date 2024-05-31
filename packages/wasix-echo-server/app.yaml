@@ -1,6 +1,0 @@
-# Sample file is used because `wasmer deploy` will inject the app id into the
-# file, which will mess up testing.
----
-kind: wasmer.io/App.v0
-name: wasix-echo-server
-package: cypress1/wasix-echo-server@0.1.0

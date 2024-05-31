@@ -1,0 +1,9 @@
+[[module]]
+name = "wasix-echo-server"
+source = "wasix-echo-server.wasm"
+abi = "wasi"
+
+[[command]]
+name = "wasix-echo-server"
+module = "wasix-echo-server"
+runner = "https://webc.org/runner/wasi"
