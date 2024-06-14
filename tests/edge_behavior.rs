@@ -25,7 +25,10 @@ async fn test_gateway_get() {
     // ??
     // assert_eq!(data["headers"]["accept-encoding"], "gzip, deflate");
     // assert_eq!(data["headers"]["connection"], "keep-alive");
-    assert_eq!(data["headers"]["host"], "echo-server-wasmer-tests.wasmer.dev");
+    assert_eq!(
+        data["headers"]["host"],
+        "echo-server-wasmer-tests.wasmer.dev"
+    );
 }
 
 #[test_log::test(tokio::test)]
@@ -55,5 +58,8 @@ async fn test_gateway_post() {
     assert_eq!(data["headers"]["content-length"], "4");
     // assert_eq!(data["headers"]["accept-encoding"], "gzip, deflate");
     // assert_eq!(data["headers"]["connection"], "keep-alive");
-    assert_eq!(data["headers"]["host"], "echo-server-wasmer-tests.wasmer.dev");
+    assert_eq!(
+        data["headers"]["host"],
+        "echo-server-wasmer-tests.wasmer.dev"
+    );
 }

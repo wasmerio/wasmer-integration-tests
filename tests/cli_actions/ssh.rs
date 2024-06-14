@@ -11,7 +11,8 @@ async fn test_ssh() {
                 .unwrap()
                 .stdout
         )
-        .unwrap().trim()
+        .unwrap()
+        .trim()
     );
     assert_eq!(
         "/",
@@ -22,18 +23,20 @@ async fn test_ssh() {
                 .unwrap()
                 .stdout
         )
-        .unwrap().trim()
+        .unwrap()
+        .trim()
     );
-    assert!(
-        String::from_utf8(
-            Command::new("wasmer")
-                .args(["ssh", "sharrattj/bash", "--", "-c", "ls"])
-                .output()
-                .unwrap()
-                .stdout
-        )
-        .unwrap().trim().split_ascii_whitespace().any(|e| e == "bin")
-    );
+    assert!(String::from_utf8(
+        Command::new("wasmer")
+            .args(["ssh", "sharrattj/bash", "--", "-c", "ls"])
+            .output()
+            .unwrap()
+            .stdout
+    )
+    .unwrap()
+    .trim()
+    .split_ascii_whitespace()
+    .any(|e| e == "bin"));
     assert_eq!(
         "/test",
         String::from_utf8(
@@ -43,7 +46,8 @@ async fn test_ssh() {
                 .unwrap()
                 .stdout
         )
-        .unwrap().trim()
+        .unwrap()
+        .trim()
     );
     assert_eq!(
         "hello",
@@ -54,6 +58,7 @@ async fn test_ssh() {
                 .unwrap()
                 .stdout
         )
-        .unwrap().trim()
+        .unwrap()
+        .trim()
     );
 }

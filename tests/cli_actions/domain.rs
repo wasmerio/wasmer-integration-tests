@@ -10,19 +10,12 @@ use rustdns::types::*;
 use tempfile::TempDir;
 use uuid::Uuid;
 
-
 #[test_log::test(tokio::test)]
 async fn test_dns() {
     let domain = format!("{}.com", Uuid::new_v4().to_string().get(..10).unwrap());
-    let temp_dir  = TempDir::new().unwrap().into_path();
+    let temp_dir = TempDir::new().unwrap().into_path();
     assert!(Command::new("wasmer")
-        .args([
-            "domain",
-            "register",
-            &domain,
-            "--registry",
-            "wasmer.wtf",
-        ])
+        .args(["domain", "register", &domain, "--registry", "wasmer.wtf",])
         .status()
         .unwrap()
         .success());
@@ -41,7 +34,9 @@ async fn test_dns() {
     let zonefile_path = temp_dir.join("zonefile");
     write(
         &zonefile_path,
-        String::from_utf8(get_zone_file.stdout).unwrap() + "$TTL 3600\n" + "my_a_record IN A 192.168.1.1",
+        String::from_utf8(get_zone_file.stdout).unwrap()
+            + "$TTL 3600\n"
+            + "my_a_record IN A 192.168.1.1",
     )
     .unwrap();
     assert!(Command::new("wasmer")

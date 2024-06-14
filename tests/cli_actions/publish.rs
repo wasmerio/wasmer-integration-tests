@@ -1,5 +1,5 @@
-use std::process::Command;
 use std::fs::write;
+use std::process::Command;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -28,11 +28,22 @@ version = "0.1.0"
         .status()
         .unwrap()
         .success());
-    let output = String::from_utf8(Command::new("wasmer")
-    .args(["run", "--registry", "wasmer.wtf", &format!("wasmer-tests/{name}"), "--", "-c", "print('Hello World!')"])
-    .current_dir(dir)
-    .output()
-    .unwrap()
-    .stdout).unwrap();
+    let output = String::from_utf8(
+        Command::new("wasmer")
+            .args([
+                "run",
+                "--registry",
+                "wasmer.wtf",
+                &format!("wasmer-tests/{name}"),
+                "--",
+                "-c",
+                "print('Hello World!')",
+            ])
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
     assert!(output.contains("Hello World!"), "output={output}");
 }
