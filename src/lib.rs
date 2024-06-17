@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 pub const REGISTRY_PROD: &str = "https://registry.wasmer.io/graphql";
 
-fn manifest_dir() -> PathBuf {
+pub fn manifest_dir() -> PathBuf {
     std::env::var("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .expect("CARGO_MANIFEST_DIR env var not set")
