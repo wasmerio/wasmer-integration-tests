@@ -1,0 +1,14 @@
+[dependencies]
+"php/php" = "^8.3.4"
+
+[fs]
+"/app" = "app"
+"/config" = "config"
+
+[[command]]
+name = "run"
+module = "php/php:php"
+runner = "wasi"
+[command.annotations.wasi]
+env = ["PHPRC=/config/php.ini"]
+main-args = ["-S", "localhost:8080", "/app/index.php"]
