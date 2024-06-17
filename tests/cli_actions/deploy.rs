@@ -4,6 +4,7 @@ use tempfile::TempDir;
 use uuid::Uuid;
 use watest::deploy_dir;
 use watest::deploy_hello_world_app;
+use watest::http_client;
 use watest::mkdir;
 use watest::send_get_request_to_app;
 #[test_log::test(tokio::test)]
@@ -206,4 +207,111 @@ capabilities:
     let data = res.json::<serde_json::Value>().await.unwrap();
     let cache_hits = data["opcache_statistics"]["hits"].as_u64().unwrap();
     assert!(cache_hits > 0);
+}
+
+/// Instaboot file system test.
+///
+/// Populates the file system with a file during the bootstrap phase, and
+/// then makes sure the file is still present in instabooted instances.
+///
+/// PHP app running the php-testserver package, which provides URIs for accessing
+/// the file system.
+#[test_log::test(tokio::test)]
+async fn test_app_instaboot_php_fs() {
+    // Ensure submodules are cloned, because the php-testserver package from
+    // the wasmopticon submodule is needed.
+    watest::ensure_submodules();
+
+    let dir = TempDir::new().unwrap();
+    let path = dir.path();
+    let watest::TestEnv {
+        namespace,
+        app_domain,
+        ..
+    } = watest::env();
+
+    let name = format!("test-{}", Uuid::new_v4());
+    let domain = format!("{name}.{app_domain}");
+
+    let testerver_pkg_dir = watest::wasmopticon_dir()
+        .join("pkg")
+        .join("php-testserver")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    mkdir!(path; {
+        "app.yaml" => format!(r#"
+kind: wasmer.io/App.v0
+name: {name}
+owner: {namespace}
+package: {testerver_pkg_dir}
+debug: true
+domains:
+  - {domain}
+capabilities:
+  instaboot:
+    requests:
+      - path: /fs/write/tmp/hello.txt
+        body: hello
+"#),
+    });
+
+    assert_cmd::Command::new("wasmer")
+        .args(&["deploy", "--non-interactive", "--no-wait"])
+        .current_dir(&dir)
+        .assert()
+        .success();
+
+    let url = format!("https://{domain}/");
+
+    eprintln!("fetching url {url}");
+
+    let client = http_client();
+
+    {
+        let res = client
+            .get(&url)
+            .header("x-edge-purge-instances", "1")
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        assert_eq!(
+            res.headers()
+                .get("x-edge-instance-journal-status")
+                .expect("missing required header")
+                .to_str()
+                .unwrap(),
+            "none",
+        );
+    }
+
+    let mut fs_url = url.clone();
+    fs_url.push_str("fs/read/tmp/hello.txt");
+
+    eprintln!("fetching url: {fs_url}");
+    let res = client
+        .get(&fs_url)
+        .header("x-edge-purge-instances", "1")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    assert_eq!(
+        res.headers()
+            .get("x-edge-instance-journal-status")
+            .expect("missing required header")
+            .to_str()
+            .unwrap(),
+        "bootsrap=journal+memory",
+    );
+
+    let body = res.text().await.unwrap();
+    eprintln!("body: '{body}'");
+    assert_eq!(body, "hello", "unexpected file body");
 }

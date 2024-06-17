@@ -13,6 +13,10 @@ fn manifest_dir() -> PathBuf {
         .expect("CARGO_MANIFEST_DIR env var not set")
 }
 
+pub fn wasmopticon_dir() -> PathBuf {
+    manifest_dir().join("wasmopticon")
+}
+
 pub fn ensure_submodules() {
     let dir = manifest_dir();
     assert_cmd::Command::new("git")
@@ -47,6 +51,14 @@ pub fn env() -> TestEnv {
         namespace,
         app_domain,
     }
+}
+
+pub fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent("wasmer-integration-tests")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap()
 }
 
 pub fn deploy_hello_world_app() -> (String, PathBuf) {
