@@ -1,0 +1,3 @@
+[submodule "wasmopticon"]
+	path = wasmopticon
+	url = https://github.com/wasix-org/wasmopticon.git

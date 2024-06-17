@@ -7,6 +7,21 @@ use uuid::Uuid;
 
 pub const REGISTRY_PROD: &str = "https://registry.wasmer.io/graphql";
 
+fn manifest_dir() -> PathBuf {
+    std::env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .expect("CARGO_MANIFEST_DIR env var not set")
+}
+
+pub fn ensure_submodules() {
+    let dir = manifest_dir();
+    assert_cmd::Command::new("git")
+        .args(&["submodule", "update", "--init", "--recursive"])
+        .current_dir(&dir)
+        .assert()
+        .success();
+}
+
 pub struct TestEnv {
     pub registry: url::Url,
     pub namespace: String,
