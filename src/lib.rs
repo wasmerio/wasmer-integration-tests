@@ -88,9 +88,17 @@ pub async fn send_get_request_to_app(name: &String) -> Response {
         .unwrap()
 }
 
+pub async fn send_get_request_to_url(url: &str) -> Response {
+    reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .unwrap()
+}
+
 pub fn deploy_dir(dir: &PathBuf) {
     assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive", "--registry", "wasmer.wtf"])
+        .args(["deploy", "--non-interactive"])
         .current_dir(dir)
         .status()
         .unwrap()

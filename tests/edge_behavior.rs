@@ -2,7 +2,10 @@ use std::{fs::write, process::Command, thread::sleep, time::Duration};
 
 use tempfile::TempDir;
 use uuid::Uuid;
-use watest::{deploy_dir, deploy_hello_world_app, send_get_request_to_app};
+use watest::{
+    deploy_dir, deploy_hello_world_app, send_get_request_to_app, send_get_request_to_url,
+};
+use yaml_rust::YamlLoader;
 
 #[test_log::test(tokio::test)]
 async fn test_instance_respawn() {
@@ -83,14 +86,26 @@ package: wasmer-tests/hello-world
     )
     .unwrap();
     deploy_dir(&dir);
-    
+    let yaml = YamlLoader::load_from_str(
+        &String::from_utf8(
+            Command::new("wasmer")
+                .args(["app", "get", &format!("wasmer-tests/{name}")])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap(),
+    )
+    .unwrap()[0]
+        .clone();
+    let url = yaml["url"].as_str().unwrap();
     assert!(Command::new("wasmer")
-        .args(["app", "delete", "--non-interactive", "--registry", "wasmer.wtf"])
+        .args(["app", "delete", "--non-interactive"])
         .current_dir(&dir)
         .status()
         .unwrap()
         .success());
-    while send_get_request_to_app(&name).await.status().is_success() {};
+    while send_get_request_to_url(url).await.status().is_success() {}
     write(
         dir.join("app.yaml"),
         format!(
@@ -104,11 +119,11 @@ package: wasmer-tests/hello-world
     )
     .unwrap();
     assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive", "--registry", "wasmer.wtf", "--no-wait"])
+        .args(["deploy", "--non-interactive", "--no-wait"])
         .current_dir(dir)
         .status()
         .unwrap()
         .success());
     sleep(Duration::from_secs(10));
-    assert!(send_get_request_to_app(&name).await.status().is_success());
+    assert!(send_get_request_to_url(url).await.status().is_success());
 }
