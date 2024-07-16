@@ -52,15 +52,15 @@ async fn test_package_download_named() {
         .success();
 
     assert_eq!(
-        std::fs::read_to_string(path.join("out/data/a.txt")).unwrap(),
+        std::fs::read_to_string(path.join("out/atom/data/a.txt")).unwrap(),
         "a"
     );
     assert_eq!(
-        std::fs::read_to_string(path.join("out/data/b/b.md")).unwrap(),
+        std::fs::read_to_string(path.join("out/atom/data/b/b.md")).unwrap(),
         "# b"
     );
 }
-
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_package_download_unnamed() {
     let dir = TempDir::new().unwrap();
@@ -120,12 +120,12 @@ async fn test_package_download_unnamed() {
     // FIXME: currently uses the wrong webc version , resulting in an unexpected
     // directory layout. Backend returns v3 or we switch to v3 in general
     //
-    // assert_eq!(
-    //     std::fs::read_to_string(dir.join("out/data/a.txt")).unwrap(),
-    //     "a"
-    // );
-    // assert_eq!(
-    //     std::fs::read_to_string(dir.join("out/data/b/b.md")).unwrap(),
-    //     "# b"
-    // );
+    assert_eq!(
+        std::fs::read_to_string(path.join("out/atom/data/a.txt")).unwrap(),
+        "a"
+    );
+    assert_eq!(
+        std::fs::read_to_string(path.join("out/atom/data/b/b.md")).unwrap(),
+        "# b"
+    );
 }

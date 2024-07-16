@@ -1,6 +1,6 @@
 [package]
-name = "wasmer-tests/axum"
-version = "0.1.0"
+name = "wasmer-integration-tests/axum"
+version = "0.2.5"
 
 [[module]]
 name = "wasix-axum"

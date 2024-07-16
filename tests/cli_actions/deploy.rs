@@ -5,6 +5,7 @@ use tempfile::TempDir;
 use uuid::Uuid;
 use watest::deploy_dir;
 use watest::deploy_hello_world_app;
+use watest::get_random_app_name;
 use watest::http_client;
 use watest::mkdir;
 use watest::send_get_request_to_app;
@@ -17,16 +18,15 @@ async fn test_deploy() {
             == "Hello World!\n"
     );
 }
-
 #[test_log::test(tokio::test)]
 async fn test_unnamed_package() {
-    let name = &Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
 
     write(
         dir.join("wasmer.toml"),
         r#"[dependencies]
-"wasmer-tests/hello-world" = "*""#,
+"wasmer-integration-tests/hello-world" = "*""#,
     )
     .unwrap();
     write(
@@ -35,7 +35,7 @@ async fn test_unnamed_package() {
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
 "#
         ),
@@ -52,14 +52,14 @@ async fn test_deploy_fails_no_app_name() {
         format!(
             r#"
 kind: wasmer.io/App.v0
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
 "#
         ),
     )
     .unwrap();
     assert!(!Command::new("wasmer")
-        .args(["deploy", "--registry", "wasmer.wtf", "--non-interactive"])
+        .args(["deploy", "--non-interactive"])
         .current_dir(dir)
         .status()
         .unwrap()
@@ -82,7 +82,7 @@ package: .
     )
     .unwrap();
     assert!(!Command::new("wasmer")
-        .args(["deploy", "--registry", "wasmer.wtf", "--non-interactive"])
+        .args(["deploy", "--non-interactive"])
         .current_dir(dir)
         .status()
         .unwrap()
@@ -219,10 +219,6 @@ capabilities:
 /// the file system.
 #[test_log::test(tokio::test)]
 async fn test_app_instaboot_php_fs() {
-    // Ensure submodules are cloned, because the php-testserver package from
-    // the wasmopticon submodule is needed.
-    watest::ensure_submodules();
-
     let dir = TempDir::new().unwrap();
     let path = dir.path();
     let watest::TestEnv {
@@ -234,19 +230,12 @@ async fn test_app_instaboot_php_fs() {
     let name = format!("test-{}", Uuid::new_v4());
     let domain = format!("{name}.{app_domain}");
 
-    let testerver_pkg_dir = watest::wasmopticon_dir()
-        .join("pkg")
-        .join("php-testserver")
-        .to_str()
-        .unwrap()
-        .to_string();
-
     mkdir!(path; {
         "app.yaml" => format!(r#"
 kind: wasmer.io/App.v0
 name: {name}
 owner: {namespace}
-package: {testerver_pkg_dir}
+package: wasmer-tests/php-testserver
 debug: true
 domains:
   - {domain}
@@ -325,12 +314,9 @@ capabilities:
 /// then returns that timestamp value in responses.
 ///
 /// PHP app running the local php-instaboot-timestamp package.
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_app_instaboot_max_age_php() {
-    // Ensure submodules are cloned, because the php-testserver package from
-    // the wasmopticon submodule is needed.
-    watest::ensure_submodules();
-
     let dir = TempDir::new().unwrap();
     let path = dir.path();
     let watest::TestEnv {

@@ -17,15 +17,6 @@ pub fn wasmopticon_dir() -> PathBuf {
     manifest_dir().join("wasmopticon")
 }
 
-pub fn ensure_submodules() {
-    let dir = manifest_dir();
-    assert_cmd::Command::new("git")
-        .args(&["submodule", "update", "--init", "--recursive"])
-        .current_dir(&dir)
-        .assert()
-        .success();
-}
-
 pub struct TestEnv {
     pub registry: url::Url,
     pub namespace: String,
@@ -61,17 +52,22 @@ pub fn http_client() -> reqwest::Client {
         .unwrap()
 }
 
+pub fn get_random_app_name() -> String {
+    let uuid = Uuid::new_v4().to_string();
+    String::from(&uuid[1..25])
+}
+
 pub fn deploy_hello_world_app() -> (String, PathBuf) {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("app.yaml"),
         format!(
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
-package: wasmer-tests/hello-world
+owner: wasmer-integration-tests
+package: wasmer-integration-tests/hello-world
     "#
         ),
     )
@@ -81,8 +77,9 @@ package: wasmer-tests/hello-world
 }
 
 pub async fn send_get_request_to_app(name: &String) -> Response {
+    let app_domain = env().app_domain;
     reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-tests.wasmer.dev"))
+        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
         .send()
         .await
         .unwrap()
@@ -110,8 +107,10 @@ pub fn deploy_dir(dir: &PathBuf) {
 /// # Example
 ///
 /// ```rust
+/// use watest::mkdir;
+/// use tempfile::TempDir;
 /// let dir = TempDir::new().unwrap().into_path();
-///
+/// 
 /// mkdir!(dir; {
 ///   "a.txt" => "a",
 ///   "b" => {

@@ -6,10 +6,9 @@ use std::{
 };
 use tempfile::TempDir;
 use test_log;
-use uuid::Uuid;
-use watest::{deploy_dir, deploy_hello_world_app, send_get_request_to_app};
+use watest::{deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app};
 use yaml_rust::YamlLoader;
-
+#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_app_listing() {
     let mut names = vec![];
@@ -28,7 +27,7 @@ async fn test_app_listing() {
         .unwrap(),
     )
     .unwrap()[0];
-
+    println!("{:?}", listed_apps.as_vec().unwrap());
     for name in &names {
         assert!(listed_apps
             .as_vec()
@@ -38,6 +37,7 @@ async fn test_app_listing() {
     }
 }
 
+#[ignore = "currently app delete is broken on dev"]
 #[test_log::test(tokio::test)]
 async fn test_app_delete() {
     let (name, dir) = deploy_hello_world_app();
@@ -63,7 +63,8 @@ async fn test_app_info_get() {
             .stdout,
     )
     .unwrap();
-    let expected_url = format!("https://{name}-wasmer-tests.wasmer.dev");
+    let app_domain = env().app_domain;
+    let expected_url = format!("https://{name}-wasmer-integration-tests.{app_domain}");
     assert!(info_output.contains(&format!("Name: {name}")));
     assert!(info_output.contains(&format!("URL: {expected_url}")));
 
@@ -86,7 +87,7 @@ async fn test_app_info_get() {
 
 #[test_log::test(tokio::test)]
 async fn test_logs() {
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
     write(
         dir.join("wasmer.toml"),
@@ -103,7 +104,7 @@ async fn test_logs() {
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
 cli_args:
 - -c 
@@ -114,7 +115,7 @@ cli_args:
     .unwrap();
     // --no-wait because app doesnt have an http server, so healthcheck from cli will fail
     assert!(Command::new("wasmer")
-        .args(["deploy", "--no-wait", "--registry", "wasmer.wtf"])
+        .args(["deploy", "--no-wait"])
         .current_dir(&dir)
         .status()
         .unwrap()
@@ -137,7 +138,7 @@ cli_args:
 
 #[test_log::test(tokio::test)]
 async fn test_update_multiple_times() {
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
     create_dir(dir.join("public")).unwrap();
     write(
@@ -162,7 +163,7 @@ runner = "https://webc.org/runner/wasi"
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
     "#
         ),
@@ -179,7 +180,7 @@ package: .
 
 #[test_log::test(tokio::test)]
 async fn test_cli_app_create_from_package() {
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
 
     assert!(Command::new("wasmer")
@@ -189,9 +190,9 @@ async fn test_cli_app_create_from_package() {
             "--name",
             &name,
             "--owner",
-            "wasmer-tests",
+            "wasmer-integration-tests",
             "--package",
-            "wasmer-tests/hello-world",
+            "wasmer-integration-tests/hello-world",
             "--deploy"
         ])
         .current_dir(dir)

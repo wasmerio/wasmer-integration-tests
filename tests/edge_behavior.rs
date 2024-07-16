@@ -1,9 +1,8 @@
 use std::{fs::write, process::Command, thread::sleep, time::Duration};
 
 use tempfile::TempDir;
-use uuid::Uuid;
 use watest::{
-    deploy_dir, deploy_hello_world_app, send_get_request_to_app, send_get_request_to_url,
+    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app, send_get_request_to_url
 };
 use yaml_rust::YamlLoader;
 
@@ -17,8 +16,9 @@ async fn test_instance_respawn() {
 
 #[test_log::test(tokio::test)]
 async fn test_gateway_get() {
+    let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .get("https://echo-server-wasmer-tests.wasmer.dev/hello?format=json")
+        .get(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
         .send()
         .await
         .unwrap();
@@ -32,14 +32,15 @@ async fn test_gateway_get() {
     // assert_eq!(data["headers"]["connection"], "keep-alive");
     assert_eq!(
         data["headers"]["host"],
-        "echo-server-wasmer-tests.wasmer.dev"
+        format!("echo-server-wasmer-integration-tests.{app_domain}")
     );
 }
 
 #[test_log::test(tokio::test)]
 async fn test_gateway_head() {
+    let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .head("https://echo-server-wasmer-tests.wasmer.dev/hello?format=json")
+        .head(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
         .send()
         .await
         .unwrap();
@@ -49,8 +50,9 @@ async fn test_gateway_head() {
 
 #[test_log::test(tokio::test)]
 async fn test_gateway_post() {
+    let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .post("https://echo-server-wasmer-tests.wasmer.dev/hello?format=json")
+        .post(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
         .body("body")
         .send()
         .await
@@ -65,22 +67,22 @@ async fn test_gateway_post() {
     // assert_eq!(data["headers"]["connection"], "keep-alive");
     assert_eq!(
         data["headers"]["host"],
-        "echo-server-wasmer-tests.wasmer.dev"
+        format!("echo-server-wasmer-integration-tests.{app_domain}")
     );
 }
 
 #[test_log::test(tokio::test)]
 async fn app_redeployed_quickly() {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("app.yaml"),
         format!(
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
-package: wasmer-tests/hello-world
+owner: wasmer-integration-tests
+package: wasmer-integration-tests/hello-world
     "#
         ),
     )
@@ -89,7 +91,7 @@ package: wasmer-tests/hello-world
     let yaml = YamlLoader::load_from_str(
         &String::from_utf8(
             Command::new("wasmer")
-                .args(["app", "get", &format!("wasmer-tests/{name}")])
+                .args(["app", "get", &format!("wasmer-integration-tests/{name}")])
                 .output()
                 .unwrap()
                 .stdout,
@@ -112,8 +114,8 @@ package: wasmer-tests/hello-world
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
-package: wasmer-tests/hello-world
+owner: wasmer-integration-tests
+package: wasmer-integration-tests/hello-world
     "#
         ),
     )

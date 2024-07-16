@@ -12,10 +12,6 @@ use watest::{http_client, mkdir};
 /// PHP app running the local php-instaboot-timestamp package.
 #[test_log::test(tokio::test)]
 async fn test_app_cache_purge_instaboot_php() {
-    // Ensure submodules are cloned, because the php-testserver package from
-    // the wasmopticon submodule is needed.
-    watest::ensure_submodules();
-
     let dir = TempDir::new().unwrap();
     let path = dir.path();
     let watest::TestEnv {
