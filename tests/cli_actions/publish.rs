@@ -13,7 +13,7 @@ async fn test_publish() {
         format!(
             r#"
 [package]
-name = "wasmer-tests/{name}"
+name = "wasmer-integration-tests/{name}"
 version = "0.1.0"
 [dependencies]
 "wasmer/python" = "3"
@@ -23,7 +23,7 @@ version = "0.1.0"
     .unwrap();
 
     assert!(Command::new("wasmer")
-        .args(["publish", "--registry", "wasmer.wtf",])
+        .args(["publish"])
         .current_dir(&dir)
         .status()
         .unwrap()
@@ -32,9 +32,7 @@ version = "0.1.0"
         Command::new("wasmer")
             .args([
                 "run",
-                "--registry",
-                "wasmer.wtf",
-                &format!("wasmer-tests/{name}"),
+                &format!("wasmer-integration-tests/{name}"),
                 "--",
                 "-c",
                 "print('Hello World!')",

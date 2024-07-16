@@ -1,29 +1,27 @@
 use std::fs::{create_dir, write};
 use tempfile::TempDir;
-use uuid::Uuid;
-use watest::{deploy_dir, send_get_request_to_app};
+use watest::{deploy_dir, env, get_random_app_name, send_get_request_to_app};
 
-#[ignore = "python wcgi broken on wasmer"]
 #[test_log::test(tokio::test)]
 async fn test_python_wcgi() {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("wasmer.toml"),
         format!(
             r#"
 [dependencies]
-"wasmer/python" = "3"
+"wasmer/python" = "*"
 
 [fs]
-"/main.py" = "./main.py"
+"/src" = "./src"
 
 [[command]]
 name = "script"
 module = "wasmer/python:python"
 runner = "https://webc.org/runner/wcgi"
 [command.annotations.wasi]
-main-args = ["/main.py"]
+main-args = ["src/main.py"]
     "#
         ),
     )
@@ -34,17 +32,15 @@ main-args = ["/main.py"]
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
-cli_args:
-- /main.py
     "#
         ),
     )
     .unwrap();
-
+    create_dir(dir.join("src")).unwrap();
     write(
-        dir.join("main.py"),
+        dir.join("src/main.py"),
         r#"
 print("HTTP/1.1 200 OK\r")
 print("Content-Type: text/html\r")
@@ -58,13 +54,12 @@ print("\r")
     deploy_dir(&dir);
 
     let body = send_get_request_to_app(&name).await.text().await.unwrap();
-    assert!(body.contains("Hello World!"), "{body}");
+    assert!(body.contains("Hello, World!"), "{body}");
 }
-
 #[test_log::test(tokio::test)]
 async fn test_winterjs() {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("wasmer.toml"),
         format!(
@@ -83,7 +78,7 @@ async fn test_winterjs() {
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
 cli_args:
 - /src/main.js
@@ -108,10 +103,11 @@ addEventListener('fetch', (req) => {
     assert!(body.contains("Hello World!"), "{body}");
 }
 
+
 #[test_log::test(tokio::test)]
 async fn test_php() {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("wasmer.toml"),
         format!(
@@ -138,7 +134,7 @@ main-args = ["-t", "/src", "-S", "localhost:8080"]
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
+owner: wasmer-integration-tests
 package: .
     "#
         ),
@@ -151,44 +147,45 @@ package: .
 <?
 echo $_GET["name"];
 ?>
-        
 "#,
     )
     .unwrap();
 
     deploy_dir(&dir);
-
-    assert!(reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-tests.wasmer.dev"))
+    let app_domain = env().app_domain;
+    let response = reqwest::Client::new()
+        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
         .query(&[("name", &name)])
         .send()
         .await
         .unwrap()
         .text()
         .await
-        .unwrap()
-        .contains(&name));
+        .unwrap();
+    println!("{response}");
+    assert!(response.contains(&name));
 }
 
 #[test_log::test(tokio::test)]
 async fn wasmer_build_deploy_axum() {
     let dir = TempDir::new().unwrap().into_path();
-    let name = Uuid::new_v4().to_string();
+    let name = get_random_app_name();
     write(
         dir.join("app.yaml"),
         format!(
             r#"
 kind: wasmer.io/App.v0
 name: {name}
-owner: wasmer-tests
-package: wasmer-tests/axum
+owner: wasmer-integration-tests
+package: wasmer-integration-tests/axum
     "#
         ),
     )
     .unwrap();
     deploy_dir(&dir);
+    let app_domain = env().app_domain;
     assert!(reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-tests.wasmer.dev"))
+        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
         .query(&[("name", &name)])
         .send()
         .await

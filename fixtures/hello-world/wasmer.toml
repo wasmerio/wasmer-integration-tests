@@ -1,5 +1,5 @@
 [package]
-name = "wasmer-tests/hello-world"
+name = "wasmer-integration-tests/hello-world"
 version = "0.1.0"
 
 [dependencies]
