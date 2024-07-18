@@ -18,7 +18,7 @@ fn deploy_app(name: &str, domain: &str) -> anyhow::Result<()> {
 kind: wasmer.io/App.v0
 name: {name}
 owner: {namespace}
-package: sha256:130e613ce2593bf2c27c0c8857bf576f539d8fb09a9bd7ad615892979df1e9b9
+package: wasmer-integration-tests/echo-env@0.1.0 
 domains:
 - {domain}
 "#),
