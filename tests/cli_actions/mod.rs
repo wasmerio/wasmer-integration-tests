@@ -7,3 +7,4 @@ mod package_download;
 pub mod publish;
 pub mod run;
 pub mod ssh;
+pub mod secrets;
