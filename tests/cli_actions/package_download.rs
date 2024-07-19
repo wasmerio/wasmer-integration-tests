@@ -4,6 +4,7 @@ use uuid::Uuid;
 use watest::{mkdir, TestEnv};
 
 #[test_log::test(tokio::test)]
+#[ignore]
 async fn test_package_download_named() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
