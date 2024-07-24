@@ -23,6 +23,12 @@ pub struct TestEnv {
     pub app_domain: String,
 }
 
+impl TestEnv {
+    pub fn load() -> Self {
+        env()
+    }
+}
+
 pub fn env() -> TestEnv {
     const DEFAULT_REGISTRY: &str = "https://registry.wasmer.wtf/graphql";
     const DEFAULT_NAMESPACE: &str = "wasmer-integration-tests";
@@ -79,27 +85,45 @@ package: wasmer-integration-tests/hello-world
 pub async fn send_get_request_to_app(name: &String) -> Response {
     let app_domain = env().app_domain;
     reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
+        .get(format!(
+            "https://{name}-wasmer-integration-tests.{app_domain}"
+        ))
         .send()
         .await
         .unwrap()
 }
 
 pub async fn send_get_request_to_url(url: &str) -> Response {
-    reqwest::Client::new()
-        .get(url)
-        .send()
-        .await
-        .unwrap()
+    reqwest::Client::new().get(url).send().await.unwrap()
 }
 
-pub fn deploy_dir(dir: &PathBuf) {
-    assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive"])
+pub struct DeployedAppInfo {
+    pub version_id: String,
+    pub url: url::Url,
+    pub app_id: String,
+}
+
+pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
+    let result = assert_cmd::Command::new("wasmer")
+        .args(&["deploy", "--non-interactive"])
         .current_dir(dir)
-        .status()
-        .unwrap()
-        .success());
+        .assert()
+        .success();
+
+    let output = result.get_output();
+
+    let status = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        .expect("could not parse stdout as json");
+
+    DeployedAppInfo {
+        version_id: status["id"].as_str().unwrap().to_string(),
+        url: status["url"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .expect("invalid URL"),
+        app_id: status["app"]["id"].as_str().unwrap().to_string(),
+    }
 }
 
 /// Macro that creates a directory structure with file contents.
@@ -110,7 +134,7 @@ pub fn deploy_dir(dir: &PathBuf) {
 /// use watest::mkdir;
 /// use tempfile::TempDir;
 /// let dir = TempDir::new().unwrap().into_path();
-/// 
+///
 /// mkdir!(dir; {
 ///   "a.txt" => "a",
 ///   "b" => {

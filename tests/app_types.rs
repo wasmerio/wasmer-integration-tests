@@ -103,7 +103,6 @@ addEventListener('fetch', (req) => {
     assert!(body.contains("Hello World!"), "{body}");
 }
 
-
 #[test_log::test(tokio::test)]
 async fn test_php() {
     let dir = TempDir::new().unwrap().into_path();
@@ -154,7 +153,9 @@ echo $_GET["name"];
     deploy_dir(&dir);
     let app_domain = env().app_domain;
     let response = reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
+        .get(format!(
+            "https://{name}-wasmer-integration-tests.{app_domain}"
+        ))
         .query(&[("name", &name)])
         .send()
         .await
@@ -185,7 +186,9 @@ package: wasmer-integration-tests/axum
     deploy_dir(&dir);
     let app_domain = env().app_domain;
     assert!(reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
+        .get(format!(
+            "https://{name}-wasmer-integration-tests.{app_domain}"
+        ))
         .query(&[("name", &name)])
         .send()
         .await
