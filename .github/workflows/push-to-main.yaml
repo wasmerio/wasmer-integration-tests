@@ -1,5 +1,8 @@
 name: "Run tests with new tests pushed on main branch"
 'on':
+  pull_request:
+    branches:
+      - 'main'
   push:
     branches:
       - 'main'
@@ -11,6 +14,18 @@ concurrency:
 jobs:
   default:
     runs-on: ubuntu-latest
+    env:
+      MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+      MYSQL_DBNAME: ${{ secrets.MYSQL_DBNAME }}
+      MYSQL_USERNAME: ${{ secrets.MYSQL_USERNAME }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+      MYSQL_CERT: ${{ secrets.MYSQL_CERT }}
+      PG_HOST: ${{ secrets.PG_HOST }}
+      PG_DBNAME: ${{ secrets.PG_DBNAME }}
+      PG_USERNAME: ${{ secrets.PG_USERNAME }}
+      PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+      PG_PORT: ${{ secrets.PG_PORT }}
     steps:
       - uses: actions/checkout@v3
       - uses: wasmerio/setup-wasmer@v2
