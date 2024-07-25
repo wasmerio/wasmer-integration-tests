@@ -15,6 +15,7 @@ jobs:
   default:
     runs-on: ubuntu-latest
     env:
+      RUST_BACKTRACE: 1
       MYSQL_HOST: ${{ vars.MYSQL_HOST }}
       MYSQL_DBNAME: ${{ vars.MYSQL_DBNAME }}
       MYSQL_USERNAME: ${{ secrets.MYSQL_USERNAME }}
