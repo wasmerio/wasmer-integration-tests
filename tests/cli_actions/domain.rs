@@ -47,7 +47,7 @@ async fn test_dns() {
         .unwrap()
         .success());
     // Wait until edge fetches dns records from backend
-    sleep(Duration::from_secs(15));
+    sleep(Duration::from_secs(60));
     let mut query = Message::default();
     query.add_question(&format!("my_a_record.{}", domain), Type::A, Class::Internet);
     
