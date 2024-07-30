@@ -28,6 +28,20 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: wasmerio/setup-wasmer@v2
+      - name: Cargo Registry Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/advisory-db
+            ~/.cargo/git
+            ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cargo target cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            target/
+          key: cargo-release-${{ hashFiles('**/Cargo.lock') }}
       - run: |
           # login to wasmer registry
           wasmer config set registry.url https://registry.wasmer.wtf/graphql
