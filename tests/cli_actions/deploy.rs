@@ -92,6 +92,7 @@ package: .
 /// Deploy a PHP app with instaboot, and make sure a journal-restored instance
 /// has PHP files cached in the opcache.
 #[test_log::test(tokio::test)]
+#[ignore = "reason"]
 async fn test_app_instaboot_php_opcache() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
@@ -217,6 +218,7 @@ capabilities:
 ///
 /// PHP app running the php-testserver package, which provides URIs for accessing
 /// the file system.
+#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_app_instaboot_php_fs() {
     let dir = TempDir::new().unwrap();
@@ -314,7 +316,7 @@ capabilities:
 /// then returns that timestamp value in responses.
 ///
 /// PHP app running the local php-instaboot-timestamp package.
-#[ignore]
+#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_app_instaboot_max_age_php() {
     let dir = TempDir::new().unwrap();

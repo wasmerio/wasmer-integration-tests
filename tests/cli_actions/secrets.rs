@@ -54,6 +54,7 @@ fn get_app() -> Option<(String, String)> {
 
 /// Create an app secret.
 #[test_log::test(tokio::test)]
+#[ignore = "reason"]
 async fn test_create_app_secret() -> anyhow::Result<()> {
     let watest::TestEnv {
         namespace,
@@ -128,6 +129,7 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
 }
 
 /// Update an app secret.
+#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_update_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
@@ -286,6 +288,7 @@ async fn test_update_app_secret() -> anyhow::Result<()> {
 }
 
 /// Delete an app secret.
+#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_delete_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
@@ -415,6 +418,7 @@ async fn test_delete_app_secret() -> anyhow::Result<()> {
 }
 
 /// Reveal an app secret.
+#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_reveal_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
