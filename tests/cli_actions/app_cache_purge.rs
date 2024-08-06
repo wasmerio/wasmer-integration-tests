@@ -11,7 +11,6 @@ use watest::{http_client, mkdir};
 ///
 /// PHP app running the local php-instaboot-timestamp package.
 #[test_log::test(tokio::test)]
-#[ignore = "reason"]
 async fn test_app_cache_purge_instaboot_php() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();

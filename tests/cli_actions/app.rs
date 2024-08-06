@@ -1,20 +1,20 @@
 use std::{
     fs::{create_dir, write},
     process::Command,
-    thread::sleep,
     time::Duration,
 };
 use tempfile::TempDir;
 use test_log;
+use tokio::time::sleep;
 use watest::{deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app};
 use yaml_rust::YamlLoader;
-#[ignore]
 #[test_log::test(tokio::test)]
+#[ignore = "there is too many apps for the integration test user, new apps wont get listed due to page limits"]
 async fn test_app_listing() {
     let mut names = vec![];
     for _ in 1..2 {
         let (name, _) = deploy_hello_world_app();
-        names.push(name.clone())
+        names.push(name.clone());
     }
     let listed_apps = &YamlLoader::load_from_str(
         &String::from_utf8(
@@ -27,7 +27,6 @@ async fn test_app_listing() {
         .unwrap(),
     )
     .unwrap()[0];
-    println!("{:?}", listed_apps.as_vec().unwrap());
     for name in &names {
         assert!(listed_apps
             .as_vec()
@@ -37,8 +36,8 @@ async fn test_app_listing() {
     }
 }
 
-#[ignore = "currently app delete is broken on dev"]
 #[test_log::test(tokio::test)]
+#[ignore = "app deletion is problematic to test due to weird behaviour, test manually"]
 async fn test_app_delete() {
     let (name, dir) = deploy_hello_world_app();
     assert!(Command::new("wasmer")
@@ -47,7 +46,7 @@ async fn test_app_delete() {
         .status()
         .unwrap()
         .success());
-    sleep(Duration::from_secs(20));
+    sleep(Duration::from_secs(180)).await;
     assert!(!send_get_request_to_app(&name).await.status().is_success())
 }
 
@@ -123,7 +122,7 @@ cli_args:
     // because of --no-wait, the app didnt received any http request, thus not spawned
     // so send a sample request to spawn it
     send_get_request_to_app(&name).await;
-    sleep(Duration::from_secs(10));
+    sleep(Duration::from_secs(10)).await;
     let logs = String::from_utf8(
         Command::new("wasmer")
             .args(["app", "logs"])

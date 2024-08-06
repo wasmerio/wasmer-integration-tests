@@ -4,7 +4,7 @@ use uuid::Uuid;
 use watest::{mkdir, TestEnv};
 
 #[test_log::test(tokio::test)]
-#[ignore]
+#[ignore = "cli is defaulting to v2"]
 async fn test_package_download_named() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
@@ -27,6 +27,9 @@ async fn test_package_download_named() {
             "a.txt" => "a",
             "b" => {
                 "b.md" => "# b",
+            }
+            "c" => {
+                "c.md" => "# c",
             }
         }
     });
@@ -53,16 +56,20 @@ async fn test_package_download_named() {
         .success();
 
     assert_eq!(
-        std::fs::read_to_string(path.join("out/atom/data/a.txt")).unwrap(),
+        std::fs::read_to_string(path.join("out/data/a.txt")).unwrap(),
         "a"
     );
     assert_eq!(
-        std::fs::read_to_string(path.join("out/atom/data/b/b.md")).unwrap(),
+        std::fs::read_to_string(path.join("out/data/b/b.md")).unwrap(),
         "# b"
     );
+    assert_eq!(
+        std::fs::read_to_string(path.join("out/data/c/c.md")).unwrap(),
+        "# c"
+    );
 }
-#[ignore]
 #[test_log::test(tokio::test)]
+#[ignore = "cli is defaulting to v2"]
 async fn test_package_download_unnamed() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
@@ -122,11 +129,11 @@ async fn test_package_download_unnamed() {
     // directory layout. Backend returns v3 or we switch to v3 in general
     //
     assert_eq!(
-        std::fs::read_to_string(path.join("out/atom/data/a.txt")).unwrap(),
+        std::fs::read_to_string(path.join("out/data/a.txt")).unwrap(),
         "a"
     );
     assert_eq!(
-        std::fs::read_to_string(path.join("out/atom/data/b/b.md")).unwrap(),
+        std::fs::read_to_string(path.join("out/data/b/b.md")).unwrap(),
         "# b"
     );
 }
