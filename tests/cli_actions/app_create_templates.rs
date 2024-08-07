@@ -5,7 +5,6 @@
 
 use watest::{TestEnv, REGISTRY_PROD};
 
-#[ignore = "prod login credentials are not available to most of the enviroments"]
 #[test_log::test(tokio::test)]
 async fn test_app_template_static_site() {
     let dir = tempfile::tempdir().unwrap();

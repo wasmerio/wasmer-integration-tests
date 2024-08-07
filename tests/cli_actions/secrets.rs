@@ -1,6 +1,5 @@
 use predicates::{boolean::NotPredicate, str::contains};
 use rand::Rng;
-use std::sync::OnceLock;
 use tempfile::TempDir;
 use uuid::Uuid;
 use watest::mkdir;
@@ -38,27 +37,20 @@ domains:
 
 /// A utility to get a clean (new) app identifier each time the tests run.
 fn get_app() -> Option<(String, String)> {
-    static APP: OnceLock<Option<(String, String)>> = OnceLock::new();
-    let app = APP.get_or_init(|| {
-        let watest::TestEnv { app_domain, .. } = watest::env();
+    let watest::TestEnv { app_domain, .. } = watest::env();
 
-        let name = format!("test-{}", Uuid::new_v4());
-        let domain = format!("{name}.{app_domain}");
-        deploy_app(&name, &domain).ok()?;
+    let name = format!("test-{}", Uuid::new_v4());
+    let domain = format!("{name}.{app_domain}");
+    deploy_app(&name, &domain).ok()?;
 
-        Some((name, domain))
-    });
-
-    app.clone()
+    Some((name, domain))
 }
 
 /// Create an app secret.
 #[test_log::test(tokio::test)]
-#[ignore = "reason"]
 async fn test_create_app_secret() -> anyhow::Result<()> {
     let watest::TestEnv {
         namespace,
-        registry,
         ..
     } = watest::env();
     let (app_name, app_domain) =
@@ -68,8 +60,8 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
     let mut rng = rand::thread_rng();
     let range = 0..=i32::MAX;
 
-    let secret_value = format!("SECRET_{}", rng.gen_range(range.clone()));
-    let secret_name = format!("VALUE_{}", rng.gen_range(range));
+    let secret_name= format!("SECRET_{}", rng.gen_range(range.clone()));
+    let secret_value = format!("VALUE_{}", rng.gen_range(range.clone()));
 
     assert_cmd::Command::new("wasmer")
         .args([
@@ -78,8 +70,7 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
             "create",
             &format!("--app={app_id}"),
             &secret_name,
-            &secret_value,
-            &format!("--registry={registry}"),
+            &secret_value
         ])
         .assert()
         .success();
@@ -90,7 +81,6 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
             "secrets",
             "list",
             &format!("--app={app_id}"),
-            &format!("--registry={registry}"),
         ])
         .assert()
         .success()
@@ -129,7 +119,6 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
 }
 
 /// Update an app secret.
-#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_update_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
@@ -288,7 +277,6 @@ async fn test_update_app_secret() -> anyhow::Result<()> {
 }
 
 /// Delete an app secret.
-#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_delete_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
@@ -418,7 +406,6 @@ async fn test_delete_app_secret() -> anyhow::Result<()> {
 }
 
 /// Reveal an app secret.
-#[ignore = "reason"]
 #[test_log::test(tokio::test)]
 async fn test_reveal_app_secret() -> anyhow::Result<()> {
     // Let's first create it.

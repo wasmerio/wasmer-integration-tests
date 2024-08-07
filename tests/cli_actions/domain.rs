@@ -1,17 +1,16 @@
 use std::fs::write;
 use std::net::Ipv4Addr;
 use std::process::Command;
-use std::thread::sleep;
 use std::time::Duration;
 
 use rustdns::clients::udp::Client;
 use rustdns::clients::Exchanger;
 use rustdns::types::*;
 use tempfile::TempDir;
+use tokio::time::sleep;
 use uuid::Uuid;
 
 #[test_log::test(tokio::test)]
-#[ignore = "temporarily disable because the dns client is unrelaiable"]
 async fn test_dns() {
     let domain = format!("{}.com", Uuid::new_v4().to_string().get(..10).unwrap());
     let temp_dir = TempDir::new().unwrap().into_path();
@@ -48,20 +47,28 @@ async fn test_dns() {
         .unwrap()
         .success());
     // Wait until edge fetches dns records from backend
-    sleep(Duration::from_secs(60));
-    let mut query = Message::default();
-    query.add_question(&format!("my_a_record.{}", domain), Type::A, Class::Internet);
-    
-    let is_prod = String::from_utf8(Command::new("wasmer").args(["config", "get", "registry.url"]).output().unwrap().stderr).unwrap().contains("wasmer.io");
-    let mut dns_server_url = "alpha.ns.wasmer-dev.network:53";
-    if is_prod {
-        dns_server_url = "alpha.ns.wasmernet.com:53"
-    } 
-    let client: Client = Client::new(dns_server_url).unwrap();
-    let resp = client.exchange(&query).unwrap();
-    assert!(resp.rcode == Rcode::NoError);
-    assert!(resp
-        .answers
-        .iter()
-        .any(|record| record.resource == Resource::A(Ipv4Addr::new(192, 168, 1, 1))));
+    let mut success = false;
+    for _ in 1..30 {
+        if success {
+            break;
+        }
+        let mut query = Message::default();
+        query.add_question(&format!("my_a_record.{}", domain), Type::A, Class::Internet);
+        
+        let is_prod = String::from_utf8(Command::new("wasmer").args(["config", "get", "registry.url"]).output().unwrap().stderr).unwrap().contains("wasmer.io");
+        let mut dns_server_url = "alpha.ns.wasmer-dev.network:53";
+        if is_prod {
+            dns_server_url = "alpha.ns.wasmernet.com:53"
+        } 
+        let client: Client = Client::new(dns_server_url).unwrap();
+        let resp = client.exchange(&query).unwrap();
+        for i in resp.answers.iter() {
+            print!("{i}")
+        }
+        if resp.rcode == Rcode::NoError && resp.answers.iter().any(|record| record.resource == Resource::A(Ipv4Addr::new(192, 168, 1, 1))) {
+            success = true;
+        }
+        sleep(Duration::from_secs(10)).await;
+    }
+    assert!(success);
 }
