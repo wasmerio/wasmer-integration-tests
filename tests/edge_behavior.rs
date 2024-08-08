@@ -3,7 +3,8 @@ use std::{fs::write, process::Command, time::Duration};
 use tempfile::TempDir;
 use tokio::time::sleep;
 use watest::{
-    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app, send_get_request_to_url
+    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app,
+    send_get_request_to_url,
 };
 
 #[test_log::test(tokio::test)]
@@ -18,7 +19,9 @@ async fn test_instance_respawn() {
 async fn test_gateway_get() {
     let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .get(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
+        .get(format!(
+            "https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"
+        ))
         .send()
         .await
         .unwrap();
@@ -40,7 +43,9 @@ async fn test_gateway_get() {
 async fn test_gateway_head() {
     let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .head(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
+        .head(format!(
+            "https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"
+        ))
         .send()
         .await
         .unwrap();
@@ -52,7 +57,9 @@ async fn test_gateway_head() {
 async fn test_gateway_post() {
     let app_domain = env().app_domain;
     let resp = reqwest::Client::new()
-        .post(format!("https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"))
+        .post(format!(
+            "https://echo-server-wasmer-integration-tests.{app_domain}/hello?format=json"
+        ))
         .body("body")
         .send()
         .await

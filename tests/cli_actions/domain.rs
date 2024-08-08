@@ -20,11 +20,7 @@ async fn test_dns() {
         .unwrap()
         .success());
     let get_zone_file = Command::new("wasmer")
-        .args([
-            "domain",
-            "get-zone-file",
-            &domain
-        ])
+        .args(["domain", "get-zone-file", &domain])
         .output()
         .unwrap();
     assert!(get_zone_file.status.success());
@@ -38,11 +34,7 @@ async fn test_dns() {
     )
     .unwrap();
     assert!(Command::new("wasmer")
-        .args([
-            "domain",
-            "sync-zone-file",
-            &zonefile_path.to_str().unwrap()
-        ])
+        .args(["domain", "sync-zone-file", &zonefile_path.to_str().unwrap()])
         .status()
         .unwrap()
         .success());
@@ -54,18 +46,31 @@ async fn test_dns() {
         }
         let mut query = Message::default();
         query.add_question(&format!("my_a_record.{}", domain), Type::A, Class::Internet);
-        
-        let is_prod = String::from_utf8(Command::new("wasmer").args(["config", "get", "registry.url"]).output().unwrap().stderr).unwrap().contains("wasmer.io");
+
+        let is_prod = String::from_utf8(
+            Command::new("wasmer")
+                .args(["config", "get", "registry.url"])
+                .output()
+                .unwrap()
+                .stderr,
+        )
+        .unwrap()
+        .contains("wasmer.io");
         let mut dns_server_url = "alpha.ns.wasmer-dev.network:53";
         if is_prod {
             dns_server_url = "alpha.ns.wasmernet.com:53"
-        } 
+        }
         let client: Client = Client::new(dns_server_url).unwrap();
         let resp = client.exchange(&query).unwrap();
         for i in resp.answers.iter() {
             print!("{i}")
         }
-        if resp.rcode == Rcode::NoError && resp.answers.iter().any(|record| record.resource == Resource::A(Ipv4Addr::new(192, 168, 1, 1))) {
+        if resp.rcode == Rcode::NoError
+            && resp
+                .answers
+                .iter()
+                .any(|record| record.resource == Resource::A(Ipv4Addr::new(192, 168, 1, 1)))
+        {
             success = true;
         }
         sleep(Duration::from_secs(10)).await;

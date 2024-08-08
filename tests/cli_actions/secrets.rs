@@ -49,10 +49,7 @@ fn get_app() -> Option<(String, String)> {
 /// Create an app secret.
 #[test_log::test(tokio::test)]
 async fn test_create_app_secret() -> anyhow::Result<()> {
-    let watest::TestEnv {
-        namespace,
-        ..
-    } = watest::env();
+    let watest::TestEnv { namespace, .. } = watest::env();
     let (app_name, app_domain) =
         get_app().ok_or(anyhow::anyhow!("Could not get app identifier!"))?;
 
@@ -60,7 +57,7 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
     let mut rng = rand::thread_rng();
     let range = 0..=i32::MAX;
 
-    let secret_name= format!("SECRET_{}", rng.gen_range(range.clone()));
+    let secret_name = format!("SECRET_{}", rng.gen_range(range.clone()));
     let secret_value = format!("VALUE_{}", rng.gen_range(range.clone()));
 
     assert_cmd::Command::new("wasmer")
@@ -70,18 +67,13 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
             "create",
             &format!("--app={app_id}"),
             &secret_name,
-            &secret_value
+            &secret_value,
         ])
         .assert()
         .success();
 
     assert_cmd::Command::new("wasmer")
-        .args([
-            "app",
-            "secrets",
-            "list",
-            &format!("--app={app_id}"),
-        ])
+        .args(["app", "secrets", "list", &format!("--app={app_id}")])
         .assert()
         .success()
         .stdout(contains(&secret_name));
