@@ -79,24 +79,22 @@ package: wasmer-integration-tests/hello-world
 pub async fn send_get_request_to_app(name: &String) -> Response {
     let app_domain = env().app_domain;
     reqwest::Client::new()
-        .get(format!("https://{name}-wasmer-integration-tests.{app_domain}"))
+        .get(format!(
+            "https://{name}-wasmer-integration-tests.{app_domain}"
+        ))
         .send()
         .await
         .unwrap()
 }
 
 pub async fn send_get_request_to_url(url: &str) -> Response {
-    reqwest::Client::new()
-        .get(url)
-        .send()
-        .await
-        .unwrap()
+    reqwest::Client::new().get(url).send().await.unwrap()
 }
 
-pub fn deploy_dir(dir: &PathBuf) {
+pub fn deploy_dir(dir: impl AsRef<std::path::Path>) {
     assert!(Command::new("wasmer")
         .args(["deploy", "--non-interactive"])
-        .current_dir(dir)
+        .current_dir(dir.as_ref())
         .status()
         .unwrap()
         .success());
@@ -110,7 +108,7 @@ pub fn deploy_dir(dir: &PathBuf) {
 /// use watest::mkdir;
 /// use tempfile::TempDir;
 /// let dir = TempDir::new().unwrap().into_path();
-/// 
+///
 /// mkdir!(dir; {
 ///   "a.txt" => "a",
 ///   "b" => {

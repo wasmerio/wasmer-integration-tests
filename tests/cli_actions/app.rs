@@ -6,7 +6,9 @@ use std::{
 use tempfile::TempDir;
 use test_log;
 use tokio::time::sleep;
-use watest::{deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app};
+use watest::{
+    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app,
+};
 use yaml_rust::YamlLoader;
 #[test_log::test(tokio::test)]
 #[ignore = "there is too many apps for the integration test user, new apps wont get listed due to page limits"]
