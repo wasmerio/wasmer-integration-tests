@@ -218,7 +218,6 @@ capabilities:
 /// PHP app running the php-testserver package, which provides URIs for accessing
 /// the file system.
 #[test_log::test(tokio::test)]
-#[ignore = "instaboot changes broke this, being investigated"]
 async fn test_app_instaboot_php_fs() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
@@ -244,6 +243,7 @@ capabilities:
   instaboot:
     requests:
       - path: /fs/write/tmp/hello.txt
+        method: POST
         body: hello
 "#),
     });
