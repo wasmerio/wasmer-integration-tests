@@ -5,7 +5,6 @@ use uuid::Uuid;
 use watest::{http_client, mkdir};
 
 #[test_log::test(tokio::test)]
-#[ignore]
 async fn test_php_extensions() {
     let dir = TempDir::new().unwrap();
     let path = dir.path();
