@@ -93,7 +93,7 @@ pub async fn send_get_request_to_url(url: &str) -> Response {
 
 pub fn deploy_dir(dir: impl AsRef<std::path::Path>) {
     assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive"])
+        .args(["deploy", "--non-interactive", &format!("--registry={}", env().registry)])
         .current_dir(dir.as_ref())
         .status()
         .unwrap()
