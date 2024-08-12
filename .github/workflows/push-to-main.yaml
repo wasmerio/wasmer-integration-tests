@@ -6,6 +6,7 @@ name: "Run tests with new tests pushed on main branch"
   push:
     branches:
       - 'main'
+  workflow_dispatch:
 
 concurrency:
   group: push-to-main
