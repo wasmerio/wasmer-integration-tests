@@ -6,7 +6,6 @@
 use watest::{TestEnv, REGISTRY_PROD};
 
 #[test_log::test(tokio::test)]
-#[ignore = "disabled until ci's have prod key"]
 async fn test_app_template_static_site() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path();
