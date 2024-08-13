@@ -30,7 +30,6 @@ async fn php_wasmer_starter() {
     deploy_template("https://github.com/wasmer-examples/php-wasmer-starter")
 }
 #[test_log::test(tokio::test)]
-#[ignore = "requires php and composer in test env"]
 async fn symfony_wasmer_starter() {
     let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
@@ -40,6 +39,54 @@ async fn symfony_wasmer_starter() {
             "create",
             "--template",
             "https://github.com/wasmer-examples/symfony-wasmer-starter",
+            "--non-interactive",
+            "--name",
+            &name,
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("composer")
+        .args(["install"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("php")
+        .args(["bin/console", "asset-map:compile"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("wasmer")
+        .args([
+            "deploy",
+            "--non-interactive",
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+}
+#[test_log::test(tokio::test)]
+async fn wordpress_wasmer_starter() {
+    deploy_template("https://github.com/wasmer-examples/wordpress-wasmer-starter")
+}
+#[test_log::test(tokio::test)]
+async fn laravel_wasmer_starter() {
+    let name = get_random_app_name();
+    let dir = TempDir::new().unwrap().into_path();
+    assert!(Command::new("wasmer")
+        .args([
+            "app",
+            "create",
+            "--template",
+            "https://github.com/wasmer-examples/laravel-wasmer-starter",
             "--non-interactive",
             "--name",
             &name,
@@ -67,15 +114,6 @@ async fn symfony_wasmer_starter() {
         .status()
         .unwrap()
         .success());
-}
-#[test_log::test(tokio::test)]
-async fn wordpress_wasmer_starter() {
-    deploy_template("https://github.com/wasmer-examples/wordpress-wasmer-starter")
-}
-#[ignore = "this requires additional build steps before deploying, will embed docker into test runtime and run the build steps in docker"]
-#[test_log::test(tokio::test)]
-async fn laravel_wasmer_starter() {
-    deploy_template("https://github.com/wasmer-examples/laravel-wasmer-starter")
 }
 #[test_log::test(tokio::test)]
 async fn php_wcgi_starter() {

@@ -40,7 +40,7 @@ async fn test_dns() {
         .success());
     // Wait until edge fetches dns records from backend
     let mut success = false;
-    for _ in 1..30 {
+    for _ in 1..60 {
         if success {
             break;
         }
