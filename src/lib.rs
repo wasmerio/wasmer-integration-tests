@@ -1,7 +1,6 @@
 use reqwest::Response;
 use std::fs::write;
 use std::path::PathBuf;
-use std::process::Command;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -21,6 +20,12 @@ pub struct TestEnv {
     pub registry: url::Url,
     pub namespace: String,
     pub app_domain: String,
+}
+
+impl TestEnv {
+    pub fn load() -> Self {
+        env()
+    }
 }
 
 pub fn env() -> TestEnv {
@@ -91,13 +96,54 @@ pub async fn send_get_request_to_url(url: &str) -> Response {
     reqwest::Client::new().get(url).send().await.unwrap()
 }
 
-pub fn deploy_dir(dir: impl AsRef<std::path::Path>) {
-    assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive", &format!("--registry={}", env().registry)])
-        .current_dir(dir.as_ref())
-        .status()
-        .unwrap()
-        .success());
+pub struct DeployedAppInfo {
+    pub version_id: String,
+    pub url: url::Url,
+    pub app_id: String,
+}
+
+pub fn deploy_dir_with_args<I, S>(dir: &PathBuf, extra_args: I) -> DeployedAppInfo
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let result = assert_cmd::Command::new("wasmer")
+        .args(&["deploy", "--non-interactive", "--format=json"])
+        .arg("--registry")
+        .arg(env().registry.as_str())
+        .args(extra_args)
+        .current_dir(dir)
+        .assert()
+        .success();
+
+    let output = result.get_output();
+
+    let status = match serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+        Ok(v) => v,
+        Err(err) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            panic!(
+                "Could not parse  output of 'wasmer deploy' as json: {err}:\n=====\n{}\n=====\n{}\n=====",
+                stdout, stderr
+            );
+        }
+    };
+
+    DeployedAppInfo {
+        version_id: status["id"].as_str().unwrap().to_string(),
+        url: status["url"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .expect("invalid URL"),
+        app_id: status["app"]["id"].as_str().unwrap().to_string(),
+    }
+}
+
+pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
+    deploy_dir_with_args(dir, Vec::<String>::new())
 }
 
 /// Macro that creates a directory structure with file contents.

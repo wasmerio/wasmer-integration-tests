@@ -3,8 +3,8 @@ use std::{fs::write, process::Command, time::Duration};
 use tempfile::TempDir;
 use tokio::time::sleep;
 use watest::{
-    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app,
-    send_get_request_to_url,
+    deploy_dir, deploy_dir_with_args, deploy_hello_world_app, env, get_random_app_name,
+    http_client, send_get_request_to_app, wasmopticon_dir,
 };
 
 #[test_log::test(tokio::test)]
@@ -124,4 +124,63 @@ package: wasmer-integration-tests/hello-world
         .success());
     sleep(Duration::from_secs(65)).await;
     assert!(send_get_request_to_app(&name).await.status().is_success());
+}
+
+#[test_log::test(tokio::test)]
+async fn app_volumes() {
+    let dir = TempDir::new().unwrap().into_path();
+    let name = get_random_app_name();
+    let pkg_dir = wasmopticon_dir()
+        .join("pkg/php-testserver")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    write(
+        dir.join("app.yaml"),
+        format!(
+            r#"
+kind: wasmer.io/App.v0
+name: {name}
+owner: wasmer-integration-tests
+package: {pkg_dir}
+debug: true
+volumes:
+- name: data
+  mounts:
+  - mount_path: /data1
+    "#
+        ),
+    )
+    .unwrap();
+    let meta = deploy_dir_with_args(&dir, ["--bump"]);
+    let client = http_client();
+
+    // Write a file to the volume.
+    {
+        let mut url = meta.url.clone();
+        url.set_path("/fs/write/data1/file1");
+        client.post(url).body("value1").send().await.unwrap();
+    }
+
+    // Read the data
+    {
+        let mut url = meta.url.clone();
+        url.set_path("/fs/read/data1/file1");
+        let resp = client.get(url).send().await.unwrap();
+        assert_eq!(resp.text().await.unwrap(), "value1");
+    }
+
+    // Now read again, but force a fresh instance to make sure it wasn't just stored in memory.
+    {
+        let mut url = meta.url.clone();
+        url.set_path("/fs/read/data1/file1");
+        let resp = client
+            .get(url)
+            .header("x-edge-purge-instances", "1")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.text().await.unwrap(), "value1");
+    }
 }
