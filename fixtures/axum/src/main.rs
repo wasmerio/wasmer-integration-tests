@@ -21,5 +21,5 @@ async fn main() {
 }
 
 async fn handler(Query(params): Query<HashMap<String, String>>) -> String {
-    format!("{:?}", params)
+    format!("hellooooo{:?}", params)
 }
