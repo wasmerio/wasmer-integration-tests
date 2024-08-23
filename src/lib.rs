@@ -21,8 +21,10 @@ pub fn wasmopticon_dir() -> PathBuf {
                 path.display()
             );
         }
+        path
+    } else {
+        manifest_dir().join("wasmopticon")
     }
-    manifest_dir().join("wasmopticon")
 }
 
 pub struct TestEnv {
