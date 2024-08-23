@@ -9,7 +9,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH=/root/.cargo/bin:$PATH
 
 # Copy the test apps repo
-COPY ./wasmopticon /wasmopticon
+COPY ./wasmopticon /
 ENV WASMOPTICON_DIR=/wasmopticon
 
 # Install dependencies
