@@ -13,6 +13,15 @@ pub fn manifest_dir() -> PathBuf {
 }
 
 pub fn wasmopticon_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("WASMOPTICON_DIR") {
+        let path = PathBuf::from(dir);
+        if !path.exists() {
+            panic!(
+                "WASMOPTICON_DIR env var set, but directory does not exist: '{}'",
+                path.display()
+            );
+        }
+    }
     manifest_dir().join("wasmopticon")
 }
 
