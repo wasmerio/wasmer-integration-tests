@@ -29,20 +29,91 @@ fn deploy_template(template_name: &str) {
 async fn php_wasmer_starter() {
     deploy_template("https://github.com/wasmer-examples/php-wasmer-starter")
 }
-#[ignore = "this requires additional build steps before deploying, will embed docker into test runtime and run the build steps in docker"]
 #[test_log::test(tokio::test)]
 async fn symfony_wasmer_starter() {
-    deploy_template("https://github.com/wasmer-examples/symfony-wasmer-starter")
+    let name = get_random_app_name();
+    let dir = TempDir::new().unwrap().into_path();
+    assert!(Command::new("wasmer")
+        .args([
+            "app",
+            "create",
+            "--template",
+            "https://github.com/wasmer-examples/symfony-wasmer-starter",
+            "--non-interactive",
+            "--name",
+            &name,
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("composer")
+        .args(["install"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("php")
+        .args(["bin/console", "asset-map:compile"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("wasmer")
+        .args([
+            "deploy",
+            "--non-interactive",
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
 }
-#[ignore = "fails locally due to bug in package upload timeout"]
 #[test_log::test(tokio::test)]
 async fn wordpress_wasmer_starter() {
     deploy_template("https://github.com/wasmer-examples/wordpress-wasmer-starter")
 }
-#[ignore = "this requires additional build steps before deploying, will embed docker into test runtime and run the build steps in docker"]
 #[test_log::test(tokio::test)]
 async fn laravel_wasmer_starter() {
-    deploy_template("https://github.com/wasmer-examples/laravel-wasmer-starter")
+    let name = get_random_app_name();
+    let dir = TempDir::new().unwrap().into_path();
+    assert!(Command::new("wasmer")
+        .args([
+            "app",
+            "create",
+            "--template",
+            "https://github.com/wasmer-examples/laravel-wasmer-starter",
+            "--non-interactive",
+            "--name",
+            &name,
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("composer")
+        .args(["install"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("wasmer")
+        .args([
+            "deploy",
+            "--non-interactive",
+            "--owner",
+            "wasmer-integration-tests",
+        ])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
 }
 #[test_log::test(tokio::test)]
 async fn php_wcgi_starter() {

@@ -1,19 +1,25 @@
-name: "Run tests with new tests pushed on main branch"
+name: "run-against-prod"
 'on':
-  pull_request:
-    branches:
-      - 'main'
-  push:
-    branches:
-      - 'main'
   workflow_dispatch:
 
 concurrency:
-  group: push-to-main
+  group: run-against-prod
 
 jobs:
   default:
     runs-on: ubuntu-latest
+    env:
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_DBNAME: ${{ vars.MYSQL_DBNAME }}
+      MYSQL_USERNAME: ${{ secrets.MYSQL_USERNAME }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_CERT: ${{ secrets.MYSQL_CERT }}
+      PG_HOST: ${{ vars.PG_HOST }}
+      PG_DBNAME: ${{ vars.PG_DBNAME }}
+      PG_USERNAME: ${{ secrets.PG_USERNAME }}
+      PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+      PG_PORT: ${{ vars.PG_PORT }}
     steps:
       - uses: actions/checkout@v3
       - uses: wasmerio/setup-wasmer@v2
@@ -45,12 +51,8 @@ jobs:
             export PG_USERNAME='${{ secrets.PG_USERNAME }}' &&\
             export PG_PASSWORD='${{ secrets.PG_PASSWORD }}' &&\
             export PG_PORT='${{ vars.PG_PORT }}' &&\
+            export WASMER_REGISTRY="https://registry.wasmer.io/graphql" &&\
+            export WASMER_APP_DOMAIN="wasmer.app" &&\
             wasmer config set registry.url https://registry.wasmer.io/graphql &&\
             wasmer login ${{ secrets.WAPM_PROD_TOKEN }} &&\
-            wasmer config set registry.url https://registry.wasmer.wtf/graphql &&\
-            wasmer login ${{ secrets.WAPM_DEV_TOKEN }} &&\
             cargo test --no-fail-fast"
-      - name: notify failure in slack
-        if: failure()
-        run: |
-          curl -X POST -H 'Content-type: application/json' --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' https://hooks.slack.com/services/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

@@ -243,6 +243,7 @@ capabilities:
   instaboot:
     requests:
       - path: /fs/write/tmp/hello.txt
+        method: POST
         body: hello
 "#),
     });
@@ -314,7 +315,6 @@ capabilities:
 /// then returns that timestamp value in responses.
 ///
 /// PHP app running the local php-instaboot-timestamp package.
-#[ignore]
 #[test_log::test(tokio::test)]
 async fn test_app_instaboot_max_age_php() {
     let dir = TempDir::new().unwrap();

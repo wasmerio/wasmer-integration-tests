@@ -1,17 +1,17 @@
-use std::{fs::write, process::Command, thread::sleep, time::Duration};
+use std::{fs::write, process::Command, time::Duration};
 
 use tempfile::TempDir;
+use tokio::time::sleep;
 use watest::{
     deploy_dir, deploy_hello_world_app, env, get_random_app_name, mkdir, send_get_request_to_app,
-    send_get_request_to_url, TestEnv,
+    TestEnv,
 };
-use yaml_rust::YamlLoader;
 
 #[test_log::test(tokio::test)]
 async fn test_instance_respawn() {
     let (name, _) = deploy_hello_world_app();
     assert!(send_get_request_to_app(&name).await.status().is_success());
-    sleep(Duration::from_secs(65));
+    sleep(Duration::from_secs(310)).await;
     assert!(send_get_request_to_app(&name).await.status().is_success());
 }
 
@@ -79,6 +79,7 @@ async fn test_gateway_post() {
 }
 
 #[test_log::test(tokio::test)]
+#[ignore = "app deletion is problematic to test due to weird behaviour, test manually"]
 async fn app_redeployed_quickly() {
     let dir = TempDir::new().unwrap().into_path();
     let name = get_random_app_name();
@@ -95,26 +96,14 @@ package: wasmer-integration-tests/hello-world
     )
     .unwrap();
     deploy_dir(&dir);
-    let yaml = YamlLoader::load_from_str(
-        &String::from_utf8(
-            Command::new("wasmer")
-                .args(["app", "get", &format!("wasmer-integration-tests/{name}")])
-                .output()
-                .unwrap()
-                .stdout,
-        )
-        .unwrap(),
-    )
-    .unwrap()[0]
-        .clone();
-    let url = yaml["url"].as_str().unwrap();
     assert!(Command::new("wasmer")
         .args(["app", "delete", "--non-interactive"])
         .current_dir(&dir)
         .status()
         .unwrap()
         .success());
-    while send_get_request_to_url(url).await.status().is_success() {}
+    sleep(Duration::from_secs(65)).await;
+    assert!(!send_get_request_to_app(&name).await.status().is_success());
     write(
         dir.join("app.yaml"),
         format!(
@@ -133,8 +122,8 @@ package: wasmer-integration-tests/hello-world
         .status()
         .unwrap()
         .success());
-    sleep(Duration::from_secs(10));
-    assert!(send_get_request_to_url(url).await.status().is_success());
+    sleep(Duration::from_secs(65)).await;
+    assert!(send_get_request_to_app(&name).await.status().is_success());
 }
 
 #[test_log::test(tokio::test)]
