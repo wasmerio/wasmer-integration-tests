@@ -8,8 +8,10 @@ name: "Run tests with new tests pushed on main branch"
       - 'main'
   workflow_dispatch:
 
+# Automatically cancel previous workflow runs when a new commit is pushed.
 concurrency:
-  group: push-to-main
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   default:
