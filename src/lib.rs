@@ -1,7 +1,6 @@
 use reqwest::Response;
 use std::fs::write;
 use std::path::PathBuf;
-use std::process::Command;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -97,6 +96,7 @@ pub async fn send_get_request_to_url(url: &str) -> Response {
     reqwest::Client::new().get(url).send().await.unwrap()
 }
 
+#[derive(Debug)]
 pub struct DeployedAppInfo {
     pub version_id: String,
     pub url: url::Url,
@@ -105,7 +105,7 @@ pub struct DeployedAppInfo {
 
 pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
     let result = assert_cmd::Command::new("wasmer")
-        .args(&["deploy", "--non-interactive"])
+        .args(&["deploy", "--non-interactive", "--format=json", "--no-wait"])
         .current_dir(dir)
         .assert()
         .success();

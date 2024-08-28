@@ -2,8 +2,8 @@ use std::{fs::write, process::Command, thread::sleep, time::Duration};
 
 use tempfile::TempDir;
 use watest::{
-    deploy_dir, deploy_hello_world_app, env, get_random_app_name, http_client, mkdir,
-    send_get_request_to_app, send_get_request_to_url, TestEnv,
+    deploy_dir, deploy_hello_world_app, env, get_random_app_name, mkdir, send_get_request_to_app,
+    send_get_request_to_url, TestEnv,
 };
 use yaml_rust::YamlLoader;
 
@@ -164,6 +164,8 @@ kind: wasmer.io/App.v0
 name: {name}
 owner: {namespace}
 package: .
+redirect:
+  force_https: false
 "#),
     });
 
@@ -217,7 +219,10 @@ redirect:
         ),
     )
     .unwrap();
-    let _info = deploy_dir(&dir);
+    let info = deploy_dir(&dir);
+
+    let mut url_http = info.url.clone();
+    url_http.set_scheme("http").unwrap();
 
     // Should redirect.
     let resp = client
@@ -227,7 +232,7 @@ redirect:
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(resp.status(), 301);
+    assert_eq!(resp.status(), 308);
 
     let location = resp
         .headers()
@@ -249,7 +254,7 @@ redirect:
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(resp.status(), 301);
+    assert_eq!(resp.status(), 308);
     let location = resp
         .headers()
         .get("location")
