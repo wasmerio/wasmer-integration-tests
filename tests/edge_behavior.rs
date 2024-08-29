@@ -131,7 +131,7 @@ async fn app_volumes() {
     let dir = TempDir::new().unwrap().into_path();
     let name = get_random_app_name();
     let pkg_dir = wasmopticon_dir()
-        .join("pkg/php-testserver")
+        .join("php/php-testserver")
         .to_str()
         .unwrap()
         .to_string();
