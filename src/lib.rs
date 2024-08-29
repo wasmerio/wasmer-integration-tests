@@ -107,6 +107,7 @@ pub async fn send_get_request_to_url(url: &str) -> Response {
     reqwest::Client::new().get(url).send().await.unwrap()
 }
 
+#[derive(Debug)]
 pub struct DeployedAppInfo {
     pub version_id: String,
     pub url: url::Url,
