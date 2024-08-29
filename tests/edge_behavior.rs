@@ -3,8 +3,8 @@ use std::{fs::write, process::Command, time::Duration};
 use tempfile::TempDir;
 use tokio::time::sleep;
 use watest::{
-    deploy_dir, deploy_hello_world_app, env, get_random_app_name, send_get_request_to_app,
-    send_get_request_to_url,
+    deploy_dir, deploy_hello_world_app, env, get_random_app_name, mkdir, send_get_request_to_app,
+    TestEnv,
 };
 
 #[test_log::test(tokio::test)]
@@ -124,4 +124,135 @@ package: wasmer-integration-tests/hello-world
         .success());
     sleep(Duration::from_secs(65)).await;
     assert!(send_get_request_to_app(&name).await.status().is_success());
+}
+
+#[test_log::test(tokio::test)]
+async fn app_https_redirect() {
+    let dir = TempDir::new().unwrap().into_path();
+    let path = dir.to_path_buf();
+    let name = get_random_app_name();
+
+    let TestEnv { namespace, .. } = TestEnv::load();
+
+    // First create app without https redirect, and make sure no redirect happens.
+
+    mkdir!(&path; {
+        "wasmer.toml" => format!(r#"
+            [dependencies]
+            "wasmer/static-web-server" = "*"
+
+            [fs]
+            public = "public"
+        "#),
+
+        "public/index.html" => "index",
+        "public/sub.html" => "sub",
+
+        "app.yaml" => format!(r#"
+kind: wasmer.io/App.v0
+name: {name}
+owner: {namespace}
+package: .
+redirect:
+  force_https: false
+"#),
+    });
+
+    let info = deploy_dir(&dir);
+
+    // Want a client with no redirects.
+    let client = reqwest::Client::builder()
+        .user_agent("wasmer-integration-tests")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    assert_eq!(info.url.scheme(), "https");
+
+    let mut url_http = info.url.clone();
+    url_http.set_scheme("http").unwrap();
+
+    // Should not redirect.
+    let resp = client
+        .get(url_http.clone())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // https should work.
+    let resp = client
+        .get(info.url.clone())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    // Now re-deploy the app with https redirect enabled.
+    write(
+        dir.join("app.yaml"),
+        format!(
+            r#"
+kind: wasmer.io/App.v0
+name: {name}
+owner: wasmer-integration-tests
+package: wasmer-integration-tests/hello-world
+redirect:
+  force_https: true
+    "#
+        ),
+    )
+    .unwrap();
+    let info = deploy_dir(&dir);
+
+    let mut url_http = info.url.clone();
+    url_http.set_scheme("http").unwrap();
+
+    // Should redirect.
+    let resp = client
+        .get(url_http.clone())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(resp.status(), 308);
+
+    let location = resp
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_end_matches('/');
+    assert_eq!(location, info.url.as_str().trim_end_matches('/'));
+
+    // redirect should work with path.
+    let mut url_path = url_http.clone();
+    url_path.set_path("/sub");
+
+    let resp = client
+        .get(url_path)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(resp.status(), 308);
+    let location = resp
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .trim_end_matches('/');
+    assert_eq!(
+        location,
+        info.url.join("sub").unwrap().as_str().trim_end_matches('/')
+    );
 }

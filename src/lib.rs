@@ -1,7 +1,6 @@
 use reqwest::Response;
 use std::fs::write;
 use std::path::PathBuf;
-use std::process::Command;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -21,6 +20,12 @@ pub struct TestEnv {
     pub registry: url::Url,
     pub namespace: String,
     pub app_domain: String,
+}
+
+impl TestEnv {
+    pub fn load() -> Self {
+        env()
+    }
 }
 
 pub fn env() -> TestEnv {
@@ -91,13 +96,34 @@ pub async fn send_get_request_to_url(url: &str) -> Response {
     reqwest::Client::new().get(url).send().await.unwrap()
 }
 
-pub fn deploy_dir(dir: impl AsRef<std::path::Path>) {
-    assert!(Command::new("wasmer")
-        .args(["deploy", "--non-interactive", &format!("--registry={}", env().registry)])
-        .current_dir(dir.as_ref())
-        .status()
-        .unwrap()
-        .success());
+#[derive(Debug)]
+pub struct DeployedAppInfo {
+    pub version_id: String,
+    pub url: url::Url,
+    pub app_id: String,
+}
+
+pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
+    let result = assert_cmd::Command::new("wasmer")
+        .args(&["deploy", "--non-interactive", "--format=json", "--no-wait"])
+        .current_dir(dir)
+        .assert()
+        .success();
+
+    let output = result.get_output();
+
+    let status = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        .expect("could not parse stdout as json");
+
+    DeployedAppInfo {
+        version_id: status["id"].as_str().unwrap().to_string(),
+        url: status["url"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .expect("invalid URL"),
+        app_id: status["app"]["id"].as_str().unwrap().to_string(),
+    }
 }
 
 /// Macro that creates a directory structure with file contents.
