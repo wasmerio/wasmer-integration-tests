@@ -22,10 +22,9 @@ jobs:
           submodules: "recursive"
       - name: List contents
         run: |
-          ls /
-          ls /app
-          ls /app/wasmopticon
-          ls /app/wasmopticon/pkg
+          ls ./
+          echo "---"
+          ls ./wasmopticon
       - uses: wasmerio/setup-wasmer@v2
       - name: Cargo Registry Cache
         uses: actions/cache@v3
@@ -44,6 +43,14 @@ jobs:
       - run: |
           docker build -t tmp .
           docker run -v $PWD:/app -w /app tmp bash -c " \
+            ls / \
+            echo "---" \
+            ls /app \
+            echo "---" \
+            ls /app/wasmopticon \
+            echo "---" \
+            ls /app/wasmopticon/pkg \
+            echo "---" \
             export MYSQL_HOST='${{ vars.MYSQL_HOST }}' &&\
             export MYSQL_DBNAME='${{ vars.MYSQL_DBNAME }}' &&\
             export MYSQL_USERNAME='${{ secrets.MYSQL_USERNAME }}' &&\
