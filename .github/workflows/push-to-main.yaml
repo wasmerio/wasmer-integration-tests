@@ -53,7 +53,7 @@ jobs:
             wasmer login ${{ secrets.WAPM_PROD_TOKEN }} &&\
             wasmer config set registry.url https://registry.wasmer.wtf/graphql &&\
             wasmer login ${{ secrets.WAPM_DEV_TOKEN }} &&\
-            cargo test --no-fail-fast"
+            cargo test --no-fail-fast -- --test-threads 1" 
       - name: notify failure in slack
         if: failure()
         run: |
