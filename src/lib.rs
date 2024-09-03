@@ -108,14 +108,18 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<std::ffi::OsStr>,
 {
-    let result = assert_cmd::Command::new("wasmer")
-        .args(&["deploy", "--non-interactive", "--format=json"])
+    tracing::info!("Deploying app in directory: {:?}", dir);
+
+    let mut cmd = assert_cmd::Command::new("wasmer");
+    cmd.args(&["deploy", "--non-interactive", "--format=json"])
         .arg("--registry")
         .arg(env().registry.as_str())
         .args(extra_args)
-        .current_dir(dir)
-        .assert()
-        .success();
+        .current_dir(dir);
+
+    tracing::info!("Running command: {:?}", cmd);
+
+    let result = cmd.assert().success();
 
     let output = result.get_output();
 
@@ -132,7 +136,7 @@ where
         }
     };
 
-    DeployedAppInfo {
+    let info = DeployedAppInfo {
         version_id: status["id"].as_str().unwrap().to_string(),
         url: status["url"]
             .as_str()
@@ -140,7 +144,11 @@ where
             .parse()
             .expect("invalid URL"),
         app_id: status["app"]["id"].as_str().unwrap().to_string(),
-    }
+    };
+
+    tracing::info!("Deployed app: {:?}", info);
+
+    info
 }
 
 pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
