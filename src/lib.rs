@@ -105,7 +105,7 @@ pub struct DeployedAppInfo {
 
 pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
     let result = assert_cmd::Command::new("wasmer")
-        .args(&["deploy", "--non-interactive", "--format=json", "--no-wait"])
+        .args(&["deploy", "--non-interactive", "--format=json"])
         .current_dir(dir)
         .assert()
         .success();
