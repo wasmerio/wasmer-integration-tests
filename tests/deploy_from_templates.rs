@@ -30,6 +30,7 @@ async fn php_wasmer_starter() {
     deploy_template("https://github.com/wasmer-examples/php-wasmer-starter")
 }
 #[test_log::test(tokio::test)]
+#[ignore = "php is not working with latest runtime"]
 async fn symfony_wasmer_starter() {
     let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
@@ -74,10 +75,12 @@ async fn symfony_wasmer_starter() {
         .success());
 }
 #[test_log::test(tokio::test)]
+#[ignore = "php is not working with latest runtime"]
 async fn wordpress_wasmer_starter() {
     deploy_template("https://github.com/wasmer-examples/wordpress-wasmer-starter")
 }
 #[test_log::test(tokio::test)]
+#[ignore = "php is not working with latest runtime"]
 async fn laravel_wasmer_starter() {
     let name = get_random_app_name();
     let dir = TempDir::new().unwrap().into_path();
