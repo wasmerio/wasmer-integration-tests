@@ -1,7 +1,5 @@
 use std::{
-    fs::{create_dir, write},
-    process::Command,
-    time::Duration,
+    env::args, fs::{create_dir, write}, process::Command, time::Duration
 };
 use tempfile::TempDir;
 use test_log;
@@ -11,31 +9,36 @@ use watest::{
 };
 use yaml_rust::YamlLoader;
 #[test_log::test(tokio::test)]
-#[ignore = "there is too many apps for the integration test user, new apps wont get listed due to page limits"]
 async fn test_app_listing() {
-    let mut names = vec![];
-    for _ in 1..2 {
-        let (name, _) = deploy_hello_world_app();
-        names.push(name.clone());
-    }
-    let listed_apps = &YamlLoader::load_from_str(
-        &String::from_utf8(
+    let (name, _) = deploy_hello_world_app();
+
+    let mut found = false;
+    for _ in 1..5 {
+        println!("{name}");
+        // Command::new("which").arg("wasmer").status().unwrap();
+        let output = 
             Command::new("wasmer")
-                .args(["app", "list", "--all", "-f", "yaml"])
+                .args([
+                    "app",
+                    "list",
+                    "--namespace=wasmer-integration-tests",
+                    "--max=100",
+                    "--format=yaml",
+                    "--sort=newest",
+                ])
                 .output()
-                .unwrap()
-                .stdout,
+                .unwrap();
+        found = YamlLoader::load_from_str(
+            &String::from_utf8(output.stdout).unwrap()
         )
-        .unwrap(),
-    )
-    .unwrap()[0];
-    for name in &names {
-        assert!(listed_apps
+        .unwrap()[0]
             .as_vec()
             .unwrap()
             .iter()
-            .any(|e| e["name"].as_str().unwrap() == name));
+            .any(|e| e["name"].as_str().unwrap() == name);
+        sleep(Duration::from_secs(5)).await;
     }
+    assert!(found);
 }
 
 #[test_log::test(tokio::test)]
@@ -175,7 +178,10 @@ package: .
         let content = format!("hello-{i}");
         write(dir.join("public/index.html"), &content).unwrap();
         deploy_dir(&dir);
-        assert!(send_get_request_to_app(&name).await.text().await.unwrap() == content);
+        assert_eq!(
+            send_get_request_to_app(&name).await.text().await.unwrap(),
+            content
+        );
     }
 }
 
