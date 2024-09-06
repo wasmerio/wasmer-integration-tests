@@ -103,19 +103,40 @@ pub struct DeployedAppInfo {
     pub app_id: String,
 }
 
-pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
-    let result = assert_cmd::Command::new("wasmer")
-        .args(&["deploy", "--non-interactive", "--format=json"])
-        .current_dir(dir)
-        .assert()
-        .success();
+pub fn deploy_dir_with_args<I, S>(dir: &PathBuf, extra_args: I) -> DeployedAppInfo
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    tracing::info!("Deploying app in directory: {:?}", dir);
+
+    let mut cmd = assert_cmd::Command::new("wasmer");
+    cmd.args(&["deploy", "--non-interactive", "--format=json"])
+        .arg("--registry")
+        .arg(env().registry.as_str())
+        .args(extra_args)
+        .current_dir(dir);
+
+    tracing::info!("Running command: {:?}", cmd);
+
+    let result = cmd.assert().success();
 
     let output = result.get_output();
 
-    let status = serde_json::from_slice::<serde_json::Value>(&output.stdout)
-        .expect("could not parse stdout as json");
+    let status = match serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+        Ok(v) => v,
+        Err(err) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
 
-    DeployedAppInfo {
+            panic!(
+                "Could not parse  output of 'wasmer deploy' as json: {err}:\n=====\n{}\n=====\n{}\n=====",
+                stdout, stderr
+            );
+        }
+    };
+
+    let info = DeployedAppInfo {
         version_id: status["id"].as_str().unwrap().to_string(),
         url: status["url"]
             .as_str()
@@ -123,7 +144,15 @@ pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
             .parse()
             .expect("invalid URL"),
         app_id: status["app"]["id"].as_str().unwrap().to_string(),
-    }
+    };
+
+    tracing::info!("Deployed app: {:?}", info);
+
+    info
+}
+
+pub fn deploy_dir(dir: &PathBuf) -> DeployedAppInfo {
+    deploy_dir_with_args(dir, Vec::<String>::new())
 }
 
 /// Macro that creates a directory structure with file contents.
