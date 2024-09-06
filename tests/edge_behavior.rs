@@ -147,8 +147,7 @@ package: {pkg_dir}
 debug: true
 volumes:
 - name: data
-  mounts:
-  - mount_path: /data1
+  mount: /data1
     "#
         ),
     )
