@@ -112,7 +112,7 @@ async fn test_php() {
         format!(
             r#"
 [dependencies]
-"php/php" = "*"
+"php/php" = "8.*"
 
 [fs]
 "/src" = "src"
