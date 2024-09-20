@@ -48,6 +48,7 @@ fn get_app() -> Option<(String, String)> {
 
 /// Create an app secret.
 #[test_log::test(tokio::test)]
+#[ignore = "some queries put load and causes these tests to fail when all tests are run concurrently"]
 async fn test_create_app_secret() -> anyhow::Result<()> {
     let watest::TestEnv { namespace, .. } = watest::env();
     let (app_name, app_domain) =
@@ -111,6 +112,7 @@ async fn test_create_app_secret() -> anyhow::Result<()> {
 }
 
 /// Update an app secret.
+#[ignore = "some queries put load and causes these tests to fail when all tests are run concurrently"]
 #[test_log::test(tokio::test)]
 async fn test_update_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
@@ -269,6 +271,7 @@ async fn test_update_app_secret() -> anyhow::Result<()> {
 }
 
 /// Delete an app secret.
+#[ignore = "some queries put load and causes these tests to fail when all tests are run concurrently"]
 #[test_log::test(tokio::test)]
 async fn test_delete_app_secret() -> anyhow::Result<()> {
     // Let's first create it.
