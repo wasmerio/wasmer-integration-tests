@@ -529,21 +529,18 @@ export class TestEnv {
       env['WASMER_TOKEN'] = this.token;
     }
 
-    const command = new Deno.Command(cmd, {
+    const copts: Deno.CommandOptions = {
       cwd: options.cwd,
       args,
-      env: options.env,
+      env,
+      stdin: options.stdin ? 'piped' : 'null',
+    };
+
+    console.debug("Running command...", copts);
+    const command = new Deno.Command(cmd,  {
+      ...copts,
       stdout: 'piped',
       stderr: 'piped',
-      stdin: options.stdin ? 'piped' : 'null',
-    });
-
-    console.debug("Running command...", {
-      cmd: this.wasmerBinary,
-      args: options.args,
-      cwd: options.cwd,
-      env: options.env,
-      stdin: options.stdin,
     });
 
     // create subprocess and collect output
