@@ -1,10 +1,10 @@
 import { assertEquals, assertNotEquals, assert } from "jsr:@std/assert";
-import * as path from "jsr:@std/path";
 // import * as fs from "jsr:@std/fs";
 import { exists } from "jsr:@std/fs";
 import * as yaml from "jsr:@std/yaml";
 import * as toml from "jsr:@std/toml";
 
+import * as path from "node:path";
 import process from 'node:process';
 import http from 'node:http';
 import https from 'node:https';
