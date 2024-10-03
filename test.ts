@@ -467,7 +467,12 @@ export class TestEnv {
     // If token is not set, try to read it from the wasmer config.
     // The token is needed for API requests.
     if (!maybeToken) {
-      const config = loadWasmerConfig();
+      let config: WasmerConfig;
+      try {
+        config = loadWasmerConfig();
+      } catch (err) {
+        throw new Error(`Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${err})`);
+      }
       maybeToken = config.registry?.tokens?.find((t) => t.registry === registry)?.token ?? null;
       if (!maybeToken) {
         throw new Error(
