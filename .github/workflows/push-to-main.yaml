@@ -17,39 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: wasmerio/setup-wasmer@v2
-      - name: Cargo Registry Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/advisory-db
-            ~/.cargo/git
-            ~/.cargo/registry
-          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cargo target cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            target/
-          key: cargo-release-${{ hashFiles('**/Cargo.lock') }}
-      - run: |
-          docker build -t tmp .
-          docker run -v $PWD:/app -w /app tmp bash -c " \
-            export MYSQL_HOST='${{ vars.MYSQL_HOST }}' &&\
-            export MYSQL_DBNAME='${{ vars.MYSQL_DBNAME }}' &&\
-            export MYSQL_USERNAME='${{ secrets.MYSQL_USERNAME }}' &&\
-            export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}' &&\
-            export MYSQL_PORT='${{ vars.MYSQL_PORT }}' &&\
-            export MYSQL_CERT='${{ secrets.MYSQL_CERT }}' &&\
-            export PG_HOST='${{ vars.PG_HOST }}' &&\
-            export PG_DBNAME='${{ vars.PG_DBNAME }}' &&\
-            export PG_USERNAME='${{ secrets.PG_USERNAME }}' &&\
-            export PG_PASSWORD='${{ secrets.PG_PASSWORD }}' &&\
-            export PG_PORT='${{ vars.PG_PORT }}' &&\
-            wasmer config set registry.url https://registry.wasmer.io/graphql &&\
-            wasmer login ${{ secrets.WAPM_PROD_TOKEN }} &&\
-            wasmer config set registry.url https://registry.wasmer.wtf/graphql &&\
-            wasmer login ${{ secrets.WAPM_DEV_TOKEN }} &&\
-            cargo test --no-fail-fast"
+      - uses: denoland/setup-deno@v1
+      - name: test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+        run: deno test --allow-all --parallel
       - name: notify failure in slack
         if: failure()
         run: |
