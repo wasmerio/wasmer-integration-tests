@@ -878,6 +878,23 @@ interface DeployOutput {
 
 // TESTS
 
+Deno.test("wasmer-cli-version", async function() {
+  const env = TestEnv.fromEnv();
+  const out = await env.runWasmerCommand({ args: ['-v', '--version'] });
+
+  const data = out.stdout.trim().split('\n').reduce((acc: Record<string, string>, line: string): Record<string, string> => {
+    line = line.trim();
+    if (line.includes(':')) {
+      console.log({line})
+      const [key, value] = line.split(':');
+      acc[key.trim()] = value.trim();
+    }
+    return acc;
+  }, {});
+
+  assertEquals(data['binary'], 'wasmer-cli');
+});
+
 // Test that the instance purge header works correctly.
 Deno.test("app-purge-instances", async () => {
   const spec = buildStaticSiteApp();
