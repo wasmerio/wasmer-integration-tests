@@ -57,18 +57,39 @@ async function wasmopticonDir(): Promise<string> {
 
   // No env var set, check the default location.
   const localDir = path.join(process.cwd(), 'wasmopticon');
-  const doesExist = await exists(localDir);
-  if (doesExist) {
+
+  // Acquire a lock to prevent multiple concurrent clones.
+  const lockPath = path.join(process.cwd(), 'wasmopticon-clone.lock');
+  while (true) {
+    try {
+      fs.promises.writeFile(lockPath, '', { flag: 'wx' });
+      // Lock acquired, start cloning.
+      break;
+    } catch {
+      // Lock already exists.
+      // Wait a bit and try again.
+      await sleep(1000);
+    }
+  }
+
+  const freeLock = async () => {
+    await fs.promises.unlink(lockPath);
+  }
+
+  // Lock acquired.
+  if (await exists(localDir)) {
+    await freeLock();
     return localDir;
   }
 
-
   console.log('wasmopticon dir not found')
   console.log(`Cloning ${WASMOPTICON_GIT_URL} to ${localDir}...`);
+
   const cmd = new Deno.Command('git', {
     args: ['clone', WASMOPTICON_GIT_URL, localDir],
   });
   const output = await cmd.output();
+  await freeLock();
   if (!output.success) {
     throw new Error(`Failed to clone wasmopticon: ${output.code}`);
   }
