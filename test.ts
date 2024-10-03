@@ -537,7 +537,7 @@ export class TestEnv {
     };
 
     console.debug("Running command...", copts);
-    const command = new Deno.Command(cmd,  {
+    const command = new Deno.Command(cmd, {
       ...copts,
       stdout: 'piped',
       stderr: 'piped',
@@ -548,24 +548,65 @@ export class TestEnv {
 
     if (options.stdin) {
       const writer = proc.stdin.getWriter();
-      writer.write(new TextEncoder().encode(options.stdin));
-      writer.releaseLock();
-      proc.stdin.close();
+      await writer.write(new TextEncoder().encode(options.stdin));
+      await writer.releaseLock();
+      await proc.stdin.close();
     }
 
-    const output = await proc.output();
-    const stdout = new TextDecoder().decode(output.stdout);
-    const stderr = new TextDecoder().decode(output.stderr);
+    const stdoutChunks: Uint8Array[] = [];
+    const stderrChunks: Uint8Array[] = [];
+
+    function mergeChunks(chunks: Uint8Array[]): Uint8Array {
+      const ret = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
+      chunks.reduce((offset, chunk) => {
+        ret.set(chunk, offset);
+        return offset + chunk.length;
+      }, 0);
+      return ret;
+    }
+
+    const collectAndPrint = async (readable: ReadableStream<Uint8Array>, chunks: Uint8Array[]) => {
+      const reader = readable.getReader();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (value) {
+          Deno.stdout.write(value); // Print while reading
+          chunks.push(value); // Collect to array
+        }
+        if (done) {
+          break;
+        }
+      }
+    };
+
+    let out = {
+      code: 0,
+    };
+
+    console.log('command output >>>')
+    await Promise.all([
+      collectAndPrint(proc.stdout, stdoutChunks),
+      collectAndPrint(proc.stderr, stderrChunks),
+      async () => {
+        const status = await proc.status;
+        out.code = status.code;
+      },
+    ]);
+    const code = out.code;
+    console.log(`<<< command finished with code ${code}`);
+
+    const stdout = new TextDecoder().decode(mergeChunks(stdoutChunks).buffer);
+    const stderr = new TextDecoder().decode(mergeChunks(stderrChunks).buffer);
 
     const result: CommandOutput = {
-      code: output.code,
+      code,
       stdout,
       stderr,
     };
 
     console.debug("Command executed:", result);
 
-    if (output.code !== 0 && options.noAssertSuccess !== true) {
+    if (code !== 0 && options.noAssertSuccess !== true) {
       const data = JSON.stringify(result, null, 2);
       throw new Error(`Command failed: ${data}`);
     }
