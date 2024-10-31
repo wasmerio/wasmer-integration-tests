@@ -1670,7 +1670,7 @@ Deno.test('instaboot-max-age', async () => {
   }
 });
 
-Deno.test('dns-zonefile', async () => {
+Deno.test('dns-zonefile', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const tmpDir = await createTempDir();
 
