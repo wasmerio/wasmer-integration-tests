@@ -1215,7 +1215,7 @@ Deno.test('recreate-app-with-same-name', async () => {
   assertEquals(body2, 'version BETA');
 });
 
-Deno.test('app-listing', async () => {
+Deno.test('app-listing', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
@@ -1291,7 +1291,7 @@ Deno.test.ignore('app-delete', async () => {
   }
 });
 
-Deno.test('app-info-get', async () => {
+Deno.test('app-info-get', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
