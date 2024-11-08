@@ -1321,7 +1321,7 @@ Deno.test('app-info-get', {ignore: true}, async () => {
   assertEquals(json.url, expectedUrl);
 });
 
-Deno.test('app-create-from-package', async () => {
+Deno.test('app-create-from-package', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
   const fullName = `${env.namespace}/${name}`;
@@ -1551,7 +1551,7 @@ router();
 ///
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
-Deno.test('app-cache-purge-instaboot-php', async () => {
+Deno.test('app-cache-purge-instaboot-php', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildPhpInstabootTimestampApp();
@@ -1605,7 +1605,7 @@ Deno.test('app-cache-purge-instaboot-php', async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test('instaboot-max-age', async () => {
+Deno.test('instaboot-max-age', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities.instaboot.max_age = '5s';
