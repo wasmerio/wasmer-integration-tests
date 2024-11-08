@@ -26,4 +26,4 @@ jobs:
       - name: notify failure in slack
         if: failure()
         run: |
-          curl -X POST -H 'Content-type: application/json' --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' https://hooks.slack.com/services/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
+          curl -X POST -H 'Content-type: application/json' --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' https://hooks.slack.com/services/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
