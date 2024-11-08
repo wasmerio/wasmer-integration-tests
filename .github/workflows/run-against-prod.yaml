@@ -8,51 +8,16 @@ concurrency:
 jobs:
   default:
     runs-on: ubuntu-latest
-    env:
-      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
-      MYSQL_DBNAME: ${{ vars.MYSQL_DBNAME }}
-      MYSQL_USERNAME: ${{ secrets.MYSQL_USERNAME }}
-      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
-      MYSQL_CERT: ${{ secrets.MYSQL_CERT }}
-      PG_HOST: ${{ vars.PG_HOST }}
-      PG_DBNAME: ${{ vars.PG_DBNAME }}
-      PG_USERNAME: ${{ secrets.PG_USERNAME }}
-      PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
-      PG_PORT: ${{ vars.PG_PORT }}
     steps:
       - uses: actions/checkout@v3
       - uses: wasmerio/setup-wasmer@v2
-      - name: Cargo Registry Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/advisory-db
-            ~/.cargo/git
-            ~/.cargo/registry
-          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cargo target cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            target/
-          key: cargo-release-${{ hashFiles('**/Cargo.lock') }}
-      - run: |
-          docker build -t tmp .
-          docker run -v $PWD:/app -w /app tmp bash -c " \
-            export MYSQL_HOST='${{ vars.MYSQL_HOST }}' &&\
-            export MYSQL_DBNAME='${{ vars.MYSQL_DBNAME }}' &&\
-            export MYSQL_USERNAME='${{ secrets.MYSQL_USERNAME }}' &&\
-            export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}' &&\
-            export MYSQL_PORT='${{ vars.MYSQL_PORT }}' &&\
-            export MYSQL_CERT='${{ secrets.MYSQL_CERT }}' &&\
-            export PG_HOST='${{ vars.PG_HOST }}' &&\
-            export PG_DBNAME='${{ vars.PG_DBNAME }}' &&\
-            export PG_USERNAME='${{ secrets.PG_USERNAME }}' &&\
-            export PG_PASSWORD='${{ secrets.PG_PASSWORD }}' &&\
-            export PG_PORT='${{ vars.PG_PORT }}' &&\
-            export WASMER_REGISTRY="https://registry.wasmer.io/graphql" &&\
-            export WASMER_APP_DOMAIN="wasmer.app" &&\
-            wasmer config set registry.url https://registry.wasmer.io/graphql &&\
-            wasmer login ${{ secrets.WAPM_PROD_TOKEN }} &&\
-            cargo test --no-fail-fast"
+      - uses: denoland/setup-deno@v1
+      - name: test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.io/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_PROD_TOKEN }}
+        run: deno test --allow-all --parallel
+      - name: notify failure in slack
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' https://hooks.slack.com/services/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
