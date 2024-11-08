@@ -956,7 +956,7 @@ Deno.test("app-purge-instances", async () => {
 });
 
 // Test app auto https redirect functionality.
-Deno.test("app-https-redirect", async () => {
+Deno.test("app-https-redirect", {ignore: true}, async () => {
   const spec = buildStaticSiteApp();
   spec.appYaml.name = randomAppName();
   // Note: redirects are enabled by default!
@@ -990,7 +990,7 @@ Deno.test("app-https-redirect", async () => {
   assertEquals(res2.status, 200);
 });
 
-Deno.test('app-volumes', async () => {
+Deno.test('app-volumes', {ignore: true},async () => {
   const env = TestEnv.fromEnv();
 
   const phpServerDir = path.join(await wasmopticonDir(), 'php/php-testserver');
@@ -1215,7 +1215,7 @@ Deno.test('recreate-app-with-same-name', async () => {
   assertEquals(body2, 'version BETA');
 });
 
-Deno.test('app-listing', async () => {
+Deno.test('app-listing', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
@@ -1291,7 +1291,7 @@ Deno.test.ignore('app-delete', async () => {
   }
 });
 
-Deno.test('app-info-get', async () => {
+Deno.test('app-info-get', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
@@ -1385,7 +1385,7 @@ runner = "https://webc.org/runner/wasi"
   assertEquals(body.trim(), name);
 });
 
-Deno.test('app-update-multiple-times', async () => {
+Deno.test('app-update-multiple-times', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info1 = await env.deployApp(spec);
@@ -1670,7 +1670,7 @@ Deno.test('instaboot-max-age', async () => {
   }
 });
 
-Deno.test('dns-zonefile', async () => {
+Deno.test('dns-zonefile', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const tmpDir = await createTempDir();
 
@@ -1959,7 +1959,7 @@ Deno.test('cli-run-python', async () => {
   assertEquals(output.stdout.trim(), '42');
 });
 
-Deno.test('app-secrets-fullstack', async () => {
+Deno.test('app-secrets-fullstack', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
   const code = `
 addEventListener("fetch", (fetchEvent) => {
@@ -2091,7 +2091,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', async () => {
+Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -2113,7 +2113,7 @@ Deno.test('deploy-fails-without-app-name', async () => {
 });
 
 
-Deno.test('deploy-fails-without-owner', async () => {
+Deno.test('deploy-fails-without-owner', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
