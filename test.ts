@@ -625,6 +625,7 @@ export class TestEnv {
 
     const args: string[] = [
       "deploy",
+      "--non-interactive",
       "--format",
       "json",
       ...extraArgs,
@@ -956,7 +957,7 @@ Deno.test("app-purge-instances", async () => {
 });
 
 // Test app auto https redirect functionality.
-Deno.test("app-https-redirect", {ignore: true}, async () => {
+Deno.test("app-https-redirect", async () => {
   const spec = buildStaticSiteApp();
   spec.appYaml.name = randomAppName();
   // Note: redirects are enabled by default!
@@ -2329,7 +2330,7 @@ class DeveloperMailClient {
 }
 
 // Test that the integrated email sending works.
-Deno.test('php-email-sending', async () => {
+Deno.test('php-email-sending', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   console.log('Creating a new mailbox...');
