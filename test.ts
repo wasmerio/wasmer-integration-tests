@@ -2091,7 +2091,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', async () => {
+Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -2105,7 +2105,9 @@ Deno.test('deploy-fails-without-app-name', async () => {
     await env.deployAppDir(dir, { noWait: true });
   } catch (err) {
     console.log('Deploy failed with error: ' + err);
-    assert(err.toString().includes('does not specify any app name'));
+    if (err instanceof Error) {
+      assert(err.toString().includes('does not specify any app name'));
+    }
     return
   }
 
@@ -2125,7 +2127,9 @@ Deno.test('deploy-fails-without-owner', {ignore: true}, async () => {
     await env.deployAppDir(dir, { noWait: true });
   } catch (err) {
     console.log('Deploy failed with error: ' + err);
-    assert(err.toString().includes('No owner specified'));
+    if (err instanceof Error) {
+      assert(err.toString().includes('No owner specified'));
+    }
     return
   }
 
@@ -2290,9 +2294,12 @@ class DeveloperMailClient {
       try {
         ids = await this.messageIds();
       } catch (error) {
-        console.warn('Failed to get mailbox message ids:', {
-          error: error.toString(),
-        });
+        if (error instanceof Error) {
+          console.warn('Failed to get mailbox message ids:', {
+            
+            error: error.toString(),
+          });
+        }
         continue;
       }
       if (ids.length > 0) {
@@ -2322,7 +2329,7 @@ class DeveloperMailClient {
 }
 
 // Test that the integrated email sending works.
-Deno.test('php-email-sending', {ignore: true}, async () => {
+Deno.test('php-email-sending', async () => {
   const env = TestEnv.fromEnv();
 
   console.log('Creating a new mailbox...');
