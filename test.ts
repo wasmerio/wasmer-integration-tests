@@ -1959,7 +1959,7 @@ Deno.test('cli-run-python', async () => {
   assertEquals(output.stdout.trim(), '42');
 });
 
-Deno.test('app-secrets-fullstack', {ignore: true}, async () => {
+Deno.test('app-secrets-fullstack', async () => {
   const env = TestEnv.fromEnv();
   const code = `
 addEventListener("fetch", (fetchEvent) => {
