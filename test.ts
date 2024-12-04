@@ -2091,7 +2091,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
+Deno.test('deploy-fails-without-app-name', async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
