@@ -584,24 +584,21 @@ export class TestEnv {
       }
     };
 
-    let out = {
-      code: 0,
-    };
-
     console.log('command output >>>')
-    await Promise.all([
-      collectAndPrint(proc.stdout, stdoutChunks),
-      collectAndPrint(proc.stderr, stderrChunks),
-      async () => {
-        const status = await proc.status;
-        out.code = status.code;
-      },
-    ]);
-    const code = out.code;
-    console.log(`<<< command finished with code ${code}`);
 
+    // Need to run concurrently to avoid blocking due to full stdout/stderr buffers.
+
+    const stdoutRes = collectAndPrint(proc.stdout, stdoutChunks);
+    const stderrRes = collectAndPrint(proc.stderr, stderrChunks);
+    const procResult = await proc.status;
+
+    await stdoutRes;
     const stdout = new TextDecoder().decode(mergeChunks(stdoutChunks).buffer);
+    await stderrRes;
     const stderr = new TextDecoder().decode(mergeChunks(stderrChunks).buffer);
+
+    const code = procResult.code;
+    console.log(`<<< command finished with code ${code}`);
 
     const result: CommandOutput = {
       code,
@@ -2092,7 +2089,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
+Deno.test('deploy-fails-without-app-name', async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
