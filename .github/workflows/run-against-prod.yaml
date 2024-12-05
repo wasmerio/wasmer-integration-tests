@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
       - uses: wasmerio/setup-wasmer@v2
       - uses: denoland/setup-deno@v1
       - name: test
