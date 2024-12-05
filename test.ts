@@ -1322,7 +1322,7 @@ Deno.test('app-info-get', async () => {
   assertEquals(json.url, expectedUrl);
 });
 
-Deno.test('app-create-from-package', {ignore: true}, async () => {
+Deno.test('app-create-from-package', async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
   const fullName = `${env.namespace}/${name}`;
@@ -1386,7 +1386,7 @@ runner = "https://webc.org/runner/wasi"
   assertEquals(body.trim(), name);
 });
 
-Deno.test('app-update-multiple-times', {ignore: true}, async () => {
+Deno.test('app-update-multiple-times', async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info1 = await env.deployApp(spec);
@@ -1552,7 +1552,7 @@ router();
 ///
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
-Deno.test('app-cache-purge-instaboot-php', {ignore: true}, async () => {
+Deno.test('app-cache-purge-instaboot-php', async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildPhpInstabootTimestampApp();
@@ -1606,7 +1606,7 @@ Deno.test('app-cache-purge-instaboot-php', {ignore: true}, async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test('instaboot-max-age', {ignore: true}, async () => {
+Deno.test('instaboot-max-age', async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities.instaboot.max_age = '5s';
@@ -1671,7 +1671,7 @@ Deno.test('instaboot-max-age', {ignore: true}, async () => {
   }
 });
 
-Deno.test('dns-zonefile', {ignore: true}, async () => {
+Deno.test('dns-zonefile', async () => {
   const env = TestEnv.fromEnv();
   const tmpDir = await createTempDir();
 
@@ -2092,7 +2092,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
+Deno.test('deploy-fails-without-app-name', async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -2116,7 +2116,7 @@ Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
 });
 
 
-Deno.test('deploy-fails-without-owner', {ignore: true}, async () => {
+Deno.test('deploy-fails-without-owner', async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -2330,7 +2330,7 @@ class DeveloperMailClient {
 }
 
 // Test that the integrated email sending works.
-Deno.test('php-email-sending', {ignore: true}, async () => {
+Deno.test('php-email-sending', { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
 
   console.log('Creating a new mailbox...');
