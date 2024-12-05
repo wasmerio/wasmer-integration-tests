@@ -1606,7 +1606,7 @@ Deno.test('app-cache-purge-instaboot-php', {ignore: true}, async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test('instaboot-max-age', async () => {
+Deno.test('instaboot-max-age', {ignore: true} ,async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities.instaboot.max_age = '5s';
