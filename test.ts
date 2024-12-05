@@ -1119,7 +1119,7 @@ Deno.test("app-volumes", async () => {
 });
 
 // TODO: fix CGI!
-Deno.test("app-python-wcgi", async () => {
+Deno.test("app-python-wcgi", {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {

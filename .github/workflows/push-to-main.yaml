@@ -22,6 +22,11 @@ jobs:
           find .
       - uses: wasmerio/setup-wasmer@v2
       - uses: denoland/setup-deno@v1
+      - name: whoami
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+        run: wasmer whoami
       - name: test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
