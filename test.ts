@@ -991,7 +991,7 @@ Deno.test("app-https-redirect", async () => {
   assertEquals(res2.status, 200);
 });
 
-Deno.test('app-volumes', {ignore: true},async () => {
+Deno.test('app-volumes', async () => {
   const env = TestEnv.fromEnv();
 
   const phpServerDir = path.join(await wasmopticonDir(), 'php/php-testserver');
