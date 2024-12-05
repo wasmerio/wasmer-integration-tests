@@ -575,7 +575,7 @@ export class TestEnv {
       while (true) {
         const { value, done } = await reader.read();
         if (value) {
-          Deno.stdout.write(value); // Print while reading
+          await Deno.stdout.write(value); // Print while reading
           chunks.push(value); // Collect to array
         }
         if (done) {
@@ -1292,7 +1292,7 @@ Deno.test.ignore('app-delete', async () => {
   }
 });
 
-Deno.test('app-info-get', {ignore: true}, async () => {
+Deno.test('app-info-get', async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
