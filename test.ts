@@ -1119,7 +1119,7 @@ Deno.test("app-volumes", async () => {
 });
 
 // TODO: fix CGI!
-Deno.test.ignore("app-python-wcgi", async () => {
+Deno.test("app-python-wcgi", async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
@@ -1326,7 +1326,7 @@ Deno.test("app-listing", async () => {
 // anymore.
 //
 // TODO: ignored because app deletion seems to be problematic ATM
-Deno.test.ignore("app-delete", async () => {
+Deno.test('app-delete', async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const domain = spec.appYaml!.name + "." + env.appDomain;
@@ -2202,7 +2202,7 @@ Deno.test("deploy-fails-without-app-name", async () => {
   throw new Error("Expected deploy to fail without app name");
 });
 
-Deno.test("deploy-fails-without-owner", { ignore: true }, async () => {
+Deno.test("deploy-fails-without-owner", async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
