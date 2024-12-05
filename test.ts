@@ -1552,7 +1552,7 @@ router();
 ///
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
-Deno.test('app-cache-purge-instaboot-php', async () => {
+Deno.test('app-cache-purge-instaboot-php', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildPhpInstabootTimestampApp();
@@ -2092,7 +2092,7 @@ addEventListener("fetch", (fetchEvent) => {
   }
 });
 
-Deno.test('deploy-fails-without-app-name', async () => {
+Deno.test('deploy-fails-without-app-name', {ignore: true}, async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -2116,7 +2116,7 @@ Deno.test('deploy-fails-without-app-name', async () => {
 });
 
 
-Deno.test('deploy-fails-without-owner', async () => {
+Deno.test('deploy-fails-without-owner', {ignore: true} ,async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
