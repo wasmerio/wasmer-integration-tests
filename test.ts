@@ -1216,7 +1216,7 @@ Deno.test('recreate-app-with-same-name', async () => {
   assertEquals(body2, 'version BETA');
 });
 
-Deno.test('app-listing', {ignore: true}, async () => {
+Deno.test('app-listing', async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
