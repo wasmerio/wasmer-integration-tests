@@ -827,7 +827,7 @@ export class TestEnv {
       let body: string | null = null;
       try {
         body = await response.text();
-      } catch (err) {}
+      } catch (err) { }
 
       // TODO: allow running against a particular server.
       throw new Error(
@@ -843,7 +843,7 @@ const HEADER_INSTANCE_ID: string = "x-edge-instance-id";
 
 type Path = string;
 
-interface DirEntry extends Record<Path, string | DirEntry> {}
+interface DirEntry extends Record<Path, string | DirEntry> { }
 
 // Build a file system directory from the provided directory tree.
 async function buildDir(path: Path, files: DirEntry): Promise<void> {
@@ -1001,7 +1001,7 @@ interface DeployOutput {
 
 // TESTS
 
-Deno.test("wasmer-cli-version", async function () {
+Deno.test("wasmer-cli-version", async function() {
   const env = TestEnv.fromEnv();
   const out = await env.runWasmerCommand({ args: ["-v", "--version"] });
 
@@ -1170,8 +1170,9 @@ Deno.test("app-volumes", async () => {
   }
 });
 
+
 // TODO: fix CGI!
-Deno.test("app-python-wcgi", {ignore: true}, async () => {
+Deno.test("app-python-wcgi", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
@@ -1378,7 +1379,7 @@ Deno.test("app-listing", async () => {
 // anymore.
 //
 // TODO: ignored because app deletion seems to be problematic ATM
-Deno.test('app-delete', async () => {
+Deno.test("app-delete", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const domain = spec.appYaml!.name + "." + env.appDomain;
@@ -1729,7 +1730,7 @@ Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test('instaboot-max-age', {ignore: true} ,async () => {
+Deno.test("instaboot-max-age", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities.instaboot.max_age = "5s";
