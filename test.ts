@@ -827,7 +827,7 @@ export class TestEnv {
       let body: string | null = null;
       try {
         body = await response.text();
-      } catch (err) { }
+      } catch (err) {}
 
       // TODO: allow running against a particular server.
       throw new Error(
@@ -843,7 +843,7 @@ const HEADER_INSTANCE_ID: string = "x-edge-instance-id";
 
 type Path = string;
 
-interface DirEntry extends Record<Path, string | DirEntry> { }
+interface DirEntry extends Record<Path, string | DirEntry> {}
 
 // Build a file system directory from the provided directory tree.
 async function buildDir(path: Path, files: DirEntry): Promise<void> {
@@ -1001,7 +1001,7 @@ interface DeployOutput {
 
 // TESTS
 
-Deno.test("wasmer-cli-version", async function() {
+Deno.test("wasmer-cli-version", async function () {
   const env = TestEnv.fromEnv();
   const out = await env.runWasmerCommand({ args: ["-v", "--version"] });
 
@@ -1170,6 +1170,71 @@ Deno.test("app-volumes", async () => {
   }
 });
 
+// Test that a volume can be mounted inside a directory mounted from a package.
+Deno.test("volume-mount-inside-package-dir", async () => {
+  const env = TestEnv.fromEnv();
+
+  const phpServerDir = path.join(await wasmopticonDir(), "php/php-testserver");
+  const phpServerPackage = await ensurePackagePublished(env, phpServerDir);
+
+  // The PHP testserver mounts code at /app, so we'll mount a volume inside that.
+
+  const app: AppDefinition = {
+    appYaml: {
+      kind: "wasmer.io/App.v0",
+      package: phpServerPackage,
+      // Enable debug mode to allow instance purging.
+      debug: true,
+      volumes: [
+        {
+          name: "data",
+          mount: "/app/data",
+        },
+      ],
+    },
+  };
+  const info = await env.deployApp(app);
+
+  const file1Content = "value1";
+
+  const filePath = "/app/data/file1";
+
+  // Write a file to the volume.
+  await env.fetchApp(info, `/fs/write${filePath}`, {
+    method: "POST",
+    body: file1Content,
+    discardBody: true,
+  });
+
+  // Read the file.
+  let firstInstanceId: string;
+  {
+    const resp = await env.fetchApp(info, `/fs/read${filePath}`);
+    const body = await resp.text();
+    assertEquals(body, file1Content);
+    const id = resp.headers.get(HEADER_INSTANCE_ID);
+    assert(id);
+    firstInstanceId = id;
+  }
+  assert(firstInstanceId);
+
+  // Now read again, but force a fresh instance to make sure it wasn't just
+  // stored in memory.
+  {
+    const resp = await env.fetchApp(info, `/fs/read${filePath}`, {
+      headers: {
+        [HEADER_PURGE_INSTANCES]: "1",
+      },
+    });
+    const body = await resp.text();
+    assertEquals(body, file1Content);
+
+    const secondInstanceId = resp.headers.get(HEADER_INSTANCE_ID);
+    assert(secondInstanceId);
+    // Make sure the response was served from a different instance.
+    assertNotEquals(firstInstanceId, secondInstanceId);
+  }
+});
 
 // TODO: fix CGI!
 Deno.test("app-python-wcgi", { ignore: true }, async () => {
