@@ -362,7 +362,7 @@ interface GraphQlResponse<T> {
   errors?: any[];
 }
 
-class BackendClient {
+export class BackendClient {
   url: string;
   token: string | null;
 
@@ -453,6 +453,58 @@ class BackendClient {
     };
 
     return app;
+  }
+
+  async appsInNamespace(
+    namespace: string,
+    after: string | null,
+  ): Promise<
+    {
+      apps: [{ id: string; deleted: boolean; createdAt: string }];
+      lastCursor: string | null;
+    }
+  > {
+    const query = `
+query($namespace:String!, $after:String) {
+  getNamespace(name:$namespace) {
+    apps(sortBy:NEWEST, after:$after) {
+      pageInfo {
+        endCursor
+      }
+      edges {
+        node {
+          id
+          deleted
+          createdAt
+        }
+      }
+    }
+  }
+}
+    `;
+
+    const res = await this.gqlQuery(query, { namespace, after });
+    const data = res!.data!.getNamespace!.apps;
+    const lastCursor = data!.pageInfo.endCursor;
+    const edges = data!.edges;
+    const apps = edges.map((e: any) => e.node);
+    return { apps, lastCursor };
+  }
+
+  async deleteApp(appId: string): Promise<void> {
+    const query = `
+mutation($id:ID!) {
+  deleteApp(input:{id:$id}) {
+    success
+  }
+}
+`;
+
+    const res = await this.gqlQuery(query, { id: appId });
+    const success = res.data.deleteApp.success;
+    if (!success) {
+      throw new Error(`Failed to delete app: ${appId}`);
+    }
   }
 }
 
