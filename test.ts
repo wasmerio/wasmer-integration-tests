@@ -2485,3 +2485,35 @@ echo "email_sent\n";
   //   throw new Error(`Email does not contain expected body '${body}': ${first}`);
   // }
 });
+
+// ignroed, because currently deploying database apps does not populate db credentials, causing app to fail
+Deno.test("app-with-volume-and-database", {ignore: true}, async () => {
+  const env = TestEnv.fromEnv();
+
+  const spec: AppDefinition = {
+    appYaml: {
+      kind: "wasmer.io/App.v0",
+      package: "wasmer/wordpress",
+      locality: {
+        regions: [
+          "fi-helsinki"
+        ]
+      },
+      volumes: [
+        {
+          name: "wp-content",
+          mount: "/app/wp-content"
+        }
+      ],
+      capabilities: {
+        database: {
+          engine: "mysql"
+        }
+      }
+    },
+  };
+
+  const info = await env.deployApp(spec);
+  const res = await env.fetchApp(info, "/", {redirect: "follow"});
+  const body = await res.text();
+});
