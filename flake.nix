@@ -15,7 +15,7 @@
           with pkgs;
           {
             devShells.default = mkShell {
-              buildInputs = [ deno wasmer ];
+              buildInputs = [ deno ];
               shellHook = ''
                 alias test-all='deno test --allow-all --parallel'
                 echo "Run tests with: test-all"
