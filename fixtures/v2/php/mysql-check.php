@@ -40,7 +40,7 @@ function checkSqlConnection()
     return $envVarCheck . "\nAll environment variables:\n" . listAllEnvVars();
   }
 
-  $servername = getenv('DB_HOST') . getenv('DB_PORT');
+  $servername = getenv('DB_HOST') . ":" . getenv('DB_PORT');
   $username = getenv('DB_USERNAME');
   $password = getenv('DB_PASSWORD');
   $dbname = getenv('DB_NAME');
