@@ -2623,6 +2623,7 @@ Deno.test("sql-connectivity", {}, async () => {
     // encourage and perhaps enable malicious use
     assertNotEquals(got, "OK",
       "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!")
+    env.deleteApp(withoutSqlInfo)
   }
 
   // Validate happy-path
@@ -2644,6 +2645,7 @@ Deno.test("sql-connectivity", {}, async () => {
     const res = await env.fetchApp(withSqlInfo, "/results")
     const got = await res.text();
     assertEquals(got, want, "Received connection error to SQL db")
+    env.deleteApp(withSqlInfo)
   }
 })
 
