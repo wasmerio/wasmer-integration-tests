@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
+import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "jsr:@std/assert";
 // import * as fs from "jsr:@std/fs";
 import { exists } from "jsr:@std/fs";
 import * as yaml from "jsr:@std/yaml";
@@ -1629,8 +1629,12 @@ addEventListener("fetch", (fetchEvent) => {
 
 const EDGE_HEADER_PURGE_INSTANCES = "x-edge-purge-instances";
 const EDGE_HEADER_JOURNAL_STATUS = "x-edge-instance-journal-status";
-
-function buildPhpApp(phpCode: string): AppDefinition {
+const DEFAULT_PHP_APP_YAML = {
+  kind: "wasmer.io/App.v0",
+  name: randomAppName(),
+  package: ".",
+}
+function buildPhpApp(phpCode: string, additionalAppYamlSettings?: Record<string, any>): AppDefinition {
   const spec: AppDefinition = {
     wasmerToml: {
       dependencies: {
@@ -1650,11 +1654,7 @@ function buildPhpApp(phpCode: string): AppDefinition {
         },
       }],
     },
-    appYaml: {
-      kind: "wasmer.io/App.v0",
-      name: randomAppName(),
-      package: ".",
-    },
+    appYaml: { ...DEFAULT_PHP_APP_YAML, ...additionalAppYamlSettings },
     files: {
       "src": {
         "index.php": phpCode,
@@ -2603,3 +2603,49 @@ echo "email_sent\n";
   //   throw new Error(`Email does not contain expected body '${body}': ${first}`);
   // }
 });
+
+Deno.test("sql-connectivity", {}, async () => {
+  const env = TestEnv.fromEnv();
+  const filePath = "./fixtures/v2/php/mysql-check.php";
+  const testCode = await fs.promises.readFile(filePath, "utf-8");
+
+  // Validate that DB credentials aren't setup without specifying to have it
+  {
+    console.log("== Setting up environment without SQL ==")
+    let want = "Missing required SQL environment variables"
+    const withoutSqlSpec = buildPhpApp(testCode);
+    const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
+    let res = await env.fetchApp(withoutSqlInfo, "/results")
+    let got = await res.text();
+    assertStringIncludes(got, want,
+      "Expected environment to NOT include SQL details, as the environment is not specified to include them")
+    // Having environment variables set is bad, having the option to connect is worse: would
+    // encourage and perhaps enable malicious use
+    assertNotEquals(got, "OK",
+      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!")
+    env.deleteApp(withoutSqlInfo)
+  }
+
+  // Validate happy-path
+  {
+    console.log("== Setting up environment with SQL ==")
+    const want = "OK"
+    const withSqlSpec = buildPhpApp(testCode, {
+      debug: true,
+      scaling: {
+        mode: "single_concurrency"
+      },
+      capabilities: {
+        database: {
+          engine: "mysql"
+        }
+      }
+    });
+    const withSqlInfo = await env.deployApp(withSqlSpec);
+    const res = await env.fetchApp(withSqlInfo, "/results")
+    const got = await res.text();
+    assertEquals(got, want, "Received connection error to SQL db")
+    env.deleteApp(withSqlInfo)
+  }
+})
+
