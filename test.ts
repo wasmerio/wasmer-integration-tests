@@ -1,4 +1,9 @@
-import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "jsr:@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertNotEquals,
+  assertStringIncludes,
+} from "jsr:@std/assert";
 // import * as fs from "jsr:@std/fs";
 import { exists } from "jsr:@std/fs";
 import * as yaml from "jsr:@std/yaml";
@@ -22,6 +27,7 @@ const ENV_VAR_APP_DOMAIN: string = "WASMER_APP_DOMAIN";
 const ENV_VAR_EDGE_SERVER: string = "EDGE_SERVER";
 const ENV_VAR_WASMER_PATH: string = "WASMER_PATH";
 const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
+const ENV_VAR_LOG_LEVEL: string = "LOG_LEVEL";
 
 const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
@@ -32,6 +38,44 @@ const appDomainMap = {
 };
 
 const DEFAULT_NAMESPACE: string = "wasmer-integration-tests";
+
+enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  // ts enums are so funny
+  LOG = 1,
+  WARN = 2,
+  ERROR = 3,
+}
+
+function LogLevelFromEnv(): LogLevel {
+  let logLevelStr = process.env[ENV_VAR_LOG_LEVEL];
+  if (!logLevelStr) {
+    return LogLevel.INFO;
+  }
+  logLevelStr = logLevelStr.trim().toLowerCase();
+  switch (logLevelStr) {
+    case "d":
+    case "debug":
+      return LogLevel.DEBUG;
+    case "i":
+    case "info":
+      return LogLevel.INFO;
+    case "w":
+    case "warn":
+    case "warning":
+      return LogLevel.WARN;
+    case "e":
+    case "err":
+    case "error":
+      return LogLevel.ERROR;
+    default:
+      break;
+  }
+  return LogLevel.INFO;
+}
+
+const LOG_LEVEL = LogLevelFromEnv();
 
 async function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -83,8 +127,12 @@ async function wasmopticonDir(): Promise<string> {
     return localDir;
   }
 
-  console.log("wasmopticon dir not found");
-  console.log(`Cloning ${WASMOPTICON_GIT_URL} to ${localDir}...`);
+  if (LOG_LEVEL > LogLevel.LOG) {
+    console.log("wasmopticon dir not found");
+  }
+  if (LOG_LEVEL > LogLevel.LOG) {
+    console.log(`Cloning ${WASMOPTICON_GIT_URL} to ${localDir}...`);
+  }
 
   const cmd = new Deno.Command("git", {
     args: ["clone", WASMOPTICON_GIT_URL, localDir],
@@ -527,6 +575,8 @@ export class TestEnv {
   // Name or path of the `wasmer` binary to use.
   wasmerBinary: string = "wasmer";
 
+  logLevel: LogLevel = LogLevel.INFO;
+
   httpClient: HttpClient;
   backend: BackendClient;
 
@@ -581,6 +631,8 @@ export class TestEnv {
       httpClient.targetServer = edgeServer;
     }
 
+    const logLevel = LogLevelFromString(process.env[ENV_VAR_LOG_LEVEL]);
+
     const env = new TestEnv(
       registry,
       token,
@@ -610,6 +662,7 @@ export class TestEnv {
     namespace: string,
     appDomain: string,
     client: HttpClient,
+    logLevel: LogLevel,
   ) {
     this.registry = registry;
     this.namespace = namespace;
@@ -618,6 +671,8 @@ export class TestEnv {
     this.httpClient = client;
     this.backend = new BackendClient(registry, token);
     this.token = token;
+
+    this.logLevel = logLevel;
   }
 
   async runWasmerCommand(options: CommandOptions): Promise<CommandOutput> {
@@ -1633,8 +1688,11 @@ const DEFAULT_PHP_APP_YAML = {
   kind: "wasmer.io/App.v0",
   name: randomAppName(),
   package: ".",
-}
-function buildPhpApp(phpCode: string, additionalAppYamlSettings?: Record<string, any>): AppDefinition {
+};
+function buildPhpApp(
+  phpCode: string,
+  additionalAppYamlSettings?: Record<string, any>,
+): AppDefinition {
   const spec: AppDefinition = {
     wasmerToml: {
       dependencies: {
@@ -2611,41 +2669,46 @@ Deno.test("sql-connectivity", {}, async () => {
 
   // Validate that DB credentials aren't setup without specifying to have it
   {
-    console.log("== Setting up environment without SQL ==")
-    let want = "Missing required SQL environment variables"
+    console.log("== Setting up environment without SQL ==");
+    let want = "Missing required SQL environment variables";
     const withoutSqlSpec = buildPhpApp(testCode);
     const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
-    let res = await env.fetchApp(withoutSqlInfo, "/results")
+    let res = await env.fetchApp(withoutSqlInfo, "/results");
     let got = await res.text();
-    assertStringIncludes(got, want,
-      "Expected environment to NOT include SQL details, as the environment is not specified to include them")
+    assertStringIncludes(
+      got,
+      want,
+      "Expected environment to NOT include SQL details, as the environment is not specified to include them",
+    );
     // Having environment variables set is bad, having the option to connect is worse: would
     // encourage and perhaps enable malicious use
-    assertNotEquals(got, "OK",
-      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!")
-    env.deleteApp(withoutSqlInfo)
+    assertNotEquals(
+      got,
+      "OK",
+      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!",
+    );
+    env.deleteApp(withoutSqlInfo);
   }
 
   // Validate happy-path
   {
-    console.log("== Setting up environment with SQL ==")
-    const want = "OK"
+    console.log("== Setting up environment with SQL ==");
+    const want = "OK";
     const withSqlSpec = buildPhpApp(testCode, {
       debug: true,
       scaling: {
-        mode: "single_concurrency"
+        mode: "single_concurrency",
       },
       capabilities: {
         database: {
-          engine: "mysql"
-        }
-      }
+          engine: "mysql",
+        },
+      },
     });
     const withSqlInfo = await env.deployApp(withSqlSpec);
-    const res = await env.fetchApp(withSqlInfo, "/results")
+    const res = await env.fetchApp(withSqlInfo, "/results");
     const got = await res.text();
-    assertEquals(got, want, "Received connection error to SQL db")
-    env.deleteApp(withSqlInfo)
+    assertEquals(got, want, "Received connection error to SQL db");
+    env.deleteApp(withSqlInfo);
   }
-})
-
+});
