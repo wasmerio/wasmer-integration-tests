@@ -5,9 +5,10 @@ import * as toml from "jsr:@std/toml";
 
 import { HttpClient } from "./http.ts";
 import { BackendClient, AppInfo } from "./backend.ts";
-import {WasmerConfig, loadWasmerConfig, parseDeployOutput, DeployOutput} from './wasmer_cli.ts';
-import {Path, buildTempDir} from './fs.ts';
-import {AppDefinition, randomAppName, writeAppDefinition} from './app.ts';
+import { WasmerConfig, loadWasmerConfig, parseDeployOutput, DeployOutput } from './wasmer_cli.ts';
+import { Path, buildTempDir } from './fs.ts';
+import { AppDefinition, randomAppName, writeAppDefinition } from './app.ts';
+import { sleep } from './util.ts';
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -53,6 +54,8 @@ export interface AppFetchOptions extends RequestInit {
   noAssertSuccess?: boolean;
   // Discard the response body.
   discardBody?: boolean;
+  // Do not wait for the latest version to be deployed.
+  noWait?: boolean;
 }
 
 export class TestEnv {
@@ -393,6 +396,13 @@ export class TestEnv {
       url = app.url + (urlOrPath.startsWith("/") ? "" : "/") + urlOrPath;
     }
 
+    let waitForVersionId: string | null = null;
+    if (!options.noWait && !urlOrPath.startsWith("http")) {
+      // Fetch latest version
+      const info = await this.backend.getAppById(app.id);
+      waitForVersionId = info.activeVersionId;
+    }
+
     // Should not follow redirects by default.
     if (!options.redirect) {
       options.redirect = "manual";
@@ -403,7 +413,9 @@ export class TestEnv {
     console.debug(`Fetched URL ${url}`, {
       status: response.status,
       headers: response.headers,
+      remoteAddress: response.remoteAddress,
     });
+
     // if (options.discardBody) {
     //   await response.body?.cancel();
     // }
@@ -419,6 +431,21 @@ export class TestEnv {
         `Failed to fetch URL '${url}': ${response.status}\n\nBODY:\n${body}`,
       );
     }
+
+    if (waitForVersionId) {
+      const currentId = response.headers.get("x-edge-app-version-id");
+      if (!currentId) {
+        throw new Error(
+          `Failed to fetch URL '${url}': missing x-edge-app-version-id header`,
+        );
+      }
+      if (currentId !== waitForVersionId) {
+        console.info(`App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`);
+        await sleep(500);
+        return this.fetchApp(app, urlOrPath, options);
+      }
+    }
+
     return response;
   }
 }

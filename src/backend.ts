@@ -11,6 +11,7 @@ export interface GraphQlResponse<T> {
 export interface ApiDeployApp {
   id: string;
   url: string;
+  activeVersionId: string|null;
 }
 
 export interface AppInfo {
@@ -89,6 +90,9 @@ export class BackendClient {
           ... on DeployApp {
             id
             url
+            activeVersion {
+              id
+            }
           }
         }
       }
@@ -108,9 +112,12 @@ export class BackendClient {
     const url = node.url;
     assert(typeof url === "string");
 
+    const activeVersionId = node.activeVersion?.id ?? null;
+
     const app: ApiDeployApp = {
       id,
       url,
+      activeVersionId,
     };
 
     return app;

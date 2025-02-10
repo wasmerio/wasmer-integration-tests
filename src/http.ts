@@ -2,13 +2,17 @@ import http from "node:http";
 import https from "node:https";
 import {Buffer} from 'node:buffer';
 
+export interface ResponseExt extends Response {
+  remoteAddress: string|undefined;
+}
+
 // Custom nodejs based http client.
 //
 // Needed to allow custom dns resolution and accepting invalid certs.
 export class HttpClient {
   targetServer: string | null = null;
 
-  async fetch(url: string, options: RequestInit): Promise<Response> {
+  async fetch(url: string, options: RequestInit): Promise<ResponseExt> {
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       const protocol = parsedUrl.protocol === "https:" ? https : http;
@@ -60,7 +64,7 @@ export class HttpClient {
           const bodyArray: Uint8Array = new Uint8Array(buffer);
 
           const status = res.statusCode || 0;
-          const out: Response = {
+          const out: ResponseExt = {
             ok: status >= 200 && status < 300,
             status,
             statusText: res.statusMessage ?? "unknown",
@@ -83,6 +87,9 @@ export class HttpClient {
               throw new Error("Not implemented");
             },
             type: "default",
+
+	    // Add non-standard field for remote address for debugging.
+	    remoteAddress: res.socket.remoteAddress,
           };
           resolve(out);
         });
