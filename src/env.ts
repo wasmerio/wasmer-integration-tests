@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import process from 'node:process';
 import * as toml from "jsr:@std/toml";
 
 import { HttpClient } from "./http.ts";

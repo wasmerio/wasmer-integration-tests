@@ -1,4 +1,5 @@
 import path from 'node:path';
+import process from 'node:process';
 import fs from 'node:fs';
 
 import { exists } from "jsr:@std/fs";
