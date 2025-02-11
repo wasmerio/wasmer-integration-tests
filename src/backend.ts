@@ -24,6 +24,11 @@ export interface AppInfo {
   dir: Path;
 }
 
+export interface ApiAppsInNamespace {
+	apps: [{ id: string; deleted: boolean; createdAt: string }];
+	lastCursor: string | null;
+}
+
 export class BackendClient {
   url: string;
   token: string | null;
@@ -126,12 +131,7 @@ export class BackendClient {
   async appsInNamespace(
     namespace: string,
     after: string | null,
-  ): Promise<
-    {
-      apps: [{ id: string; deleted: boolean; createdAt: string }];
-      lastCursor: string | null;
-    }
-  > {
+  ): Promise<ApiAppsInNamespace> {
     const query = `
 query($namespace:String!, $after:String) {
   getNamespace(name:$namespace) {
@@ -153,7 +153,7 @@ query($namespace:String!, $after:String) {
 
     const res = await this.gqlQuery(query, { namespace, after });
     const data = res!.data!.getNamespace!.apps;
-    const lastCursor = data!.pageInfo.endCursor;
+    const lastCursor: string|null = data!.pageInfo.endCursor;
     const edges = data!.edges;
     const apps = edges.map((e: any) => e.node);
     return { apps, lastCursor };
