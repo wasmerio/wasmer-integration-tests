@@ -1,14 +1,19 @@
-import path from 'node:path';
-import fs from 'node:fs';
-import process from 'node:process';
+import path from "node:path";
+import fs from "node:fs";
+import process from "node:process";
 import * as toml from "jsr:@std/toml";
 
 import { HttpClient } from "./http.ts";
-import { BackendClient, AppInfo } from "./backend.ts";
-import { WasmerConfig, loadWasmerConfig, parseDeployOutput, DeployOutput } from './wasmer_cli.ts';
-import { Path, buildTempDir } from './fs.ts';
-import { AppDefinition, randomAppName, writeAppDefinition } from './app.ts';
-import { sleep } from './util.ts';
+import { AppInfo, BackendClient } from "./backend.ts";
+import {
+  DeployOutput,
+  loadWasmerConfig,
+  parseDeployOutput,
+  WasmerConfig,
+} from "./wasmer_cli.ts";
+import { buildTempDir, Path } from "./fs.ts";
+import { AppDefinition, randomAppName, writeAppDefinition } from "./app.ts";
+import { sleep } from "./util.ts";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -105,7 +110,9 @@ export class TestEnv {
         config = loadWasmerConfig();
       } catch (err) {
         throw new Error(
-          `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${(err as any).toString()})`,
+          `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${
+            (err as any).toString()
+          })`,
         );
       }
       maybeToken = config.registry?.tokens?.find((t) =>
@@ -424,7 +431,7 @@ export class TestEnv {
       let body: string | null = null;
       try {
         body = await response.text();
-      } catch (err) { }
+      } catch (err) {}
 
       // TODO: allow running against a particular server.
       throw new Error(
@@ -440,7 +447,9 @@ export class TestEnv {
         );
       }
       if (currentId !== waitForVersionId) {
-        console.info(`App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`);
+        console.info(
+          `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
+        );
         await sleep(500);
         return this.fetchApp(app, urlOrPath, options);
       }

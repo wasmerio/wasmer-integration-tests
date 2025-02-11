@@ -4,7 +4,7 @@
 // This should be run periodically to keep the namespace clean.
 
 import { TestEnv } from "../src/env.ts";
-import {ApiAppsInNamespace} from "../src/backend.ts";
+import { ApiAppsInNamespace } from "../src/backend.ts";
 
 // Clean up all old apps created by tests.
 async function purgeOldApps(
@@ -15,7 +15,10 @@ async function purgeOldApps(
 
   let after: string | null = null;
   while (true) {
-    const out: ApiAppsInNamespace = await env.backend.appsInNamespace( env.namespace, after);
+    const out: ApiAppsInNamespace = await env.backend.appsInNamespace(
+      env.namespace,
+      after,
+    );
     const { apps, lastCursor } = out;
 
     for (const app of apps) {

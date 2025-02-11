@@ -1,9 +1,9 @@
 import http from "node:http";
 import https from "node:https";
-import {Buffer} from 'node:buffer';
+import { Buffer } from "node:buffer";
 
 export interface ResponseExt extends Response {
-  remoteAddress: string|undefined;
+  remoteAddress: string | undefined;
 }
 
 // Custom nodejs based http client.
@@ -88,8 +88,8 @@ export class HttpClient {
             },
             type: "default",
 
-	    // Add non-standard field for remote address for debugging.
-	    remoteAddress: res.socket.remoteAddress,
+            // Add non-standard field for remote address for debugging.
+            remoteAddress: res.socket.remoteAddress,
           };
           resolve(out);
         });

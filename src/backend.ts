@@ -1,7 +1,7 @@
 import { assert } from "jsr:@std/assert";
 
-import {DeployOutput} from './wasmer_cli.ts';
-import {Path} from './fs.ts';
+import { DeployOutput } from "./wasmer_cli.ts";
+import { Path } from "./fs.ts";
 
 export interface GraphQlResponse<T> {
   data?: T;
@@ -11,7 +11,7 @@ export interface GraphQlResponse<T> {
 export interface ApiDeployApp {
   id: string;
   url: string;
-  activeVersionId: string|null;
+  activeVersionId: string | null;
 }
 
 export interface AppInfo {
@@ -25,8 +25,8 @@ export interface AppInfo {
 }
 
 export interface ApiAppsInNamespace {
-	apps: [{ id: string; deleted: boolean; createdAt: string }];
-	lastCursor: string | null;
+  apps: [{ id: string; deleted: boolean; createdAt: string }];
+  lastCursor: string | null;
 }
 
 export class BackendClient {
@@ -153,7 +153,7 @@ query($namespace:String!, $after:String) {
 
     const res = await this.gqlQuery(query, { namespace, after });
     const data = res!.data!.getNamespace!.apps;
-    const lastCursor: string|null = data!.pageInfo.endCursor;
+    const lastCursor: string | null = data!.pageInfo.endCursor;
     const edges = data!.edges;
     const apps = edges.map((e: any) => e.node);
     return { apps, lastCursor };
