@@ -1,0 +1,62 @@
+name: Code QA
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  tet:
+    name: Run tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+      - uses: wasmerio/setup-wasmer@v2
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+        run: ./run.sh
+
+  fmt:
+    name: File format check
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Format & fail on changes
+        run: |
+          deno fmt --check
+
+  lint:
+    name: Lint the project
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run deno lint
+        run: |
+          deno lint

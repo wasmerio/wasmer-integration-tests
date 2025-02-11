@@ -9,7 +9,6 @@ import {
   DeployOutput,
   loadWasmerConfig,
   parseDeployOutput,
-  WasmerConfig,
 } from "./wasmer_cli.ts";
 import { buildTempDir, Path } from "./fs.ts";
 import { AppDefinition, randomAppName, writeAppDefinition } from "./app.ts";
@@ -105,28 +104,27 @@ export class TestEnv {
     // If token is not set, try to read it from the wasmer config.
     // The token is needed for API requests.
     if (!maybeToken) {
-      let config: WasmerConfig;
       try {
-        config = loadWasmerConfig();
-      } catch (err) {
-        throw new Error(
-          `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${
-            (err as any).toString()
-          })`,
-        );
-      }
-      maybeToken = config.registry?.tokens?.find((t) =>
-        t.registry === registry
-      )?.token ?? null;
-      if (!maybeToken) {
-        throw new Error(
-          `Could not find token for registry ${registry} in wasmer.toml config - \
+        const config = loadWasmerConfig();
+        maybeToken = config.registry?.tokens?.find((t) =>
+          t.registry === registry
+        )?.token ?? null;
+        if (!maybeToken) {
+          throw new Error(
+            `Could not find token for registry ${registry} in wasmer.toml config - \
             specify the token with the WASMER_TOKEN env var`,
-        );
+          );
+        }
+      } catch (err) {
+        if (err instanceof Error) {
+          throw new Error(
+            `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${err.toString()})`,
+          );
+        }
       }
     }
 
-    const token: string = maybeToken;
+    const token: string = maybeToken ? maybeToken : "TOKEN NOT SET";
 
     const httpClient = new HttpClient();
     if (edgeServer) {
@@ -278,6 +276,8 @@ export class TestEnv {
     const manifsetPath = path.join(dir, "wasmer.toml");
     const manifestRaw = await fs.promises.readFile(manifsetPath, "utf-8");
 
+    // TODO: Setup zod object for manifest files
+    // deno-lint-ignore no-explicit-any
     let manifest: any;
     try {
       manifest = toml.parse(manifestRaw);
@@ -330,7 +330,7 @@ export class TestEnv {
       args.push("--no-wait");
     }
 
-    const { code, stdout, stderr } = await this.runWasmerCommand({
+    const { stdout } = await this.runWasmerCommand({
       args,
       cwd: dir,
     });
@@ -340,7 +340,7 @@ export class TestEnv {
 
     if (this.edgeServer && !noWait) {
       // Specific target server, but waiting is enabled, so manually test.
-      const res = await this.fetchApp(info, "/");
+      await this.fetchApp(info, "/");
     }
 
     console.debug("App deployed", { info });
@@ -431,7 +431,9 @@ export class TestEnv {
       let body: string | null = null;
       try {
         body = await response.text();
-      } catch (err) {}
+      } catch (err) {
+        console.error(err);
+      }
 
       // TODO: allow running against a particular server.
       throw new Error(

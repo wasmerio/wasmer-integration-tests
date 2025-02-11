@@ -1,6 +1,8 @@
 import http from "node:http";
 import https from "node:https";
 import { Buffer } from "node:buffer";
+import { LookupFunction } from "node:net";
+import { LookupAddress, LookupOptions } from "node:dns";
 
 export interface ResponseExt extends Response {
   remoteAddress: string | undefined;
@@ -10,9 +12,9 @@ export interface ResponseExt extends Response {
 //
 // Needed to allow custom dns resolution and accepting invalid certs.
 export class HttpClient {
-  targetServer: string | null = null;
+  targetServer: string = "";
 
-  async fetch(url: string, options: RequestInit): Promise<ResponseExt> {
+  fetch(url: string, options: RequestInit): Promise<ResponseExt> {
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       const protocol = parsedUrl.protocol === "https:" ? https : http;
@@ -22,10 +24,19 @@ export class HttpClient {
         requestHeaders[key] = value;
       }
 
-      let lookup: any = null;
+      let lookup: LookupFunction | undefined = undefined;
       if (this.targetServer) {
         const ipProto = this.targetServer.includes(":") ? 6 : 4;
-        lookup = (_hostname: string, _options: any, callback: any) => {
+
+        lookup = (
+          _hostname: string,
+          _options: LookupOptions,
+          callback: (
+            err: NodeJS.ErrnoException | null,
+            address: string | LookupAddress[],
+            family?: number,
+          ) => void,
+        ) => {
           callback(null, this.targetServer, ipProto);
           throw new Error("lookup called");
         };
@@ -38,7 +49,7 @@ export class HttpClient {
       };
 
       const req = protocol.request(parsedUrl, requestOptions, (res) => {
-        let data: any[] = [];
+        const data: unknown[] = [];
 
         res.on("data", (chunk) => {
           data.push(chunk);
@@ -59,6 +70,12 @@ export class HttpClient {
           }
 
           const headers = new Headers(plainHeaders);
+          if (
+            !Array.isArray(data) ||
+            !data.every((item) => item instanceof Uint8Array)
+          ) {
+            throw new Error("data is not of type Uint8Array[]");
+          }
 
           const buffer = Buffer.concat(data);
           const bodyArray: Uint8Array = new Uint8Array(buffer);

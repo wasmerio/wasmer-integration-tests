@@ -1,11 +1,11 @@
-import { assert } from "jsr:@std/assert";
-
 import { DeployOutput } from "./wasmer_cli.ts";
 import { Path } from "./fs.ts";
 
+import { z } from "zod";
+
 export interface GraphQlResponse<T> {
   data?: T;
-  errors?: any[];
+  errors?: Error[];
 }
 
 export interface ApiDeployApp {
@@ -25,7 +25,7 @@ export interface AppInfo {
 }
 
 export interface ApiAppsInNamespace {
-  apps: [{ id: string; deleted: boolean; createdAt: string }];
+  apps: { id: string; deleted: boolean; createdAt: string }[];
   lastCursor: string | null;
 }
 
@@ -39,10 +39,10 @@ export class BackendClient {
   }
 
   // Send a GraphQL query to the backend.
-  async gqlQuery(
+  async gqlQuery<T>(
     query: string,
-    variables: Record<string, any> = {},
-  ): Promise<GraphQlResponse<any>> {
+    variables: Record<string, unknown> = {},
+  ): Promise<GraphQlResponse<T>> {
     const requestBody = JSON.stringify({
       query,
       variables,
@@ -68,7 +68,7 @@ export class BackendClient {
       );
     }
 
-    let response: GraphQlResponse<any>;
+    let response: GraphQlResponse<T>;
     try {
       response = JSON.parse(body);
     } catch (err) {
@@ -88,7 +88,17 @@ export class BackendClient {
   }
 
   async getAppById(appId: string): Promise<ApiDeployApp> {
-    const res = await this.gqlQuery(
+    const nodeLike = z.object({
+      node: z.object({
+        id: z.string(),
+        url: z.string(),
+        activeVersion: z.object({
+          id: z.string(),
+        }),
+      }),
+    });
+    type nodeLike = z.infer<typeof nodeLike>;
+    const res = await this.gqlQuery<nodeLike>(
       `
       query($id:ID!) {
         node(id:$id) {
@@ -105,18 +115,14 @@ export class BackendClient {
       { id: appId },
     );
 
-    const node = res.data.node;
+    const node = nodeLike.parse(res.data).node;
     if (!node) {
       console.debug({ res });
       throw new Error(`App not found: ${appId}`);
     }
 
     const id = node.id;
-    assert(typeof id === "string");
-
     const url = node.url;
-    assert(typeof url === "string");
-
     const activeVersionId = node.activeVersion?.id ?? null;
 
     const app: ApiDeployApp = {
@@ -132,6 +138,27 @@ export class BackendClient {
     namespace: string,
     after: string | null,
   ): Promise<ApiAppsInNamespace> {
+    const nodeType = z.object({
+      node: z.object({
+        id: z.string(),
+        deleted: z.boolean(),
+        createdAt: z.string(),
+      }),
+    });
+    const namespaceQuery = z.object({
+      getNamespace: z.object({
+        apps: z.object({
+          pageInfo: z.object({
+            endCursor: z.string().nullable(),
+          }),
+          edges: z.array(nodeType),
+        }),
+      }),
+    });
+
+    type namespaceQuery = z.infer<typeof namespaceQuery>;
+    type nodeType = z.infer<typeof nodeType>;
+
     const query = `
 query($namespace:String!, $after:String) {
   getNamespace(name:$namespace) {
@@ -151,15 +178,26 @@ query($namespace:String!, $after:String) {
 }
     `;
 
-    const res = await this.gqlQuery(query, { namespace, after });
-    const data = res!.data!.getNamespace!.apps;
+    const res = await this.gqlQuery<namespaceQuery>(query, {
+      namespace,
+      after,
+    });
+    const data = namespaceQuery.parse(res).getNamespace.apps;
     const lastCursor: string | null = data!.pageInfo.endCursor;
-    const edges = data!.edges;
-    const apps = edges.map((e: any) => e.node);
+    const edges = data.edges;
+    const apps = edges.map((e: nodeType) => e.node);
     return { apps, lastCursor };
   }
 
   async deleteApp(appId: string): Promise<void> {
+    const deleteAppMutation = z.object({
+      deleteApp: z.object({
+        success: z.boolean(),
+      }),
+    });
+
+    type deleteAppMutation = z.infer<typeof deleteAppMutation>;
+
     const query = `
 mutation($id:ID!) {
   deleteApp(input:{id:$id}) {
@@ -168,8 +206,8 @@ mutation($id:ID!) {
 }
 `;
 
-    const res = await this.gqlQuery(query, { id: appId });
-    const success = res.data.deleteApp.success;
+    const res = await this.gqlQuery<deleteAppMutation>(query, { id: appId });
+    const success = deleteAppMutation.parse(res.data).deleteApp.success;
     if (!success) {
       throw new Error(`Failed to delete app: ${appId}`);
     }

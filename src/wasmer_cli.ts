@@ -3,6 +3,7 @@ import os from "node:os";
 import fs from "node:fs";
 import * as toml from "jsr:@std/toml";
 
+import { z } from "zod";
 import { Path } from "./fs.ts";
 
 // The global wasmer config file.
@@ -31,67 +32,35 @@ export interface DeployOutput {
   path: Path;
 }
 
+const deployOutputSchema = z.object({
+  json_config: z.string(),
+  id: z.string(),
+  app: z.object({
+    id: z.string(),
+  }),
+  url: z.string().refine((val) => val.startsWith("http"), {
+    message: "Invalid URL format",
+  }),
+});
+
 export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
-  let infoRaw: any;
-  try {
-    infoRaw = JSON.parse(stdout);
-  } catch (err) {
-    throw new Error(
-      `Invalid output data: could not parse output as JSON: '${err}': '${stdout}'`,
-    );
-  }
+  const parsedData = deployOutputSchema.parse(stdout);
 
-  let jsonConfig: any;
-  try {
-    jsonConfig = JSON.parse(infoRaw?.json_config);
-  } catch (err) {
-    throw new Error(
-      `Invalid output data: could not parse JSON config: '${err}': '${infoRaw?.jsonConfig}'`,
-    );
-  }
-
+  const jsonConfig = JSON.parse(parsedData.json_config);
   const fullName = jsonConfig?.meta?.name;
   if (typeof fullName !== "string") {
     throw new Error(
-      `Invalid output data: could not extract name from JSON config: '${infoRaw?.jsonConfig}'`,
+      `Invalid output data: could not extract name from JSON config: '${parsedData.json_config}'`,
     );
   }
+
   const [_owner, name] = fullName.split("/");
 
-  if (typeof infoRaw !== "object") {
-    throw new Error(
-      `Invalid output data: expected JSON object, got '${stdout}'`,
-    );
-  }
-
-  const versionId = infoRaw?.id;
-  if (typeof versionId !== "string") {
-    throw new Error(
-      `Invalid output data: could not extract ID from '${stdout}'`,
-    );
-  }
-
-  const appId = infoRaw?.app?.id;
-  if (typeof appId !== "string") {
-    throw new Error(
-      `Invalid output data: could not extract app ID from '${stdout}'`,
-    );
-  }
-
-  const url = infoRaw?.url;
-  if (typeof url !== "string" || !url.startsWith("http")) {
-    throw new Error(
-      `Invalid output data: could not extract URL from '${stdout}'`,
-    );
-  }
-
-  const info: DeployOutput = {
+  return {
     name,
-    appId,
-    appVersionId: versionId,
-    url,
+    appId: parsedData.app.id,
+    appVersionId: parsedData.id,
+    url: parsedData.url,
     path: dir,
   };
-
-  return info;
 }
