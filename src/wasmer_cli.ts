@@ -44,7 +44,7 @@ const deployOutputSchema = z.object({
 });
 
 export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
-  const parsedData = deployOutputSchema.parse(stdout);
+  const parsedData = deployOutputSchema.parse(JSON.parse(stdout));
 
   const jsonConfig = JSON.parse(parsedData.json_config);
   const fullName = jsonConfig?.meta?.name;
