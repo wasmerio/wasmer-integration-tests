@@ -1,11 +1,5 @@
-name: "Run tests with new tests pushed on main branch"
-'on':
-  pull_request:
-    branches:
-      - 'main'
-  push:
-    branches:
-      - 'main'
+name: "Run tests with new tests pushed on main branch. Intended to be run via workflow dispatch to validate dev environment."
+"on":
   workflow_dispatch:
 
 concurrency:
@@ -13,7 +7,7 @@ concurrency:
 
 jobs:
   default:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -35,4 +29,6 @@ jobs:
       - name: notify failure in slack
         if: failure()
         run: |
-          curl -X POST -H 'Content-type: application/json' --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' https://hooks.slack.com/services/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
+          curl -X POST -H 'Content-type: application/json' \
+          --data '{"text":"Integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+          https://hooks.slack.com/services/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

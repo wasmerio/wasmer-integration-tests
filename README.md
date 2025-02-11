@@ -7,50 +7,44 @@ CLI, the backend and Edge.
 
 The tests are written in Typescript, and use the `deno` test runner.
 
-Follow the [Deno installation docs](https://docs.deno.com/runtime/fundamentals/installation/)
+Follow the
+[Deno installation docs](https://docs.deno.com/runtime/fundamentals/installation/)
 to install deno on your system.
 
-* Run all tests:
-  `deno test --allow-all .`
-* Run specific test(s), filtered by name:
+- Run all tests: `deno test --allow-all .`
+- Run specific test(s), filtered by name:
   `deno test --allow-all --filter <TEST-NAME> .`
 
-Use the `--parallel` flag to run multiple tests in parallel.
-By default, this will run tests with a concurrency of local CPU cores.
-You can use the `DENO_JOBS` environment variable to control the number of
-parallel tests..
+Use the `--parallel` flag to run multiple tests in parallel. By default, this
+will run tests with a concurrency of local CPU cores. You can use the
+`DENO_JOBS` environment variable to control the number of parallel tests..
 
 For example: `DENO_JOBS=8 deno test --allow-all --parallel .`
 
 ### Test target environment
 
-Tests are executed against a given test environment, and will create apps in
-a specified namespace.
+Tests are executed against a given test environment, and will create apps in a
+specified namespace.
 
 By default the Wasmer dev backend is used.
 
 The test target can be customized with environment variables.
 
 Defaults:
-* WASMER_NAMESPACE: 'wasmer-integration-tests'
-  The backend namespace to use for the tests.
-  Packages and apps will be created in this namespace.
-* WASMER_REGISTRY: 'https://registry.wasmer.wtf/graphql'
-  URL of the backend.
-* WASMER_TOKEN: <null>
-  The token for the target backend is retrieved from your wasmer config.
-  (~/.wasmer/wasmer.toml) if not specified.
-* WASMER_PATH: <null>
-  Path to the wasmer CLI executable.
-  By default the tests will just use the locally installed version.
-* WASMOPTICON_DIR: <null>
-  Path to a local clone of of the wasix-org/wasmopticon repository.
-  If not specified, tests will either use a local directory if it exists, or
-  clone the repository on demand.
-* EDGE_SERVER: <null>
-  Instead Edge with regular DNS resolution, test a specific Edge server.
-  NOTE: currently not fully working due to deno not fully implementing the 
-  required Node.js APIs.
+
+- WASMER_NAMESPACE: 'wasmer-integration-tests' The backend namespace to use for
+  the tests. Packages and apps will be created in this namespace.
+- WASMER_REGISTRY: 'https://registry.wasmer.wtf/graphql' URL of the backend.
+- WASMER_TOKEN: <null> The token for the target backend is retrieved from your
+  wasmer config. (~/.wasmer/wasmer.toml) if not specified.
+- WASMER_PATH: <null> Path to the wasmer CLI executable. By default the tests
+  will just use the locally installed version.
+- WASMOPTICON_DIR: <null> Path to a local clone of of the wasix-org/wasmopticon
+  repository. If not specified, tests will either use a local directory if it
+  exists, or clone the repository on demand.
+- EDGE_SERVER: <null> Instead Edge with regular DNS resolution, test a specific
+  Edge server. NOTE: currently not fully working due to deno not fully
+  implementing the required Node.js APIs.
 
 ## Writing tests
 
@@ -59,14 +53,13 @@ the app is running correctly on Edge.
 
 Helper code is available to make this flow more convenient.
 
-In particular, the `TestEnv` helper provides wrappers for executing CLI commands,
-creating and deploying apps,sending queries to the backend and sending HTTP
-requests to Edge.
+In particular, the `TestEnv` helper provides wrappers for executing CLI
+commands, creating and deploying apps,sending queries to the backend and sending
+HTTP requests to Edge.
 
-NOTE: **You must use the TestEnv helpers to run CLI commands and to send requests
-to Edge to ensure test environment settings are respected.**
+NOTE: **You must use the TestEnv helpers to run CLI commands and to send
+requests to Edge to ensure test environment settings are respected.**
 
- 
 The following code shows an example test with commentary:
 
 ```

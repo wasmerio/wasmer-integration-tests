@@ -33,7 +33,8 @@ async function purgeOldApps(
           await env.backend.deleteApp(app.id);
           deletedCounter++;
         } catch (err) {
-          if (!(err as any).toString().includes("is already deleted")) {
+          const typedErr = err instanceof Error ? err : false;
+          if (!(typedErr && typedErr.message.includes("is already deleted"))) {
             throw err;
           }
         }

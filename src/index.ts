@@ -11,7 +11,7 @@ import { ENV_VAR_WASMOPTICON_DIR } from "./env.ts";
 // Path to the wasmopticon repo.
 export async function wasmopticonDir(): Promise<string> {
   const WASMOPTICON_GIT_URL = "https://github.com/wasix-org/wasmopticon.git";
-  let dir = process.env[ENV_VAR_WASMOPTICON_DIR];
+  const dir = process.env[ENV_VAR_WASMOPTICON_DIR];
   if (dir) {
     const doesExist = await exists(dir);
     if (!doesExist) {

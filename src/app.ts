@@ -6,7 +6,11 @@ import { buildDir, DirEntry, Path } from "./fs.ts";
 // Definition for an app.
 // Contains an optional package definition, directory tree and app.yaml configuration.
 export interface AppDefinition {
+  // TODO: Setup zod object for wasmerToml
+  // deno-lint-ignore no-explicit-any
   wasmerToml?: Record<string, any>;
+  // TODO: Setup zod object for appYaml
+  // deno-lint-ignore no-explicit-any
   appYaml: Record<string, any>;
   files?: DirEntry;
 }
