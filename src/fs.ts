@@ -1,6 +1,6 @@
-import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
+import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 
 export type Path = string;
 
@@ -11,7 +11,7 @@ export async function buildDir(path: Path, files: DirEntry): Promise<void> {
   for (const [name, value] of Object.entries(files)) {
     const subPath = `${path}/${name}`;
     if (typeof value === "string") {
-      console.log('writing file', { path, value, subPath })
+      console.log("writing file", { path, value, subPath });
       await fs.promises.writeFile(subPath, value);
     } else {
       await fs.promises.mkdir(subPath, { recursive: true });

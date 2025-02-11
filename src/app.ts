@@ -1,7 +1,7 @@
 import * as yaml from "jsr:@std/yaml";
 import * as toml from "jsr:@std/toml";
 
-import {Path, DirEntry, buildDir} from './fs.ts';
+import { buildDir, DirEntry, Path } from "./fs.ts";
 
 // Definition for an app.
 // Contains an optional package definition, directory tree and app.yaml configuration.

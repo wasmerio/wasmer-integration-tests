@@ -3,7 +3,8 @@
 // Helper script to purge old apps from the test namespace.
 // This should be run periodically to keep the namespace clean.
 
-import { TestEnv } from "../test.ts";
+import { TestEnv } from "../src/env.ts";
+import { ApiAppsInNamespace } from "../src/backend.ts";
 
 // Clean up all old apps created by tests.
 async function purgeOldApps(
@@ -14,10 +15,11 @@ async function purgeOldApps(
 
   let after: string | null = null;
   while (true) {
-    const { apps, lastCursor } = await env.backend.appsInNamespace(
+    const out: ApiAppsInNamespace = await env.backend.appsInNamespace(
       env.namespace,
       after,
     );
+    const { apps, lastCursor } = out;
 
     for (const app of apps) {
       const createdAt = new Date(app.createdAt);
@@ -31,7 +33,7 @@ async function purgeOldApps(
           await env.backend.deleteApp(app.id);
           deletedCounter++;
         } catch (err) {
-          if (!err.toString().includes("is already deleted")) {
+          if (!(err as any).toString().includes("is already deleted")) {
             throw err;
           }
         }

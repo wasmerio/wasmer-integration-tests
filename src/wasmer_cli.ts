@@ -21,7 +21,6 @@ export function loadWasmerConfig(): WasmerConfig {
   return data;
 }
 
-
 // Parsed output from the "wasmer deploy" command.
 export interface DeployOutput {
   name: string;

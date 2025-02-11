@@ -1,12 +1,19 @@
-import path from 'node:path';
-import fs from 'node:fs';
+import path from "node:path";
+import fs from "node:fs";
+import process from "node:process";
 import * as toml from "jsr:@std/toml";
 
 import { HttpClient } from "./http.ts";
-import { BackendClient, AppInfo } from "./backend.ts";
-import {WasmerConfig, loadWasmerConfig, parseDeployOutput, DeployOutput} from './wasmer_cli.ts';
-import {Path, buildTempDir} from './fs.ts';
-import {AppDefinition, randomAppName, writeAppDefinition} from './app.ts';
+import { AppInfo, BackendClient } from "./backend.ts";
+import {
+  DeployOutput,
+  loadWasmerConfig,
+  parseDeployOutput,
+  WasmerConfig,
+} from "./wasmer_cli.ts";
+import { buildTempDir, Path } from "./fs.ts";
+import { AppDefinition, randomAppName, writeAppDefinition } from "./app.ts";
+import { sleep } from "./util.ts";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -52,6 +59,8 @@ export interface AppFetchOptions extends RequestInit {
   noAssertSuccess?: boolean;
   // Discard the response body.
   discardBody?: boolean;
+  // Do not wait for the latest version to be deployed.
+  noWait?: boolean;
 }
 
 export class TestEnv {
@@ -101,7 +110,9 @@ export class TestEnv {
         config = loadWasmerConfig();
       } catch (err) {
         throw new Error(
-          `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${(err as any).toString()})`,
+          `Failed to load wasmer.toml config - specify the WASMER_TOKEN env var to provide a token without a config (error: ${
+            (err as any).toString()
+          })`,
         );
       }
       maybeToken = config.registry?.tokens?.find((t) =>
@@ -392,6 +403,13 @@ export class TestEnv {
       url = app.url + (urlOrPath.startsWith("/") ? "" : "/") + urlOrPath;
     }
 
+    let waitForVersionId: string | null = null;
+    if (!options.noWait && !urlOrPath.startsWith("http")) {
+      // Fetch latest version
+      const info = await this.backend.getAppById(app.id);
+      waitForVersionId = info.activeVersionId;
+    }
+
     // Should not follow redirects by default.
     if (!options.redirect) {
       options.redirect = "manual";
@@ -402,7 +420,9 @@ export class TestEnv {
     console.debug(`Fetched URL ${url}`, {
       status: response.status,
       headers: response.headers,
+      remoteAddress: response.remoteAddress,
     });
+
     // if (options.discardBody) {
     //   await response.body?.cancel();
     // }
@@ -411,13 +431,30 @@ export class TestEnv {
       let body: string | null = null;
       try {
         body = await response.text();
-      } catch (err) { }
+      } catch (err) {}
 
       // TODO: allow running against a particular server.
       throw new Error(
         `Failed to fetch URL '${url}': ${response.status}\n\nBODY:\n${body}`,
       );
     }
+
+    if (waitForVersionId) {
+      const currentId = response.headers.get("x-edge-app-version-id");
+      if (!currentId) {
+        throw new Error(
+          `Failed to fetch URL '${url}': missing x-edge-app-version-id header`,
+        );
+      }
+      if (currentId !== waitForVersionId) {
+        console.info(
+          `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
+        );
+        await sleep(500);
+        return this.fetchApp(app, urlOrPath, options);
+      }
+    }
+
     return response;
   }
 }

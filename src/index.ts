@@ -1,12 +1,12 @@
-import path from 'node:path';
-import fs from 'node:fs';
+import path from "node:path";
+import process from "node:process";
+import fs from "node:fs";
 
 import { exists } from "jsr:@std/fs";
 
 import { sleep } from "./util.ts";
 
 import { ENV_VAR_WASMOPTICON_DIR } from "./env.ts";
-
 
 // Path to the wasmopticon repo.
 export async function wasmopticonDir(): Promise<string> {

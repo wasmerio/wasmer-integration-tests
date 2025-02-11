@@ -1,7 +1,7 @@
 import { assert } from "jsr:@std/assert";
 
-import {DeployOutput} from './wasmer_cli.ts';
-import {Path} from './fs.ts';
+import { DeployOutput } from "./wasmer_cli.ts";
+import { Path } from "./fs.ts";
 
 export interface GraphQlResponse<T> {
   data?: T;
@@ -11,6 +11,7 @@ export interface GraphQlResponse<T> {
 export interface ApiDeployApp {
   id: string;
   url: string;
+  activeVersionId: string | null;
 }
 
 export interface AppInfo {
@@ -21,6 +22,11 @@ export interface AppInfo {
   url: string;
   // Directory holding the app.
   dir: Path;
+}
+
+export interface ApiAppsInNamespace {
+  apps: [{ id: string; deleted: boolean; createdAt: string }];
+  lastCursor: string | null;
 }
 
 export class BackendClient {
@@ -89,6 +95,9 @@ export class BackendClient {
           ... on DeployApp {
             id
             url
+            activeVersion {
+              id
+            }
           }
         }
       }
@@ -108,9 +117,12 @@ export class BackendClient {
     const url = node.url;
     assert(typeof url === "string");
 
+    const activeVersionId = node.activeVersion?.id ?? null;
+
     const app: ApiDeployApp = {
       id,
       url,
+      activeVersionId,
     };
 
     return app;
@@ -119,12 +131,7 @@ export class BackendClient {
   async appsInNamespace(
     namespace: string,
     after: string | null,
-  ): Promise<
-    {
-      apps: [{ id: string; deleted: boolean; createdAt: string }];
-      lastCursor: string | null;
-    }
-  > {
+  ): Promise<ApiAppsInNamespace> {
     const query = `
 query($namespace:String!, $after:String) {
   getNamespace(name:$namespace) {
@@ -146,7 +153,7 @@ query($namespace:String!, $after:String) {
 
     const res = await this.gqlQuery(query, { namespace, after });
     const data = res!.data!.getNamespace!.apps;
-    const lastCursor = data!.pageInfo.endCursor;
+    const lastCursor: string | null = data!.pageInfo.endCursor;
     const edges = data!.edges;
     const apps = edges.map((e: any) => e.node);
     return { apps, lastCursor };

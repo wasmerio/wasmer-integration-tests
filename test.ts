@@ -1,14 +1,25 @@
-import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "jsr:@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertNotEquals,
+  assertStringIncludes,
+} from "jsr:@std/assert";
 import * as toml from "jsr:@std/toml";
 import * as path from "node:path";
 import fs from "node:fs";
 
-import {buildTempDir, createTempDir} from './src/fs.ts';
-import {TestEnv} from './src/env.ts';
-import {buildStaticSiteApp, randomAppName, writeAppDefinition, AppDefinition, buildJsWorkerApp} from './src/app.ts';
-import {wasmopticonDir} from './src/index.ts';
-import {parseDeployOutput} from './src/wasmer_cli.ts';
-import {sleep} from './src/util.ts';
+import { buildTempDir, createTempDir } from "./src/fs.ts";
+import { TestEnv } from "./src/env.ts";
+import {
+  AppDefinition,
+  buildJsWorkerApp,
+  buildStaticSiteApp,
+  randomAppName,
+  writeAppDefinition,
+} from "./src/app.ts";
+import { wasmopticonDir } from "./src/index.ts";
+import { parseDeployOutput } from "./src/wasmer_cli.ts";
+import { sleep } from "./src/util.ts";
 
 const HEADER_PURGE_INSTANCES: string = "x-edge-purge-instances";
 const HEADER_INSTANCE_ID: string = "x-edge-instance-id";
@@ -648,8 +659,11 @@ const DEFAULT_PHP_APP_YAML = {
   kind: "wasmer.io/App.v0",
   name: randomAppName(),
   package: ".",
-}
-function buildPhpApp(phpCode: string, additionalAppYamlSettings?: Record<string, any>): AppDefinition {
+};
+function buildPhpApp(
+  phpCode: string,
+  additionalAppYamlSettings?: Record<string, any>,
+): AppDefinition {
   const spec: AppDefinition = {
     wasmerToml: {
       dependencies: {
@@ -1626,41 +1640,46 @@ Deno.test("sql-connectivity", {}, async () => {
 
   // Validate that DB credentials aren't setup without specifying to have it
   {
-    console.log("== Setting up environment without SQL ==")
-    let want = "Missing required SQL environment variables"
+    console.log("== Setting up environment without SQL ==");
+    let want = "Missing required SQL environment variables";
     const withoutSqlSpec = buildPhpApp(testCode);
     const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
-    let res = await env.fetchApp(withoutSqlInfo, "/results")
+    let res = await env.fetchApp(withoutSqlInfo, "/results");
     let got = await res.text();
-    assertStringIncludes(got, want,
-      "Expected environment to NOT include SQL details, as the environment is not specified to include them")
+    assertStringIncludes(
+      got,
+      want,
+      "Expected environment to NOT include SQL details, as the environment is not specified to include them",
+    );
     // Having environment variables set is bad, having the option to connect is worse: would
     // encourage and perhaps enable malicious use
-    assertNotEquals(got, "OK",
-      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!")
-    env.deleteApp(withoutSqlInfo)
+    assertNotEquals(
+      got,
+      "OK",
+      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!",
+    );
+    env.deleteApp(withoutSqlInfo);
   }
 
   // Validate happy-path
   {
-    console.log("== Setting up environment with SQL ==")
-    const want = "OK"
+    console.log("== Setting up environment with SQL ==");
+    const want = "OK";
     const withSqlSpec = buildPhpApp(testCode, {
       debug: true,
       scaling: {
-        mode: "single_concurrency"
+        mode: "single_concurrency",
       },
       capabilities: {
         database: {
-          engine: "mysql"
-        }
-      }
+          engine: "mysql",
+        },
+      },
     });
     const withSqlInfo = await env.deployApp(withSqlSpec);
-    const res = await env.fetchApp(withSqlInfo, "/results")
+    const res = await env.fetchApp(withSqlInfo, "/results");
     const got = await res.text();
-    assertEquals(got, want, "Received connection error to SQL db")
-    env.deleteApp(withSqlInfo)
+    assertEquals(got, want, "Received connection error to SQL db");
+    env.deleteApp(withSqlInfo);
   }
-})
-
+});
