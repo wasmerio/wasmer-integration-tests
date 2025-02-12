@@ -415,48 +415,66 @@ export class TestEnv {
       options.redirect = "manual";
     }
 
-    console.debug(`Fetching URL ${url}`, { options });
-    const response = await this.httpClient.fetch(url, options);
-    console.debug(`Fetched URL ${url}`, {
-      status: response.status,
-      headers: response.headers,
-      remoteAddress: response.remoteAddress,
-    });
+    const start = Date.now();
+    const RETRY_TIMEOUT_SECS = 60;
+    while (true) {
+      console.debug(`Fetching URL ${url}`, { options });
+      const response = await this.httpClient.fetch(url, options);
+      console.debug(`Fetched URL ${url}`, {
+        status: response.status,
+        headers: response.headers,
+        remoteAddress: response.remoteAddress,
+      });
 
-    // if (options.discardBody) {
-    //   await response.body?.cancel();
-    // }
-    if (!options.noAssertSuccess && !response.ok) {
-      // Try to get the body:
-      let body: string | null = null;
-      try {
-        body = await response.text();
-      } catch (err) {
-        console.error(err);
-      }
+      // if (options.discardBody) {
+      //   await response.body?.cancel();
+      // }
+      if (!options.noAssertSuccess && !response.ok) {
+        // Try to get the body:
+        let body: string | null = null;
+        try {
+          body = await response.text();
+        } catch (err) {
+          console.error(err);
+        }
 
-      // TODO: allow running against a particular server.
-      throw new Error(
-        `Failed to fetch URL '${url}': ${response.status}\n\nBODY:\n${body}`,
-      );
-    }
-
-    if (waitForVersionId) {
-      const currentId = response.headers.get("x-edge-app-version-id");
-      if (!currentId) {
+        // TODO: allow running against a particular server.
         throw new Error(
-          `Failed to fetch URL '${url}': missing x-edge-app-version-id header`,
+          `Failed to fetch URL '${url}': ${response.status}\n\nBODY:\n${body}`,
         );
       }
-      if (currentId !== waitForVersionId) {
-        console.info(
-          `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
-        );
-        await sleep(500);
-        return this.fetchApp(app, urlOrPath, options);
-      }
-    }
 
-    return response;
+      // NOTE: this step happens after the success check on purpose, because
+      // another error like a 404 indicates problems in the deployment flow.
+      if (waitForVersionId) {
+        const currentId = response.headers.get("x-edge-app-version-id");
+        if (!currentId) {
+          throw new Error(
+            `Failed to fetch URL '${url}': missing x-edge-app-version-id header`,
+          );
+        }
+
+        if (currentId !== waitForVersionId) {
+          const elapsed = Date.now() - start;
+          // only retry for one minute
+          if (elapsed > (RETRY_TIMEOUT_SECS * 1000)) {
+            throw new Error(
+              `Failed to fetch URL '${url}': app is not at expected version ${waitForVersionId} after retrying for ${RETRY_TIMEOUT_SECS} seconds (got ${currentId})`,
+            );
+          }
+
+          console.info(
+            `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
+          );
+          await sleep(1000);
+          // Retry...
+          continue;
+        } else {
+          console.debug(`App is at expected version ${waitForVersionId}`);
+        }
+      }
+
+      return response;
+    }
   }
 }
