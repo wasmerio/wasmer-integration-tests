@@ -8,24 +8,10 @@ on:
       - main
 
 jobs:
-  tet:
-    name: Run tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-      - uses: wasmerio/setup-wasmer@v2
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
-        run: ./run.sh
+  tests:
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@main
+    secrets:
+      WAPM_DEV_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
 
   fmt:
     name: File format check

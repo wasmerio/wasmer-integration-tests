@@ -1,0 +1,53 @@
+name: Integration Test Workflow
+
+on:
+  workflow_call:
+    secrets:
+      WAPM_DEV_TOKEN:
+        required: true
+
+jobs:
+  run-unspecified-tests:
+    name: Run root tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: wasmerio/setup-wasmer@v2
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+        run: ./run.sh
+
+  run-logvalidation-tests:
+    name: Run log tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: wasmerio/setup-wasmer@v2
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+        run: |
+          # Run test which only passes if logging works
+          deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
+          # ... and then the tests which depend on logging for validation. Doesn't make any
+          # sense to run these if we know that logging doesn't work: just a waste of resources
+          deno test --allow-all src/tests/log-validation --quiet .

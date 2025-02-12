@@ -6,26 +6,11 @@ concurrency:
   group: push-to-main
 
 jobs:
-  default:
-    runs-on: ubuntu-24.04
+  tests:
+    uses: ./.github/workflows/test-jobs.yaml
+    secrets:
+      WAPM_DEV_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - run: |
-          find .
-      - uses: wasmerio/setup-wasmer@v2
-      - uses: denoland/setup-deno@v1
-      - name: whoami
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
-        run: wasmer whoami
-      - name: test
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
-        run: deno test --allow-all --parallel
       - name: notify failure in slack
         if: failure()
         run: |
