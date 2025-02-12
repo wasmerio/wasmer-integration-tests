@@ -16,7 +16,9 @@ import {
   buildStaticSiteApp,
   randomAppName,
   writeAppDefinition,
-} from "./src/app.ts";
+} from "./src/app/index.ts";
+import { buildPhpApp } from "./src/app/php.ts";
+
 import { wasmopticonDir } from "./src/index.ts";
 import { parseDeployOutput } from "./src/wasmer_cli.ts";
 import { sleep } from "./src/util.ts";
@@ -657,44 +659,6 @@ addEventListener("fetch", (fetchEvent) => {
 
 const EDGE_HEADER_PURGE_INSTANCES = "x-edge-purge-instances";
 const EDGE_HEADER_JOURNAL_STATUS = "x-edge-instance-journal-status";
-const DEFAULT_PHP_APP_YAML = {
-  kind: "wasmer.io/App.v0",
-  name: randomAppName(),
-  package: ".",
-};
-function buildPhpApp(
-  phpCode: string,
-  additionalAppYamlSettings?: Record<string, unknown>,
-): AppDefinition {
-  const spec: AppDefinition = {
-    wasmerToml: {
-      dependencies: {
-        "php/php": "8.*",
-      },
-      fs: {
-        "/src": "src",
-      },
-      command: [{
-        name: "app",
-        module: "php/php:php",
-        runner: "https://webc.org/runner/wasi",
-        annotations: {
-          wasi: {
-            "main-args": ["-S", "localhost:8080", "/src/index.php"],
-          },
-        },
-      }],
-    },
-    appYaml: { ...DEFAULT_PHP_APP_YAML, ...additionalAppYamlSettings },
-    files: {
-      "src": {
-        "index.php": phpCode,
-      },
-    },
-  };
-
-  return spec;
-}
 
 function buildPhpInstabootTimestampApp(): AppDefinition {
   const phpCode = `
