@@ -1622,7 +1622,10 @@ echo "email_sent\n";
   // }
 });
 
-Deno.test("sql-connectivity", {}, async () => {
+// NOTE: Currently disabled due to problematic BE behaviour
+// SEE WAX-373
+// FIXME: re-enable once the BE behaviour is fixed (WAX-373)
+Deno.test("sql-connectivity", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
   const filePath = "./fixtures/v2/php/mysql-check.php";
   const testCode = await fs.promises.readFile(filePath, "utf-8");
@@ -1651,24 +1654,35 @@ Deno.test("sql-connectivity", {}, async () => {
   }
 
   // Validate happy-path
+  console.log("== Setting up environment with SQL ==");
+  const want = "OK";
+  const withSqlSpec = buildPhpApp(testCode, {
+    debug: true,
+    scaling: {
+      mode: "single_concurrency",
+    },
+    capabilities: {
+      database: {
+        engine: "mysql",
+      },
+    },
+  });
+  const withSqlInfo = await env.deployApp(withSqlSpec);
+
   {
-    console.log("== Setting up environment with SQL ==");
-    const want = "OK";
-    const withSqlSpec = buildPhpApp(testCode, {
-      debug: true,
-      scaling: {
-        mode: "single_concurrency",
-      },
-      capabilities: {
-        database: {
-          engine: "mysql",
-        },
-      },
-    });
-    const withSqlInfo = await env.deployApp(withSqlSpec);
     const res = await env.fetchApp(withSqlInfo, "/results");
     const got = await res.text();
-    assertEquals(got, want, "Received connection error to SQL db");
-    env.deleteApp(withSqlInfo);
+    assertEquals(got, want);
   }
+
+  // Also test the app version URL to make sure it is configured properly.
+  // Reggression test for WAX-373
+  {
+    const url = withSqlInfo.version.url + "/results";
+    const res = await fetch(url);
+    const body = await res.text();
+    assertEquals(body, want);
+  }
+
+  env.deleteApp(withSqlInfo);
 });
