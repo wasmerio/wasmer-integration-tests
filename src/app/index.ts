@@ -33,17 +33,11 @@ export function buildStaticSiteApp(): AppDefinition & {
       },
       fs: {
         "/public": "public",
-        // "/settings": "settings",
       },
       command: [{
         name: "script",
         module: "wasmer/static-web-server:webserver",
         runner: "https://webc.org/runner/wasi",
-        // annotations: {
-        //   wasi: {
-        //     'main-args': ["-w", "/settings/config.toml"],
-        //   }
-        // }
       }],
     },
     appYaml: {
