@@ -9,7 +9,7 @@ on:
 
 jobs:
   tests:
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@main
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@sre-183-integration-tests-exec-cronjob-cli-log-validation
     secrets:
       WAPM_DEV_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
 
