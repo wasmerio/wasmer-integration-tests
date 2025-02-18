@@ -1,19 +1,23 @@
 name: Integration Test Workflow
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_call:
     inputs:
-      test_failure_webhook:
-        required: false
-        type: string
-        description: "Add optional webhook which will be called if any tests have failed"
       fetch_artifact:
         required: false
         type: string
         description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
     secrets:
-      WAPM_DEV_TOKEN:
+      token:
         required: true
+        description: "Token used to authenticate towards some wasmer backend"
+      test_failure_webhook:
+        required: false
+        description: "Add optional webhook which will be called if any tests have failed"
 
 jobs:
   run-unspecified-tests:
@@ -34,7 +38,7 @@ jobs:
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+          WASMER_TOKEN: ${{ secrets.token }}
         run: |
           ./run.sh
       - name: Notify failure in Slack
@@ -62,7 +66,7 @@ jobs:
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+          WASMER_TOKEN: ${{ secrets.token }}
         run: |
           # Run test which only passes if logging works
           deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
