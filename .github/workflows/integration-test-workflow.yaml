@@ -47,12 +47,14 @@ jobs:
         run: |
           ./run.sh
       - name: Notify failure in Slack
-        if: failure() && secrets.test_failure_webhook != ''
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
             --data '{"text":"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.test_failure_webhook }}
+            ${TEST_FAILURE_WEBHOOK}
 
   run-logvalidation-tests:
     name: Run tests which use logging for validation
@@ -79,9 +81,11 @@ jobs:
           # sense to run these if we know that logging doesn't work: just a waste of resources
           deno test --allow-all src/tests/log-validation --quiet
       - name: Notify failure in Slack
-        if: failure() && secrets.test_failure_webhook != ''
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
             --data '{"text":"Log-validation based integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.test_failure_webhook }}
+            ${TEST_FAILURE_WEBHOOK}
