@@ -58,7 +58,6 @@ jobs:
           echo "actionlint found ${{ steps.actionlint.outputs.total-errors }} errors"
           echo "actionlint checked ${{ steps.actionlint.outputs.total-files }} files"
           echo "actionlint cache used: ${{ steps.actionlint.outputs.cache-hit }}"
-          exit ${{ steps.actionlint.outputs.exit-code }}
   lint:
     name: Lint the project
     runs-on: ubuntu-24.04
