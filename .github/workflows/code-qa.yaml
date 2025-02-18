@@ -9,7 +9,7 @@ on:
 
 jobs:
   tests:
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@main
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@fix-issues-in-integration-test-workflow
     secrets:
       wasmer_token: ${{ secrets.WAPM_DEV_TOKEN }}
 
