@@ -2,6 +2,78 @@ import * as yaml from "jsr:@std/yaml";
 import * as toml from "jsr:@std/toml";
 
 import { buildDir, DirEntry, Path } from "../fs.ts";
+import { z } from "zod";
+
+export const AppCapabilities = z.object({
+  database: z.object({
+    engine: z.string(),
+  }).optional(),
+  instaboot: z.object({
+    max_age: z.string().optional(),
+    requests: z.array(z.object({})),
+  }).optional(),
+});
+
+export const AppVolumes = z.object({
+  name: z.string(),
+  mount: z.string(),
+});
+
+export const FetchJob = z.object({
+  fetch: z.object({
+    path: z.string(),
+    timeout: z.string(),
+  }),
+});
+
+export const ExecJob = z.object({
+  execute: z.object({
+    command: z.string(),
+    env: z.map(z.string(), z.string()).optional(),
+    cli_args: z.array(z.string()).optional(),
+  }),
+});
+
+// Is this accurate? No idea. Claude thinks so. I believe in our AI overlords
+export const cronJobTimeSpec = z.string().regex(
+  /^(((\d+,)+\d+|(\d+(\/|-)\d+|\d+)(-(\d+(\/\d+)?)?)?|(\*(\/\d+)?)) ?){5,7}$/,
+);
+
+export const JobAction = z.union([ExecJob, FetchJob]);
+export type JobAction = z.infer<typeof JobAction>;
+
+export const AppJob = z.object({
+  action: JobAction,
+  name: z.string(),
+  trigger: z.union([
+    z.literal("pre-deployment"),
+    z.literal("post-deployment"),
+    cronJobTimeSpec,
+  ]),
+});
+export type AppJob = z.infer<typeof AppJob>;
+
+export const AppYaml = z.object({
+  kind: z.literal("wasmer.io/App.v0"),
+  debug: z.boolean().optional(),
+  name: z.string().optional(),
+  locality: z.object({
+    regions: z.array(z.string()),
+  }).optional(),
+  owner: z.string().optional(),
+  package: z.string(),
+  capabilities: AppCapabilities.optional(),
+  volumes: z.array(AppVolumes).optional(),
+  domains: z.array(z.string()).optional(),
+  redirect: z.object({}).optional(),
+  scaling: z.object({
+    mode: z.literal("single_concurrency"),
+  }).optional(),
+  jobs: z.array(AppJob).optional(),
+  app_id: z.string().optional(),
+});
+
+export type AppYaml = z.infer<typeof AppYaml>;
 
 // Definition for an app.
 // Contains an optional package definition, directory tree and app.yaml configuration.
@@ -9,9 +81,7 @@ export interface AppDefinition {
   // TODO: Setup zod object for wasmerToml
   // deno-lint-ignore no-explicit-any
   wasmerToml?: Record<string, any>;
-  // TODO: Setup zod object for appYaml
-  // deno-lint-ignore no-explicit-any
-  appYaml: Record<string, any>;
+  appYaml: AppYaml;
   files?: DirEntry;
 }
 
