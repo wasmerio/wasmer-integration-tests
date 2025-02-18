@@ -11,7 +11,7 @@ jobs:
   tests:
     uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@main
     secrets:
-      WAPM_DEV_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+      wasmer_token: ${{ secrets.WAPM_DEV_TOKEN }}
 
   fmt:
     name: File format check
