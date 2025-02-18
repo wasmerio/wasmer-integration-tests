@@ -8,7 +8,7 @@ on:
         description: "Token to access the Wasmer dev registry"
       test_failure_webhook:
         required: false
-        description: "Add optional webhook which will be called if any tests have failed"
+        description: "Specify optional webhook which will be called if any tests have failed"
       fetch_artifact:
         required: false
         type: string
