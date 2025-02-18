@@ -11,11 +11,6 @@ on:
         required: false
         type: string
         description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
-      regitry:
-        required: false
-        type: string
-        description: "Path to the graphql of the registry you'd like to test. See default."
-        default: "https://registry.wasmer.wtf/graphql"
     secrets:
       token:
         required: true
@@ -42,7 +37,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: ${{ inputs.registry }}
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           ./run.sh
@@ -72,7 +67,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: ${{ inputs.registry }}
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           # Run test which only passes if logging works
