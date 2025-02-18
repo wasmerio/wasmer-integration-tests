@@ -39,6 +39,9 @@ jobs:
     name: Lint GH actions
     runs-on: ubuntu-24.04
     steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
       - name: actionlint
         id: actionlint
         uses: raven-actions/actionlint@v2
