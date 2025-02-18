@@ -11,6 +11,7 @@ on:
         description: "Specify optional webhook which will be called if any tests have failed"
     inputs:
       fetch_artifact:
+        type: string
         required: false
         description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
 
