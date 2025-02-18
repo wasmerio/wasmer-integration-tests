@@ -4,6 +4,8 @@ import * as toml from "jsr:@std/toml";
 import { buildDir, DirEntry, Path } from "../fs.ts";
 import { z } from "zod";
 
+export const SECOND = 1000;
+
 export const AppCapabilities = z.object({
   database: z.object({
     engine: z.string(),
@@ -26,10 +28,12 @@ export const FetchJob = z.object({
   }),
 });
 
+export const EnvVars = z.record(z.string(), z.string());
+
 export const ExecJob = z.object({
   execute: z.object({
     command: z.string(),
-    env: z.map(z.string(), z.string()).optional(),
+    env: EnvVars.optional(),
     cli_args: z.array(z.string()).optional(),
   }),
 });
