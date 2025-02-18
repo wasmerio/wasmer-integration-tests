@@ -2,18 +2,17 @@ name: Integration Test Workflow
 
 on:
   workflow_call:
-    inputs:
+    secrets:
+      wasmer_token:
+        required: true
+        description: "Token to access the Wasmer dev registry"
       test_failure_webhook:
         required: false
-        type: string
         description: "Add optional webhook which will be called if any tests have failed"
       fetch_artifact:
         required: false
         type: string
         description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
-    secrets:
-      WAPM_DEV_TOKEN:
-        required: true
 
 jobs:
   run-unspecified-tests:
@@ -34,16 +33,19 @@ jobs:
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+          WASMER_TOKEN: ${{ secrets.wasmer_token }}
         run: |
           ./run.sh
       - name: Notify failure in Slack
-        if: failure() && inputs.test_failure_webhook != ''
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
             --data '{"text":"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ inputs.test_failure_webhook }}
+            ${{ env.TEST_FAILURE_WEBHOOK }}
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+
 
   run-logvalidation-tests:
     name: Run tests which use logging for validation
@@ -62,7 +64,7 @@ jobs:
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
+          WASMER_TOKEN: ${{ secrets.wasmer_token }}
         run: |
           # Run test which only passes if logging works
           deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
@@ -70,9 +72,12 @@ jobs:
           # sense to run these if we know that logging doesn't work: just a waste of resources
           deno test --allow-all src/tests/log-validation --quiet
       - name: Notify failure in Slack
-        if: failure() && inputs.test_failure_webhook != ''
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
           curl -X POST \
             -H 'Content-type: application/json' \
             --data '{"text":"Log-validation based integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ inputs.test_failure_webhook }}
+            ${{ env.TEST_FAILURE_WEBHOOK }}
+
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
