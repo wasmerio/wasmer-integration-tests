@@ -7,6 +7,12 @@ on:
     branches:
       - main
 
+# Allow one concurrent deployment per branch
+concurrency:
+  group: ${{ github.ref }}-code-qa
+  cancel-in-progress: true
+
+
 jobs:
   tests:
     uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@fix-issues-in-integration-test-workflow
