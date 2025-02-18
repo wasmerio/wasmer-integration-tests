@@ -1,0 +1,27 @@
+name: "Setup Test Environment"
+description: "Sets up the environment for Wasmer integration tests"
+
+inputs:
+  fetch_artifact:
+    description: "Set to the name of artifact you want to overwrite the default wasmer binary with"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - uses: wasmerio/setup-wasmer@v2
+    - name: Install Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+    - uses: actions/download-artifact@v4
+      if: inputs.fetch_artifact
+      with:
+        name: ${{ inputs.fetch_artifact }}
+    - name: Overwrite wasmer binary
+      if: inputs.fetch_artifact
+      shell: bash
+      run: |
+        tar -xzf build-wasmer.tar.gz
+        cp ./bin/wasmer ~/.wasmer/bin/wasmer

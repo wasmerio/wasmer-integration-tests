@@ -7,6 +7,10 @@ on:
         required: false
         type: string
         description: "Add optional webhook which will be called if any tests have failed"
+      fetch_artifact:
+        required: false
+        type: string
+        description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
     secrets:
       WAPM_DEV_TOKEN:
         required: true
@@ -20,16 +24,13 @@ jobs:
       - name: Clone repository
         uses: actions/checkout@v4
         with:
-          # Always checkout the wasmer integration tests repo, not the
-          # calling repository
           repository: wasmerio/wasmer-integration-tests
           ref: "main"
           submodules: true
-      - uses: wasmerio/setup-wasmer@v2
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
+      # The relative path works here as we're checking out the wasmer-integration-tests repo
+      - uses: ./.github/actions/setup-test-env
         with:
-          deno-version: v2.x
+          fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
@@ -45,21 +46,19 @@ jobs:
             ${{ inputs.test_failure_webhook }}
 
   run-logvalidation-tests:
-    name: Run tests which use log validation
+    name: Run tests which use logging for validation
     runs-on: ubuntu-24.04
 
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
         with:
-          submodules: true
           repository: wasmerio/wasmer-integration-tests
           ref: "main"
-      - uses: wasmerio/setup-wasmer@v2
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
+          submodules: true
+      - uses: ./.github/actions/setup-test-env
         with:
-          deno-version: v2.x
+          fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
