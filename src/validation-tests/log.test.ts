@@ -3,16 +3,14 @@ import { AppInfo } from "../backend.ts";
 import { TestEnv } from "../env.ts";
 import { countSubstrings, LogSniff } from "../log.ts";
 import fs from "node:fs";
-import { randomAppName } from "../app/index.ts";
 import { buildPhpApp } from "../app/php.ts";
-
-const SECOND = 1000;
+import { randomAppName, SECOND } from "../app/construct.ts";
 
 Deno.test(
   "Log test: Check fetch is logged on simple logging app",
   {},
   async (t) => {
-    const filePath = "./src/tests/validation-tests/path-logger.php";
+    const filePath = "./src/validation-tests/path-logger.php";
     const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
     const env = TestEnv.fromEnv();
     const appName = randomAppName();
