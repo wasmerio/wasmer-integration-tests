@@ -45,7 +45,6 @@ jobs:
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
 
-
   run-logvalidation-tests:
     name: Run tests which use logging for validation
     runs-on: ubuntu-24.04

@@ -12,7 +12,6 @@ concurrency:
   group: ${{ github.ref }}-code-qa
   cancel-in-progress: true
 
-
 jobs:
   tests:
     uses: wasmerio/wasmer-integration-tests/.github/workflows/integration-test-workflow.yaml@fix-issues-in-integration-test-workflow
@@ -44,7 +43,7 @@ jobs:
         id: actionlint
         uses: raven-actions/actionlint@v2
         with:
-          cache: false  # optional
+          cache: false # optional
 
       - name: actionlint Summary
         if: failure()
