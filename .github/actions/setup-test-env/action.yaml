@@ -5,7 +5,6 @@ inputs:
   fetch_artifact:
     description: "Set to the name of artifact you want to overwrite the default wasmer binary with"
     required: false
-    default: ""
 
 runs:
   using: "composite"
@@ -14,9 +13,9 @@ runs:
     - name: Install Deno
       uses: denoland/setup-deno@v2
       with:
-        deno-version: v2.x
+        deno-version: v2.1
     - uses: actions/download-artifact@v4
-      if: inputs.fetch_artifact
+      if: inputs.fetch_artifact != ''
       with:
         name: ${{ inputs.fetch_artifact }}
     - name: Overwrite wasmer binary
