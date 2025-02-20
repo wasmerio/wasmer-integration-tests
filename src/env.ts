@@ -11,12 +11,12 @@ import {
   parseDeployOutput,
 } from "./wasmer_cli.ts";
 import { buildTempDir, Path } from "./fs.ts";
+import { sleep } from "./util.ts";
 import {
   AppDefinition,
   randomAppName,
   writeAppDefinition,
-} from "./app/index.ts";
-import { sleep } from "./util.ts";
+} from "./app/construct.ts";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";

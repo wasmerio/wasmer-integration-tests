@@ -1,33 +1,18 @@
-import { AppInfo } from "../../backend.ts";
-import { TestEnv } from "../../env.ts";
-import { LogSniff } from "../../log.ts";
 import fs from "node:fs";
-import { randomAppName } from "../../app/index.ts";
-import { buildPhpApp } from "../../app/php.ts";
+import { AppJob, JobAction, randomAppName } from "./src/app/construct.ts";
+import { buildPhpApp } from "./src/app/php.ts";
+import { AppInfo } from "./src/backend.ts";
+import { TestEnv } from "./src/env.ts";
+import { LogSniff } from "./src/log.ts";
 
 /**
  * Tests in this file are separate to allow them to run in parallell
  */
 const SECOND = 1000;
 
-type Action = {
-  fetch?: {
-    path: string;
-    timeout: string;
-  };
-  execute?: {
-    command: string;
-    cli_args: string[];
-  } | undefined;
-};
-type Job = {
-  name: string;
-  trigger: string;
-  action: Action;
-};
 async function performTest(
   t: Deno.TestContext,
-  jobs: Job[],
+  jobs: AppJob[],
   logValidationStr: string,
   timeoutSec: number,
   expectLogOccurance: number = 1,
@@ -37,7 +22,7 @@ async function performTest(
   const appName = randomAppName();
   let deployedApp: AppInfo;
 
-  const filePath = "./src/tests/path-logger.php";
+  const filePath = "./src/validation-tests/path-logger.php";
   const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
 
   await t.step("Deploy app", async () => {
@@ -115,7 +100,7 @@ Deno.test("Logvalidation - Exec job: post-deployment", {}, async (t) => {
 async function cronjobTest(
   t: Deno.TestContext,
   name: string,
-  action: Action,
+  action: JobAction,
   logValidationStr: string,
 ) {
   await performTest(

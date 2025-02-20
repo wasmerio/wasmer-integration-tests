@@ -16,7 +16,7 @@ import {
   buildStaticSiteApp,
   randomAppName,
   writeAppDefinition,
-} from "./src/app/index.ts";
+} from "./src/app/construct.ts";
 import { buildPhpApp } from "./src/app/php.ts";
 
 import { wasmopticonDir } from "./src/index.ts";
@@ -793,7 +793,7 @@ Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
 Deno.test("instaboot-max-age", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
-  spec.appYaml.capabilities.instaboot.max_age = "5s";
+  spec.appYaml.capabilities!.instaboot!.max_age = "5s";
 
   // No-wait to prevent the CLI from doing a first request which initialises
   // the timestamp.

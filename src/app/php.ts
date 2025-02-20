@@ -1,4 +1,4 @@
-import { AppDefinition, randomAppName } from "./index.ts";
+import { AppDefinition, AppYaml, randomAppName } from "./construct.ts";
 
 export const DEFAULT_PHP_APP_YAML = {
   kind: "wasmer.io/App.v0",
@@ -29,7 +29,10 @@ export function buildPhpApp(
         },
       }],
     },
-    appYaml: { ...DEFAULT_PHP_APP_YAML, ...additionalAppYamlSettings },
+    appYaml: AppYaml.parse({
+      ...DEFAULT_PHP_APP_YAML,
+      ...additionalAppYamlSettings,
+    }),
     files: {
       "src": {
         "index.php": phpCode,
