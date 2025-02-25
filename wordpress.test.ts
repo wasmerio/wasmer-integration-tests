@@ -40,14 +40,11 @@ function saveAppYaml(path: string, appYaml: AppYaml): void {
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-  let password = "";
-  for (let i = 0; i < 16; i++) {
-    const crypto = createHash("sha256");
-    const randomIndex = crypto.digest()[0] %
-      charset.length;
-    password += charset[randomIndex];
-  }
-  return password;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => charset[b % charset.length])
+    .join("");
 }
 
 function randomizeDatabaseVarsEnvVars(appYaml: AppYaml): void {
@@ -61,8 +58,16 @@ function randomizeDatabaseVarsEnvVars(appYaml: AppYaml): void {
           WP_ADMIN_PASSWORD: generateNeedlesslySecureRandomPassword(),
           WP_ADMIN_USERNAME: "admin",
           WP_SITE_TITLE: "Integration test " + Math.random(),
+          WP_LOCALE: "en_US",
+          AUTH_KEY: generateNeedlesslySecureRandomPassword(),
+          AUTH_SALT: generateNeedlesslySecureRandomPassword(),
+          LOGGED_IN_KEY: generateNeedlesslySecureRandomPassword(),
+          LOGGED_IN_SALT: generateNeedlesslySecureRandomPassword(),
+          NONCE_KEY: generateNeedlesslySecureRandomPassword(),
+          NONCE_SALT: generateNeedlesslySecureRandomPassword(),
         };
-        execJobAction.execute.env = EnvVars.parse(newEnvs);
+        execJobAction.execute.env = newEnvs;
+        j.action = execJobAction;
       }
     }
   }
@@ -94,6 +99,7 @@ Deno.test("app-wordpress", {}, async (t) => {
   // This might force resetting the repo on local runs
   Deno.chdir("./wordpress/");
   const appYaml = updateAppYaml(env);
+  console.log(appYaml);
   let appInfo: AppInfo;
   const logSniff = new LogSniff(env);
 
@@ -105,9 +111,19 @@ Deno.test("app-wordpress", {}, async (t) => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
       "WordPress installed successfully.",
-      90 * SECOND,
+      30 * SECOND,
     );
+  });
 
+  await t.step("validate autosetup", async () => {
+    await logSniff.assertLogsWithin(
+      appYaml.name!,
+      "Installation complete",
+      30 * SECOND,
+    );
+  });
+
+  await t.step("validate properly setup", async () => {
     const got = await env.fetchApp(appInfo, "/");
     if (!got.ok) {
       fail(`Failed to fetch deployed wordpress app: ${await got.text()}`);
