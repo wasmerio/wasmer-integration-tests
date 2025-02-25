@@ -2,12 +2,10 @@ import { fail } from "jsr:@std/assert/fail";
 import { TestEnv } from "./src/env.ts";
 import {
   AppYaml,
-  EnvVars,
   ExecJob,
   randomAppName,
   SECOND,
 } from "./src/app/construct.ts";
-import { createHash } from "node:crypto";
 import { parse } from "jsr:@std/yaml";
 import { AppInfo } from "./src/backend.ts";
 import { LogSniff } from "./src/log.ts";
