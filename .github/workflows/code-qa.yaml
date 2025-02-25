@@ -14,8 +14,6 @@ concurrency:
 jobs:
   tests:
     uses: ./.github/workflows/integration-test-workflow.yaml
-    with:
-      test_branch: sre-637-integration-tests-wordpress-deployment
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
 
