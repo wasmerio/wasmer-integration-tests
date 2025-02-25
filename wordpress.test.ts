@@ -104,8 +104,8 @@ Deno.test("app-wordpress", {}, async (t) => {
   await t.step("validate deployment", async () => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
-      "Installation complete",
-      60 * SECOND,
+      "WordPress installed successfully.",
+      90 * SECOND,
     );
 
     const got = await env.fetchApp(appInfo, "/");
