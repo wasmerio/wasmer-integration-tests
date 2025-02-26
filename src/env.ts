@@ -395,6 +395,93 @@ export class TestEnv {
     });
   }
 
+  async* graphqlSubscription(endpoint: string, token: string, query: string, variables = {}): AsyncGenerator<any, void, unknown> {
+    const socket = new WebSocket(endpoint, ["graphql-ws"]);
+
+    const sendMessage = (message: any) => {
+      socket.send(JSON.stringify(message))
+    };
+
+    const waitForEvent = (type: any) => 
+      new Promise((resolve) => {
+        const handler = (event: any) => {
+          const response = JSON.parse(event.data);
+          if (response.type == "error") {
+            console.error(response);
+            resolve(response);
+          }
+          if (response.type === type) {
+            socket.removeEventListener("message", handler);
+            resolve(response);
+          }
+        };
+        socket.addEventListener("message", handler);
+      });
+
+    socket.onopen = () => {
+      console.log("WebSocket connection established.");
+      sendMessage({ type: "connection_init", payload: { headers: { Authorization: `Bearer ${token}` } } });
+    };
+
+    await waitForEvent("connection_ack");
+
+    sendMessage({ id: "1", type: "start", payload: { query, variables } });
+
+    try {
+      while (true) {
+        const response = await waitForEvent("data");
+        yield response;
+      }
+    } finally {
+      socket.close();
+    }
+  }
+
+  async deployAppFromRepo(repo: string, extra_data: Record<string, unknown> = {}): Promise<string | undefined> {
+    const registry = this.registry;
+    const token = "";
+    const query = `
+subscription PublishAppFromRepoAutobuild(
+  $repoUrl: String!
+  $appName: String!
+  $extraData: AutobuildDeploymentExtraData = null
+) {
+  publishAppFromRepoAutobuild(
+    repoUrl: $repoUrl
+    appName: $appName
+    managed: true
+    waitForScreenshotGeneration: false
+    extraData: $extraData
+  ) {
+    kind
+    message
+    dbPassword
+    appVersion {
+      app {
+        url
+      }
+    }
+  }
+}`;
+    const variables = {
+      repoUrl: repo,
+      appName: crypto.randomUUID().split("-").join("").slice(0, 10),
+      extraData: extra_data,
+    };
+    for await (const res of this.graphqlSubscription(registry, token, query, variables)) {
+      res.errors && console.error(res.errors);
+      console.log(res.payload);
+      let msg = res.payload.data?.publishAppFromRepoAutobuild?.message;
+      if (msg) {
+        console.log(msg);
+      }
+      if (res.payload.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
+        return res.payload.data?.publishAppFromRepoAutobuild?.appVersion?.app?.url;
+      }
+    }
+    
+  }
+  
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
