@@ -3,6 +3,7 @@ import * as toml from "jsr:@std/toml";
 
 import { buildDir, DirEntry, Path } from "../fs.ts";
 import { z } from "zod";
+import { fail } from "jsr:@std/assert/fail";
 
 export const SECOND = 1000;
 
@@ -196,4 +197,28 @@ export async function writeAppDefinition(path: Path, app: AppDefinition) {
 
   console.debug(`Writing app definition to ${path}`, { files });
   await buildDir(path, files);
+}
+
+export function loadAppYaml(path: string): AppYaml {
+  try {
+    return AppYaml.parse(yaml.parse(Deno.readTextFileSync(path + "app.yaml")));
+  } catch (error) {
+    if (error instanceof Error) {
+      fail(`Failed to load AppYaml from ${path}: ${error.message}`);
+    } else {
+      throw error;
+    }
+  }
+}
+
+export function saveAppYaml(path: string, appYaml: AppYaml): void {
+  try {
+    Deno.writeTextFileSync(path + "app.yaml", JSON.stringify(appYaml, null, 2));
+  } catch (error) {
+    if (error instanceof Error) {
+      fail(`Failed to save AppYaml to ${path}: ${error.message}`);
+    } else {
+      throw error;
+    }
+  }
 }

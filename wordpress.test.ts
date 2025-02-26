@@ -3,37 +3,13 @@ import { TestEnv } from "./src/env.ts";
 import {
   AppYaml,
   ExecJob,
+  loadAppYaml,
   randomAppName,
+  saveAppYaml,
   SECOND,
 } from "./src/app/construct.ts";
-import { parse } from "jsr:@std/yaml";
 import { AppInfo } from "./src/backend.ts";
 import { LogSniff } from "./src/log.ts";
-
-// Assume the loadAppYaml and saveAppYaml functions are predefined
-function loadAppYaml(path: string): AppYaml {
-  try {
-    return AppYaml.parse(parse(Deno.readTextFileSync(path + "app.yaml")));
-  } catch (error) {
-    if (error instanceof Error) {
-      fail(`Failed to load AppYaml from ${path}: ${error.message}`);
-    } else {
-      throw error;
-    }
-  }
-}
-
-function saveAppYaml(path: string, appYaml: AppYaml): void {
-  try {
-    Deno.writeTextFileSync(path + "app.yaml", JSON.stringify(appYaml, null, 2));
-  } catch (error) {
-    if (error instanceof Error) {
-      fail(`Failed to save AppYaml to ${path}: ${error.message}`);
-    } else {
-      throw error;
-    }
-  }
-}
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
@@ -45,7 +21,7 @@ function generateNeedlesslySecureRandomPassword(): string {
     .join("");
 }
 
-function randomizeDatabaseVarsEnvVars(appYaml: AppYaml): void {
+function randomizeJobDatabaseEnvVarsForWP(appYaml: AppYaml): void {
   if (appYaml.jobs) {
     for (const j of appYaml.jobs) {
       const execJobCheck = ExecJob.safeParse(j.action);
@@ -81,7 +57,7 @@ function updateAppYaml(env: TestEnv): AppYaml {
   appYaml.name = randomAppName();
   appYaml.app_id = undefined;
   appYaml.owner = env.namespace;
-  randomizeDatabaseVarsEnvVars(appYaml);
+  randomizeJobDatabaseEnvVarsForWP(appYaml);
   saveAppYaml("./", appYaml);
   return appYaml;
 }
@@ -128,3 +104,4 @@ Deno.test("app-wordpress", {}, async (t) => {
     }
   });
 });
+
