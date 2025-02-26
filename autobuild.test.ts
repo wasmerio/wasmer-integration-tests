@@ -13,17 +13,23 @@ Deno.test("autobuild-wordpress", {}, async (t) => {
         adminUsername: "admin",
         adminPassword: "password123!",
         language: "en_US",
-        siteName: "My Wordpress Site"
-      }
+        siteName: "My Wordpress Site",
+      },
     };
-    const url = await env.deployAppFromRepo("https://github.com/wasmerio/wordpress", extra_data);
+    const url = await env.deployAppFromRepo(
+      "https://github.com/wasmerio/wordpress",
+      extra_data,
+    );
     if (!url) {
       fail("Failed to deploy wordpress app via autobuild");
     }
     // check if the url is live
-    let response = await env.httpClient.fetch(url, { method: "GET" });
+    const response = await env.httpClient.fetch(url, { method: "GET" });
     if (response.status !== 200) {
-      fail(`Failed to fetch deployed wordpress app via autobuild: ${await response.text()}`);
+      fail(
+        `Failed to fetch deployed wordpress app via autobuild: ${await response
+          .text()}`,
+      );
     }
   });
 });
