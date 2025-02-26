@@ -395,14 +395,19 @@ export class TestEnv {
     });
   }
 
-  async* graphqlSubscription(endpoint: string, token: string, query: string, variables = {}): AsyncGenerator<any, void, unknown> {
+  async *graphqlSubscription(
+    endpoint: string,
+    token: string,
+    query: string,
+    variables = {},
+  ): AsyncGenerator<any, void, unknown> {
     const socket = new WebSocket(endpoint, ["graphql-ws"]);
 
     const sendMessage = (message: any) => {
-      socket.send(JSON.stringify(message))
+      socket.send(JSON.stringify(message));
     };
 
-    const waitForEvent = (type: any) => 
+    const waitForEvent = (type: any) =>
       new Promise((resolve) => {
         const handler = (event: any) => {
           const response = JSON.parse(event.data);
@@ -420,7 +425,10 @@ export class TestEnv {
 
     socket.onopen = () => {
       console.log("WebSocket connection established.");
-      sendMessage({ type: "connection_init", payload: { headers: { Authorization: `Bearer ${token}` } } });
+      sendMessage({
+        type: "connection_init",
+        payload: { headers: { Authorization: `Bearer ${token}` } },
+      });
     };
 
     await waitForEvent("connection_ack");
@@ -437,7 +445,10 @@ export class TestEnv {
     }
   }
 
-  async deployAppFromRepo(repo: string, extra_data: Record<string, unknown> = {}): Promise<string | undefined> {
+  async deployAppFromRepo(
+    repo: string,
+    extra_data: Record<string, unknown> = {},
+  ): Promise<string | undefined> {
     const registry = this.registry;
     const token = "";
     const query = `
@@ -468,7 +479,9 @@ subscription PublishAppFromRepoAutobuild(
       appName: crypto.randomUUID().split("-").join("").slice(0, 10),
       extraData: extra_data,
     };
-    for await (const res of this.graphqlSubscription(registry, token, query, variables)) {
+    for await (
+      const res of this.graphqlSubscription(registry, token, query, variables)
+    ) {
       res.errors && console.error(res.errors);
       console.log(res.payload);
       let msg = res.payload.data?.publishAppFromRepoAutobuild?.message;
@@ -476,12 +489,12 @@ subscription PublishAppFromRepoAutobuild(
         console.log(msg);
       }
       if (res.payload.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
-        return res.payload.data?.publishAppFromRepoAutobuild?.appVersion?.app?.url;
+        return res.payload.data?.publishAppFromRepoAutobuild?.appVersion?.app
+          ?.url;
       }
     }
-    
   }
-  
+
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
