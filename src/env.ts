@@ -400,8 +400,11 @@ export class TestEnv {
     token: string,
     query: string,
     variables = {},
+    heartbeatInterval = 1000, // each second
   ): AsyncGenerator<any, void, unknown> {
     const socket = new WebSocket(endpoint, ["graphql-ws"]);
+    // generate a random subscription_id
+    const subscription_id = Math.random().toString(36).substring(7);
 
     const sendMessage = (message: any) => {
       socket.send(JSON.stringify(message));
@@ -414,17 +417,24 @@ export class TestEnv {
           if (response.type == "error") {
             console.error(response);
             resolve(response);
+            console.log(JSON.stringify(response));
           }
+          if (response.type == "complete") {
+            resolve(response);
+            console.log(JSON.stringify(response));
+          }
+
           if (response.type === type) {
             socket.removeEventListener("message", handler);
             resolve(response);
+          } else {
+            console.log(JSON.stringify(response));
           }
         };
         socket.addEventListener("message", handler);
       });
 
     socket.onopen = () => {
-      console.log("WebSocket connection established.");
       sendMessage({
         type: "connection_init",
         payload: { headers: { Authorization: `Bearer ${token}` } },
@@ -433,7 +443,12 @@ export class TestEnv {
 
     await waitForEvent("connection_ack");
 
-    sendMessage({ id: "1", type: "start", payload: { query, variables } });
+    sendMessage({ id: subscription_id, type: "start", payload: { query, variables } });
+
+    // Send heartbeat (ping) messages periodically
+    const heartbeatIntervalId = setInterval(() => {
+      sendMessage({ type: "ping" });
+    }, heartbeatInterval);
 
     try {
       while (true) {
@@ -442,6 +457,7 @@ export class TestEnv {
       }
     } finally {
       socket.close();
+      clearInterval(heartbeatIntervalId);
     }
   }
 
@@ -483,16 +499,16 @@ subscription PublishAppFromRepoAutobuild(
       const res of this.graphqlSubscription(registry, token, query, variables)
     ) {
       res.errors && console.error(res.errors);
-      console.log(res.payload);
-      let msg = res.payload.data?.publishAppFromRepoAutobuild?.message;
+      let msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
       if (msg) {
         console.log(msg);
       }
-      if (res.payload.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
-        return res.payload.data?.publishAppFromRepoAutobuild?.appVersion?.app
+      const payload = res.payload;
+      if (payload?.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
+        return res.payload.data.publishAppFromRepoAutobuild.appVersion?.app
           ?.url;
-      }
     }
+      }
   }
 
   async fetchApp(
