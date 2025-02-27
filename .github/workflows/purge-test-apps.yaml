@@ -16,5 +16,8 @@ jobs:
         with:
           deno-version: v2.1
       - name: Purge old test apps
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.WAPM_DEV_TOKEN }}
         run: |
           ./bin/purge-old-apps.ts
