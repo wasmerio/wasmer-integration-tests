@@ -146,12 +146,14 @@ export class BackendClient {
       }),
     });
     const namespaceQuery = z.object({
-      getNamespace: z.object({
-        apps: z.object({
-          pageInfo: z.object({
-            endCursor: z.string().nullable(),
+      data: z.object({
+        getNamespace: z.object({
+          apps: z.object({
+            pageInfo: z.object({
+              endCursor: z.string().nullable(),
+            }),
+            edges: z.array(nodeType),
           }),
-          edges: z.array(nodeType),
         }),
       }),
     });
@@ -182,7 +184,7 @@ query($namespace:String!, $after:String) {
       namespace,
       after,
     });
-    const data = namespaceQuery.parse(res).getNamespace.apps;
+    const data = namespaceQuery.parse(res).data.getNamespace.apps;
     const lastCursor: string | null = data!.pageInfo.endCursor;
     const edges = data.edges;
     const apps = edges.map((e: nodeType) => e.node);
