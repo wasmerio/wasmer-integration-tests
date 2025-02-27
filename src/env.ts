@@ -464,6 +464,7 @@ export class TestEnv {
   async deployAppFromRepo(
     repo: string,
     extra_data: Record<string, unknown> = {},
+    branch: string | null = null,
   ): Promise<string | undefined> {
     const registry = this.registry;
     const token = "";
@@ -472,6 +473,7 @@ subscription PublishAppFromRepoAutobuild(
   $repoUrl: String!
   $appName: String!
   $extraData: AutobuildDeploymentExtraData = null
+  $branch: String = null
 ) {
   publishAppFromRepoAutobuild(
     repoUrl: $repoUrl
@@ -479,6 +481,7 @@ subscription PublishAppFromRepoAutobuild(
     managed: true
     waitForScreenshotGeneration: false
     extraData: $extraData
+    branch: $branch
   ) {
     kind
     message
@@ -494,6 +497,7 @@ subscription PublishAppFromRepoAutobuild(
       repoUrl: repo,
       appName: crypto.randomUUID().split("-").join("").slice(0, 10),
       extraData: extra_data,
+      branch: branch,
     };
     for await (
       const res of this.graphqlSubscription(registry, token, query, variables)
