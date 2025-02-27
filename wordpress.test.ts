@@ -99,17 +99,22 @@ Deno.test("app-wordpress", {}, async (t) => {
 
   await t.step("validate properly setup", async () => {
     const got = await env.fetchApp(appInfo, "/");
-    if (!got.ok) {
-      fail(`Failed to fetch deployed wordpress app: ${await got.text()}`);
-    }
     const body = await got.text();
+    if (!got.ok) {
+      fail(
+        `Failed to fetch deployed wordpress app. Response not OK. Body: ${body}
+\n\nFull response:${got}`,
+      );
+    }
     if (!body.includes("<html")) {
-      fail(`Expected fetched body to include a html tag, received:\n${body}`);
+      fail(`Expected fetched body to include a html tag, received:\n${body}
+\n\nFull response:${got}`);
     }
 
     if (!body.includes("WordPress")) {
       fail(
-        `Expected fetched body to include substring 'WordPress', received:\n${body}`,
+        `Expected fetched body to include substring 'WordPress', received:\n${body}
+\n\nFull response:${got}`,
       );
     }
   });
