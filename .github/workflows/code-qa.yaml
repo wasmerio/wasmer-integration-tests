@@ -32,7 +32,7 @@ jobs:
 
       - name: Format & fail on changes
         run: |
-          deno fmt --check
+          make fmt-check
 
   lint:
     name: Lint the project
@@ -49,4 +49,4 @@ jobs:
 
       - name: Run deno lint
         run: |
-          deno lint
+          make check

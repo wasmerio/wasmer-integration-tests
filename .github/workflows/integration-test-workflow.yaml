@@ -79,7 +79,7 @@ jobs:
           deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
           # ... and then the tests which depend on logging for validation. Doesn't make any
           # sense to run these if we know that logging doesn't work: just a waste of resources
-          deno test --allow-all job.test.ts --quiet
+          deno test --allow-all ./tests/job.test.ts --quiet
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -110,7 +110,7 @@ jobs:
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
-          deno test --allow-all wordpress.test.ts --quiet
+          deno test --allow-all ./tests/wordpress.test.ts --quiet
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
