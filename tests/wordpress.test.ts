@@ -1,15 +1,16 @@
 import { fail } from "jsr:@std/assert/fail";
-import { TestEnv } from "./src/env.ts";
+
 import {
+  AppInfo,
   AppYaml,
   ExecJob,
   loadAppYaml,
+  LogSniff,
   randomAppName,
   saveAppYaml,
   SECOND,
-} from "./src/app/construct.ts";
-import { AppInfo } from "./src/backend.ts";
-import { LogSniff } from "./src/log.ts";
+  TestEnv,
+} from "../src/index.ts";
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
