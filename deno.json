@@ -2,5 +2,8 @@
   "imports": {
     "@std/toml": "jsr:@std/toml@^1.0.2",
     "zod": "npm:zod@^3.24.1"
+  },
+  "lint": {
+    "exclude": ["wasmopticon"]
   }
 }

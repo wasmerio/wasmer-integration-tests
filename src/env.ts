@@ -401,17 +401,21 @@ export class TestEnv {
     query: string,
     variables = {},
     heartbeatInterval = 1000, // each second
+    // deno-lint-ignore no-explicit-any
   ): AsyncGenerator<any, void, unknown> {
     const socket = new WebSocket(endpoint, ["graphql-ws"]);
     // generate a random subscription_id
     const subscription_id = Math.random().toString(36).substring(7);
 
+    // deno-lint-ignore no-explicit-any
     const sendMessage = (message: any) => {
       socket.send(JSON.stringify(message));
     };
 
+    // deno-lint-ignore no-explicit-any
     const waitForEvent = (type: any) =>
       new Promise((resolve) => {
+        // deno-lint-ignore no-explicit-any
         const handler = (event: any) => {
           const response = JSON.parse(event.data);
           if (response.type == "error") {
@@ -443,7 +447,11 @@ export class TestEnv {
 
     await waitForEvent("connection_ack");
 
-    sendMessage({ id: subscription_id, type: "start", payload: { query, variables } });
+    sendMessage({
+      id: subscription_id,
+      type: "start",
+      payload: { query, variables },
+    });
 
     // Send heartbeat (ping) messages periodically
     const heartbeatIntervalId = setInterval(() => {
@@ -503,7 +511,7 @@ subscription PublishAppFromRepoAutobuild(
       const res of this.graphqlSubscription(registry, token, query, variables)
     ) {
       res.errors && console.error(res.errors);
-      let msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
+      const msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
       if (msg) {
         console.log(msg);
       }
@@ -511,8 +519,8 @@ subscription PublishAppFromRepoAutobuild(
       if (payload?.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
         return res.payload.data.publishAppFromRepoAutobuild.appVersion?.app
           ?.url;
-    }
       }
+    }
   }
 
   async fetchApp(
