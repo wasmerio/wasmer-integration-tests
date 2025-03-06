@@ -14,6 +14,8 @@ concurrency:
 jobs:
   tests:
     uses: ./.github/workflows/integration-test-workflow.yaml
+    with:
+      test_branch: ${{ github.head_ref }}
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
 
