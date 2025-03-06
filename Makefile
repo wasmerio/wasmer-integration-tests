@@ -1,20 +1,22 @@
+.PHONY: fmt fmt-check check lint test clean all
 JSPATHS = ./src ./tests ./bin
 
-fmt:
+setup:
+	@command -v deno >/dev/null 2>&1 || { echo >&2 "Deno is not installed. Installing..."; curl -fsSL https://deno.land/install.sh | sh; }
+
+fmt: setup
 	deno fmt $(JSPATHS)
 
-
-fmt-check:
+fmt-check: setup
 	deno fmt --check $(JSPATHS)
 
-check:
+check: setup
 	deno check $(JSPATHS)
 	deno lint $(JSPATHS)
 
-lint: fmt-check check
+lint: setup fmt-check check
 
-test:
-	DENO_JOBS=8 deno test --allow-all --quiet --parallel .
+test: setup
+	deno test --allow-all --quiet --parallel .
 
 
-.PHONY: fmt fmt-check check lint
