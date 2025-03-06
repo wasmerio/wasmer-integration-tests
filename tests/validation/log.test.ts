@@ -1,16 +1,20 @@
-import { assertEquals } from "jsr:@std/assert/equals";
-import { AppInfo } from "../backend.ts";
-import { TestEnv } from "../env.ts";
-import { countSubstrings, LogSniff } from "../log.ts";
 import fs from "node:fs";
-import { buildPhpApp } from "../app/php.ts";
-import { randomAppName, SECOND } from "../app/construct.ts";
+import { assertEquals } from "jsr:@std/assert/equals";
+
+import { countSubstrings, LogSniff } from "../../src/log.ts";
+import {
+  AppInfo,
+  buildPhpApp,
+  randomAppName,
+  SECOND,
+  TestEnv,
+} from "../../src/index.ts";
 
 Deno.test(
   "Log test: Check fetch is logged on simple logging app",
   {},
   async (t) => {
-    const filePath = "./src/validation-tests/path-logger.php";
+    const filePath = "./fixtures/path-logger.php";
     const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
     const env = TestEnv.fromEnv();
     const appName = randomAppName();

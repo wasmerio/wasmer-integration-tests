@@ -88,7 +88,7 @@ export class HttpClient {
             json: () => Promise.resolve(JSON.parse(buffer.toString())),
             text: () => Promise.resolve(buffer.toString()),
             bytes: () => Promise.resolve(bodyArray),
-            arrayBuffer: () => Promise.resolve(buffer),
+            arrayBuffer: () => Promise.resolve(buffer.buffer as ArrayBuffer),
             headers,
             url: res.url ?? "",
             body: null,

@@ -213,7 +213,7 @@ export class TestEnv {
     const stdoutChunks: Uint8Array[] = [];
     const stderrChunks: Uint8Array[] = [];
 
-    function mergeChunks(chunks: Uint8Array[]): Uint8Array {
+    function mergeChunks(chunks: Uint8Array[]): BufferSource {
       const ret = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
       chunks.reduce((offset, chunk) => {
         ret.set(chunk, offset);
@@ -248,9 +248,9 @@ export class TestEnv {
     const procResult = await proc.status;
 
     await stdoutRes;
-    const stdout = new TextDecoder().decode(mergeChunks(stdoutChunks).buffer);
+    const stdout = new TextDecoder().decode(mergeChunks(stdoutChunks));
     await stderrRes;
-    const stderr = new TextDecoder().decode(mergeChunks(stderrChunks).buffer);
+    const stderr = new TextDecoder().decode(mergeChunks(stderrChunks));
 
     const code = procResult.code;
     console.log(`<<< command finished with code ${code}`);

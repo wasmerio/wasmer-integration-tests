@@ -1,9 +1,14 @@
 import fs from "node:fs";
-import { AppJob, JobAction, randomAppName } from "./src/app/construct.ts";
-import { buildPhpApp } from "./src/app/php.ts";
-import { AppInfo } from "./src/backend.ts";
-import { TestEnv } from "./src/env.ts";
-import { LogSniff } from "./src/log.ts";
+
+import {
+  AppInfo,
+  AppJob,
+  buildPhpApp,
+  JobAction,
+  randomAppName,
+  TestEnv,
+} from "../src/index.ts";
+import { LogSniff } from "../src/log.ts";
 
 /**
  * Tests in this file are separate to allow them to run in parallell
@@ -22,7 +27,7 @@ async function performTest(
   const appName = randomAppName();
   let deployedApp: AppInfo;
 
-  const filePath = "./src/validation-tests/path-logger.php";
+  const filePath = "./fixtures/path-logger.php";
   const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
 
   await t.step("Deploy app", async () => {
