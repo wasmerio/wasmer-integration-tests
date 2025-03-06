@@ -1,7 +1,6 @@
 # Wasmer Integration Tests
 
-Integration tests for validation the Wasmer product stack, in particular the
-CLI, the backend and Edge.
+Integration tests for validation the Wasmer product stack, in particular the CLI, the backend and Edge.
 
 ## Running tests
 
@@ -67,7 +66,7 @@ The following code shows an example test with commentary:
 Deno.test('app-create-from-package', async () => {
   // Determine the test environment.
   const env = TestEnv.fromEnv();
- 
+
   // An app definition is a structured object that describes app configration
   // with an optional package definition.
   // This can be created and deployed with TestEnv.deployApp().
