@@ -93,7 +93,7 @@ Deno.test("app-wordpress", {}, async (t) => {
   await t.step("validate autosetup", async () => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
-      "Installation complete",
+      "was successfully deployed",
       30 * SECOND,
     );
   });
