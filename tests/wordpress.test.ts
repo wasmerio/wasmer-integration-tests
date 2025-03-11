@@ -1,5 +1,3 @@
-import { fail } from "jsr:@std/assert/fail";
-
 import {
   AppInfo,
   AppYaml,
@@ -12,7 +10,6 @@ import {
   TestEnv,
 } from "../src/index.ts";
 import { validateWordpressIsLive } from "../src/wordpress.ts";
-import { assert } from "jsr:@std/assert/assert";
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
