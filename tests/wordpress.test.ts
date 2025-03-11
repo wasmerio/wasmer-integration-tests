@@ -11,6 +11,8 @@ import {
   SECOND,
   TestEnv,
 } from "../src/index.ts";
+import { validateWordpressIsLive } from "../src/wordpress.ts";
+import { assert } from "jsr:@std/assert/assert";
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
@@ -74,7 +76,6 @@ Deno.test("app-wordpress", {}, async (t) => {
   // This might force resetting the repo on local runs
   Deno.chdir("./wordpress/");
   const appYaml = updateAppYaml(env);
-  console.log(appYaml);
   let appInfo: AppInfo;
   const logSniff = new LogSniff(env);
 
@@ -98,25 +99,5 @@ Deno.test("app-wordpress", {}, async (t) => {
     );
   });
 
-  await t.step("validate properly setup", async () => {
-    const got = await env.fetchApp(appInfo, "/");
-    const body = await got.text();
-    if (!got.ok) {
-      fail(
-        `Failed to fetch deployed wordpress app. Response not OK. Body: ${body}
-\n\nFull response:${got}`,
-      );
-    }
-    if (!body.includes("<html")) {
-      fail(`Expected fetched body to include a html tag, received:\n${body}
-\n\nFull response:${got}`);
-    }
-
-    if (!body.includes("WordPress")) {
-      fail(
-        `Expected fetched body to include substring 'WordPress', received:\n${body}
-\n\nFull response:${got}`,
-      );
-    }
-  });
+  await validateWordpressIsLive(t, appInfo!.url, env);
 });

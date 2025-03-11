@@ -120,3 +120,33 @@ jobs:
             -H 'Content-type: application/json' \
             --data '{"text":"WordPress integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${TEST_FAILURE_WEBHOOK}
+
+  autobuild-tests:
+    name: Run autobuild tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
+          submodules: true
+      - uses: ./.github/actions/setup-test-env
+        with:
+          fetch_artifact: ${{ inputs.fetch_artifact }}
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_TOKEN: ${{ secrets.token }}
+        run: |
+          deno test --allow-all ./tests/wordpress.test.ts --quiet
+      - name: Notify failure in Slack
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
+        run: |
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data '{"text":"Autobuild integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            ${TEST_FAILURE_WEBHOOK}

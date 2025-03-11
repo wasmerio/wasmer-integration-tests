@@ -1,12 +1,13 @@
 import { fail } from "jsr:@std/assert/fail";
-import { TestEnv } from "./src/env.ts";
+import { TestEnv } from "../src/env.ts";
+import { validateWordpressIsLive } from "../src/wordpress.ts";
 
 /*
  * This tests autobuild deployment of wordpress via a graphql subscription.
  */
 Deno.test("autobuild-wordpress", {}, async (t) => {
   const env = TestEnv.fromEnv();
-  let app_url: string;
+  let app_url: string = "";
   await t.step("deploy via autobuild", async () => {
     const extra_data = {
       wordpress: {
@@ -25,24 +26,13 @@ Deno.test("autobuild-wordpress", {}, async (t) => {
       fail("Failed to deploy wordpress app via autobuild");
     }
   });
-  await t.step("check app is live", async () => {
-    if (!app_url) {
-      fail("Failed to deploy wordpress app via autobuild");
-    }
-    // check if the url is live
-    const response = await env.httpClient.fetch(app_url, { method: "GET" });
-    if (response.status !== 200) {
-      fail(
-        `Failed to fetch deployed wordpress app via autobuild: ${await response
-          .text()}`,
-      );
-    }
-  });
+
+  await validateWordpressIsLive(t, app_url, env);
 });
 
 Deno.test("autobuild-wordpress: custom branch", {}, async (t) => {
   const env = TestEnv.fromEnv();
-  let app_url: string;
+  let app_url: string = "";
   await t.step("deploy via autobuild", async () => {
     const extra_data = {
       wordpress: {
@@ -61,26 +51,14 @@ Deno.test("autobuild-wordpress: custom branch", {}, async (t) => {
     if (!app_url || app_url === "") {
       fail("Failed to deploy wordpress app via autobuild");
     }
+  });
 
-  });
-  await t.step("check app is live", async () => {
-    if (!app_url) {
-      fail("Failed to deploy wordpress app via autobuild");
-    }
-    // check if the url is live
-    const response = await env.httpClient.fetch(app_url, { method: "GET" });
-    if (response.status !== 200) {
-      fail(
-        `Failed to fetch deployed wordpress app via autobuild: ${await response
-          .text()}`,
-      );
-    }
-  });
+  await validateWordpressIsLive(t, app_url, env);
 });
 
 Deno.test("autobuild-wordpress: spanish", {}, async (t) => {
   const env = TestEnv.fromEnv();
-  let app_url: string;
+  let app_url: string = "";
   await t.step("deploy via autobuild", async () => {
     const extra_data = {
       wordpress: {
@@ -99,17 +77,6 @@ Deno.test("autobuild-wordpress: spanish", {}, async (t) => {
       fail("Failed to deploy wordpress app via autobuild");
     }
   });
-  await t.step("check app is live", async () => {
-    if (!app_url) {
-      fail("Failed to deploy wordpress app via autobuild");
-    }
-    // check if the url is live
-    const response = await env.httpClient.fetch(app_url, { method: "GET" });
-    if (response.status !== 200) {
-      fail(
-        `Failed to fetch deployed wordpress app via autobuild: ${await response
-          .text()}`,
-      );
-    }
-  });
+
+  await validateWordpressIsLive(t, app_url, env);
 });
