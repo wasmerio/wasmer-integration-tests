@@ -395,6 +395,134 @@ export class TestEnv {
     });
   }
 
+  async *graphqlSubscription(
+    endpoint: string,
+    token: string,
+    query: string,
+    variables = {},
+    heartbeatInterval = 1000, // each second
+    // deno-lint-ignore no-explicit-any
+  ): AsyncGenerator<any, void, unknown> {
+    const socket = new WebSocket(endpoint, ["graphql-ws"]);
+    // generate a random subscription_id
+    const subscription_id = Math.random().toString(36).substring(7);
+
+    // deno-lint-ignore no-explicit-any
+    const sendMessage = (message: any) => {
+      socket.send(JSON.stringify(message));
+    };
+
+    // deno-lint-ignore no-explicit-any
+    const waitForEvent = (type: any) =>
+      new Promise((resolve) => {
+        // deno-lint-ignore no-explicit-any
+        const handler = (event: any) => {
+          const response = JSON.parse(event.data);
+          if (response.type == "error") {
+            console.error(response);
+            resolve(response);
+            console.log(JSON.stringify(response));
+          }
+          if (response.type == "complete") {
+            resolve(response);
+            console.log(JSON.stringify(response));
+          }
+
+          if (response.type === type) {
+            socket.removeEventListener("message", handler);
+            resolve(response);
+          } else {
+            console.log(JSON.stringify(response));
+          }
+        };
+        socket.addEventListener("message", handler);
+      });
+
+    socket.onopen = () => {
+      sendMessage({
+        type: "connection_init",
+        payload: { headers: { Authorization: `Bearer ${token}` } },
+      });
+    };
+
+    await waitForEvent("connection_ack");
+
+    sendMessage({
+      id: subscription_id,
+      type: "start",
+      payload: { query, variables },
+    });
+
+    // Send heartbeat (ping) messages periodically
+    const heartbeatIntervalId = setInterval(() => {
+      sendMessage({ type: "ping" });
+    }, heartbeatInterval);
+
+    try {
+      while (true) {
+        const response = await waitForEvent("data");
+        yield response;
+      }
+    } finally {
+      socket.close();
+      clearInterval(heartbeatIntervalId);
+    }
+  }
+
+  async deployAppFromRepo(
+    repo: string,
+    extra_data: Record<string, unknown> = {},
+    branch: string | null = null,
+  ): Promise<string | undefined> {
+    const registry = this.registry;
+    const token = "";
+    const query = `
+subscription PublishAppFromRepoAutobuild(
+  $repoUrl: String!
+  $appName: String!
+  $extraData: AutobuildDeploymentExtraData = null
+  $branch: String = null
+) {
+  publishAppFromRepoAutobuild(
+    repoUrl: $repoUrl
+    appName: $appName
+    managed: true
+    waitForScreenshotGeneration: false
+    extraData: $extraData
+    branch: $branch
+  ) {
+    kind
+    message
+    dbPassword
+    appVersion {
+      app {
+        url
+      }
+    }
+  }
+}`;
+    const variables = {
+      repoUrl: repo,
+      appName: crypto.randomUUID().split("-").join("").slice(0, 10),
+      extraData: extra_data,
+      branch: branch,
+    };
+    for await (
+      const res of this.graphqlSubscription(registry, token, query, variables)
+    ) {
+      res.errors && console.error(res.errors);
+      const msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
+      if (msg) {
+        console.log(msg);
+      }
+      const payload = res.payload;
+      if (payload?.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
+        return res.payload.data.publishAppFromRepoAutobuild.appVersion?.app
+          ?.url;
+      }
+    }
+  }
+
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
@@ -477,7 +605,6 @@ export class TestEnv {
           console.debug(`App is at expected version ${waitForVersionId}`);
         }
       }
-
       return response;
     }
   }
