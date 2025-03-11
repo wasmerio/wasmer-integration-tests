@@ -20,7 +20,10 @@ Deno.test("autobuild-wordpress", {}, async (t) => {
     app_url = await env.deployAppFromRepo(
       "https://github.com/wasmerio/wordpress",
       extra_data,
-    );
+    ) ?? "";
+    if (!app_url || app_url === "") {
+      fail("Failed to deploy wordpress app via autobuild");
+    }
   });
   await t.step("check app is live", async () => {
     if (!app_url) {
@@ -50,11 +53,15 @@ Deno.test("autobuild-wordpress: custom branch", {}, async (t) => {
         siteName: "My Wordpress Site",
       },
     };
-    url = await env.deployAppFromRepo(
+    app_url = await env.deployAppFromRepo(
       "https://github.com/wasmerio/wordpress",
       extra_data,
-      "dev-ev",
-    );
+      "main",
+    ) ?? "";
+    if (!app_url || app_url === "") {
+      fail("Failed to deploy wordpress app via autobuild");
+    }
+
   });
   await t.step("check app is live", async () => {
     if (!app_url) {
@@ -84,10 +91,13 @@ Deno.test("autobuild-wordpress: spanish", {}, async (t) => {
         siteName: "Mi sitio de Wordpress",
       },
     };
-    url = await env.deployAppFromRepo(
+    app_url = await env.deployAppFromRepo(
       "https://github.com/wasmerio/wordpress",
       extra_data,
-    );
+    ) ?? "";
+    if (!app_url || app_url === "") {
+      fail("Failed to deploy wordpress app via autobuild");
+    }
   });
   await t.step("check app is live", async () => {
     if (!app_url) {

@@ -605,7 +605,6 @@ subscription PublishAppFromRepoAutobuild(
           console.debug(`App is at expected version ${waitForVersionId}`);
         }
       }
-
       return response;
     }
   }
