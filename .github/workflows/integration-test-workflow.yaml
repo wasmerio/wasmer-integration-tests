@@ -44,8 +44,8 @@ jobs:
         env:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
           WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          deno test --allow-all ./tests/test.ts --quiet
+        run:
+          deno test --allow-all ./tests/test.ts ./tests/volumes.test.ts --quiet
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
