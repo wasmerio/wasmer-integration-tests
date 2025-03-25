@@ -9,6 +9,7 @@ import {
   TestEnv,
 } from "../src/index.ts";
 import { LogSniff } from "../src/log.ts";
+import { stringify } from "jsr:@std/yaml";
 
 /**
  * Tests in this file are separate to allow them to run in parallell
@@ -39,7 +40,7 @@ async function performTest(
     spec.appYaml.locality = {
       regions: ["be-mons"],
     };
-    console.debug(JSON.stringify(spec, null, " "));
+    console.debug(stringify(spec));
     deployedApp = await env.deployApp(spec);
   });
 
