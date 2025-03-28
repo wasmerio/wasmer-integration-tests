@@ -26,7 +26,7 @@ on:
 
 jobs:
   run-unspecified-tests:
-    name: Run general tests
+    name: Run tests
     runs-on: ubuntu-24.04
 
     steps:
@@ -45,7 +45,7 @@ jobs:
           WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run:
-          deno test --allow-all ./tests/test.ts ./tests/volumes.test.ts --quiet
+          deno test --allow-all --quiet --parallel
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -56,97 +56,3 @@ jobs:
             --data '{"text":"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${TEST_FAILURE_WEBHOOK}
 
-  job-tests:
-    name: Run job tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          # Run test which only passes if logging works
-          deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
-          # ... and then the tests which depend on logging for validation. Doesn't make any
-          # sense to run these if we know that logging doesn't work: just a waste of resources
-          deno test --allow-all ./tests/job.test.ts --quiet
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          curl -X POST \
-            -H 'Content-type: application/json' \
-          --data '{"text":"Integration tests for jobs failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${TEST_FAILURE_WEBHOOK}
-
-  wp-tests:
-    name: Run WordPress tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
-          deno test --allow-all ./tests/wordpress.test.ts --quiet
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data '{"text":"WordPress integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${TEST_FAILURE_WEBHOOK}
-
-  autobuild-tests:
-    name: Run autobuild tests
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          deno test --allow-all ./tests/wordpress.test.ts --quiet
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data '{"text":"Autobuild integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${TEST_FAILURE_WEBHOOK}
