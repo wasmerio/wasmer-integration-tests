@@ -1,5 +1,6 @@
 import { fail } from "jsr:@std/assert/fail";
 import { TestEnv } from "./index.ts";
+import { sleep } from "./util.ts";
 
 export async function validateWordpressIsLive(
   t: Deno.TestContext,
@@ -11,6 +12,7 @@ export async function validateWordpressIsLive(
   }
 
   await t.step("validate properly setup", async () => {
+    await sleep(10000);
     const got = await env.httpClient.fetch(app_url, { method: "GET" });
     const body = await got.text();
     if (!got.ok) {
