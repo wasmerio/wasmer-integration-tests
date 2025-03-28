@@ -1005,9 +1005,7 @@ Deno.test("deploy-fails-without-owner", async () => {
   throw new Error("Expected deploy to fail without app name");
 });
 
-// Currently ignored due to IP setup related failures.
-// SEE SRE-656
-Deno.test("ssh", { ignore: true }, async () => {
+Deno.test("ssh", async () => {
   const env = TestEnv.fromEnv();
 
   const runSsh = async (args: string[], stdin?: string) => {
@@ -1021,7 +1019,7 @@ Deno.test("ssh", { ignore: true }, async () => {
   };
 
   {
-    const res = await runSsh(["sharrattj/bash", "--", "-c", "pwd"]);
+    const res = await runSsh(["wasmer/bash", "--", "-c", "pwd"]);
     assertEquals(res, "/");
   }
 
@@ -1031,7 +1029,7 @@ Deno.test("ssh", { ignore: true }, async () => {
   }
 
   {
-    const res = await runSsh(["sharrattj/bash", "--", "-c", "ls"]);
+    const res = await runSsh(["wasmer/bash", "--", "-c", "ls"]);
     const lines = res.trim().split("\n").map((line) => line.trim());
     assert(lines.includes("bin"));
     assert(lines.includes("dev"));
