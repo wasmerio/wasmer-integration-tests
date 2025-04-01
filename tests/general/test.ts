@@ -22,7 +22,7 @@ import {
   sleep,
   TestEnv,
   writeAppDefinition,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 // TESTS
 
@@ -1266,7 +1266,7 @@ echo "email_sent\n";
 // FIXME: re-enable once the BE behaviour is fixed (WAX-373)
 Deno.test("sql-connectivity", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
-  const filePath = "./fixtures/v2/php/mysql-check.php";
+  const filePath = "./fixtures/php/mysql-check.php";
   const testCode = await fs.promises.readFile(filePath, "utf-8");
 
   // Validate that DB credentials aren't setup without specifying to have it

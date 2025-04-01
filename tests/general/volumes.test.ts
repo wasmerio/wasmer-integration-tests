@@ -3,8 +3,8 @@
 import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
 import * as path from "node:path";
 
-import { copyPackageAnonymous } from "../src/package.ts";
-import { randomAppName } from "../src/app/construct.ts";
+import { copyPackageAnonymous } from "../../src/package.ts";
+import { randomAppName } from "../../src/app/construct.ts";
 
 import {
   AppDefinition,
@@ -13,7 +13,7 @@ import {
   TestEnv,
   wasmopticonDir,
   writeAppDefinition,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 Deno.test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
