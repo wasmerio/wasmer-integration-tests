@@ -76,6 +76,7 @@ export const AppYaml = z.object({
   }).optional(),
   jobs: z.array(AppJob).optional(),
   app_id: z.string().optional(),
+  enable_email: z.boolean().optional(),
 });
 
 export type AppYaml = z.infer<typeof AppYaml>;
