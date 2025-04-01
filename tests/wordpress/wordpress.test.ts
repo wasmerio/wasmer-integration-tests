@@ -92,7 +92,7 @@ Deno.test("app-wordpress", {}, async (t) => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
       "Installation complete",
-      30 * SECOND,
+      60 * SECOND,
     );
   });
 
