@@ -1,9 +1,4 @@
-import {
-  assert,
-  assertEquals,
-  assertNotEquals,
-  assertStringIncludes,
-} from "jsr:@std/assert";
+import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
 import * as toml from "jsr:@std/toml";
 import * as path from "node:path";
 import fs from "node:fs";
@@ -1005,46 +1000,6 @@ Deno.test("deploy-fails-without-owner", async () => {
   throw new Error("Expected deploy to fail without app name");
 });
 
-// Currently ignored due to IP setup related failures.
-// SEE SRE-656
-Deno.test("ssh", { ignore: true }, async () => {
-  const env = TestEnv.fromEnv();
-
-  const runSsh = async (args: string[], stdin?: string) => {
-    const output = await env.runWasmerCommand({
-      args: ["ssh", ...args],
-      stdin,
-      noAssertSuccess: true,
-    });
-    const stdout = output.stdout.replace("\r\n", "\n").trim();
-    return stdout;
-  };
-
-  {
-    const res = await runSsh(["sharrattj/bash", "--", "-c", "pwd"]);
-    assertEquals(res, "/");
-  }
-
-  {
-    const res = await runSsh([], "pwd\n");
-    assertEquals(res, "/");
-  }
-
-  {
-    const res = await runSsh(["sharrattj/bash", "--", "-c", "ls"]);
-    const lines = res.trim().split("\n").map((line) => line.trim());
-    assert(lines.includes("bin"));
-    assert(lines.includes("dev"));
-    assert(lines.includes("etc"));
-    assert(lines.includes("tmp"));
-  }
-
-  {
-    const res = await runSsh([], "echo -n hello > test && cat test\n");
-    assertEquals(res, "hello");
-  }
-});
-
 class DeveloperMailClient {
   private name: string;
   private token: string;
@@ -1264,64 +1219,3 @@ echo "email_sent\n";
 // NOTE: Currently disabled due to problematic BE behaviour
 // SEE WAX-373
 // FIXME: re-enable once the BE behaviour is fixed (WAX-373)
-Deno.test("sql-connectivity", { ignore: true }, async () => {
-  const env = TestEnv.fromEnv();
-  const filePath = "./fixtures/php/mysql-check.php";
-  const testCode = await fs.promises.readFile(filePath, "utf-8");
-
-  // Validate that DB credentials aren't setup without specifying to have it
-  {
-    console.log("== Setting up environment without SQL ==");
-    const want = "Missing required SQL environment variables";
-    const withoutSqlSpec = buildPhpApp(testCode);
-    const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
-    const res = await env.fetchApp(withoutSqlInfo, "/results");
-    const got = await res.text();
-    assertStringIncludes(
-      got,
-      want,
-      "Expected environment to NOT include SQL details, as the environment is not specified to include them",
-    );
-    // Having environment variables set is bad, having the option to connect is worse: would
-    // encourage and perhaps enable malicious use
-    assertNotEquals(
-      got,
-      "OK",
-      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!",
-    );
-    env.deleteApp(withoutSqlInfo);
-  }
-
-  // Validate happy-path
-  console.log("== Setting up environment with SQL ==");
-  const want = "OK";
-  const withSqlSpec = buildPhpApp(testCode, {
-    debug: true,
-    scaling: {
-      mode: "single_concurrency",
-    },
-    capabilities: {
-      database: {
-        engine: "mysql",
-      },
-    },
-  });
-  const withSqlInfo = await env.deployApp(withSqlSpec);
-
-  {
-    const res = await env.fetchApp(withSqlInfo, "/results");
-    const got = await res.text();
-    assertEquals(got, want);
-  }
-
-  // Also test the app version URL to make sure it is configured properly.
-  // Reggression test for WAX-373
-  {
-    const url = withSqlInfo.version.url + "/results";
-    const res = await fetch(url);
-    const body = await res.text();
-    assertEquals(body, want);
-  }
-
-  env.deleteApp(withSqlInfo);
-});
