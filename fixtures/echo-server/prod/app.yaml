@@ -1,5 +1,0 @@
-kind: wasmer.io/App.v0
-name: echo-server
-owner: wasmer-integration-tests
-package: .
-app_id: da_R9EIBt1UwZmR

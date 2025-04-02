@@ -14,7 +14,7 @@ Deno.test(
   "Log test: Check fetch is logged on simple logging app",
   {},
   async (t) => {
-    const filePath = "./fixtures/path-logger.php";
+    const filePath = "./fixtures/php/path-logger.php";
     const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
     const env = TestEnv.fromEnv();
     const appName = randomAppName();

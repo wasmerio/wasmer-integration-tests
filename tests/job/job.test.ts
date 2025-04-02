@@ -7,13 +7,10 @@ import {
   JobAction,
   randomAppName,
   TestEnv,
-} from "../src/index.ts";
-import { LogSniff } from "../src/log.ts";
+} from "../../src/index.ts";
+import { LogSniff } from "../../src/log.ts";
 import { stringify } from "jsr:@std/yaml";
 
-/**
- * Tests in this file are separate to allow them to run in parallell
- */
 const SECOND = 1000;
 
 async function performTest(
@@ -28,7 +25,7 @@ async function performTest(
   const appName = randomAppName();
   let deployedApp: AppInfo;
 
-  const filePath = "./fixtures/path-logger.php";
+  const filePath = "./fixtures/php/path-logger.php";
   const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
 
   await t.step("Deploy app", async () => {

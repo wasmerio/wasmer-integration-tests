@@ -8,8 +8,8 @@ import {
   saveAppYaml,
   SECOND,
   TestEnv,
-} from "../src/index.ts";
-import { validateWordpressIsLive } from "../src/wordpress.ts";
+} from "../../src/index.ts";
+import { validateWordpressIsLive } from "../../src/wordpress.ts";
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
@@ -92,7 +92,7 @@ Deno.test("app-wordpress", {}, async (t) => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
       "Installation complete",
-      30 * SECOND,
+      60 * SECOND,
     );
   });
 

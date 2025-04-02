@@ -1,6 +1,6 @@
 import { fail } from "jsr:@std/assert/fail";
-import { TestEnv } from "../src/env.ts";
-import { validateWordpressIsLive } from "../src/wordpress.ts";
+import { TestEnv } from "../../src/env.ts";
+import { validateWordpressIsLive } from "../../src/wordpress.ts";
 
 /*
  * This tests autobuild deployment of wordpress via a graphql subscription.
