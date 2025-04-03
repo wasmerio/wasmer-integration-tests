@@ -2,7 +2,7 @@ import { assertEquals } from "jsr:@std/assert/equals";
 import { TestEnv } from "../../src/env.ts";
 import { assertArrayIncludes } from "jsr:@std/assert/array-includes";
 
-Deno.test("ssh", {ignore: true}, async () => {
+Deno.test("ssh", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
 
   const runSsh = async (args: string[], stdin?: string) => {

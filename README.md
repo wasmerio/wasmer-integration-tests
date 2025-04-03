@@ -62,17 +62,24 @@ requests to Edge to ensure test environment settings are respected.**
 
 ### Test UATs and project structure
 
-Each area of functionality is intended to have its own directory and pipeline step, correlating roughly with the [QA UATs](https://linear.app/wasmer/settings/teams/QA/templates).
-This is to optimize each suite (allow failing fast) and to quickly highlight issue in pipeline, as well as reruns on periodic tests.
+Each area of functionality is intended to have its own directory and pipeline
+step, correlating roughly with the
+[QA UATs](https://linear.app/wasmer/settings/teams/QA/templates). This is to
+optimize each suite (allow failing fast) and to quickly highlight issue in
+pipeline, as well as reruns on periodic tests.
 
-So, please place tests within the feature's respective domain.
-Example: If additional functionality is added to app-jobs, either modify [the main job test file](./tests/job/job.test.ts), or write a new test file in the same directory.
+So, please place tests within the feature's respective domain. Example: If
+additional functionality is added to app-jobs, either modify
+[the main job test file](./tests/job/job.test.ts), or write a new test file in
+the same directory.
 
-If writing tests for a features within a new domain, create a new directory and be sure to add it to the [workflow](./.github/workflows/integration-test-workflow.yaml).
-What constitutes a new domain?
+If writing tests for a features within a new domain, create a new directory and
+be sure to add it to the
+[workflow](./.github/workflows/integration-test-workflow.yaml). What constitutes
+a new domain?
 [Noone knows!](https://redis.io/glossary/domain-driven-design-ddd/#:~:text=At%20its%20core%2C%20DDD%20is,within%20which%20the%20software%20operates.)
-It's all very fluffy.
-But if it feels radically different to other features (such as, Agentic Workloads vs php webserver), perhaps it's a new domain.
+It's all very fluffy. But if it feels radically different to other features
+(such as, Agentic Workloads vs php webserver), perhaps it's a new domain.
 
 If you're unsure where to place a test, simply write the test as a new file and place it under `./tests/general` with a name describing the functionality (for example `volumes.test.ts`).
 
@@ -151,3 +158,6 @@ Deno.test('app-create-from-package', async () => {
   assertEquals(output.stderr, 'my stderr');
 });
 ```
+If you're unsure where to place a test, simply write the test as a new file and
+place it under `./tests/general` with a name describing the functionality (for
+example `volumes.test.ts`).

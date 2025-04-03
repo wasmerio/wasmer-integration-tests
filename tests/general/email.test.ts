@@ -157,7 +157,7 @@ class DeveloperMailClient {
 }
 
 // Test that the integrated email sending works.
-Deno.test("php-email-sending", {ignore: true}, async () => {
+Deno.test("php-email-sending", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
   console.log("Creating a new mailbox...");
   const mbox = await DeveloperMailClient.createMailbox();
