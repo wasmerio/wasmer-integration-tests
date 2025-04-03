@@ -75,3 +75,79 @@ It's all very fluffy.
 But if it feels radically different to other features (such as, Agentic Workloads vs php webserver), perhaps it's a new domain.
 
 If you're unsure where to place a test, simply write the test as a new file and place it under `./tests/general` with a name describing the functionality (for example `volumes.test.ts`).
+
+### Test example, with comments:
+
+```
+// Register a test with the Deno test runner.
+Deno.test('app-create-from-package', async () => {
+  // Determine the test environment.
+  const env = TestEnv.fromEnv();
+
+  // An app definition is a structured object that describes app configration
+  // with an optional package definition.
+  // This can be created and deployed with TestEnv.deployApp().
+  const spec: AppDefinition = {
+    // app.yaml config.
+    appYaml: {
+      kind: 'wasmer.io/App.v0',
+      name: randomAppName(),
+      package: '.',
+    },
+
+    // Package definition (wasmer.toml)
+    wasmerToml: {
+      dependencies: {
+        "wasmer/static-web-server": "1",
+      },
+      fs: {
+        "/public": "public",
+        // "/settings": "settings",
+      },
+      command: [{
+        name: "script",
+        module: "wasmer/static-web-server:webserver",
+        runner: "https://webc.org/runner/wasi",
+      }],
+    },
+
+    // Files that should be present in the package.
+    files: {
+      'public': {
+        'index.html': `<html><body>Hello!</body></html>`,
+      },
+    }
+  };
+
+
+  // Create a directory with the package contents and app.yaml.
+  // Then use the `wasmer deploy` command to deploy the app.
+  const info = await env.deployApp(spec);
+
+  // Send an HTTP request to the app running on Edge
+  // `fetchApp` is the same as the regular Javascript `fetch()`, but it
+  // ensures that requests are sent to the right target.
+  const res = await env.fetchApp(info, '/', {headers: {...})
+  const body = await res.text();
+
+  // Assert that the response is as expected.
+  assertEquals(res.status, 200);
+  assertEquals(body.trim(), '<html><body>Hello!</body></html>');
+
+  // NOTE: you can use a full url instead of a path as well, in which case
+  // the wrapper will make sure the request is sent to the Edge target server
+  // if EDGE_SERVER is specified.
+  const res = await env.fetchApp(info, 'https://....', {headers: {...})
+
+  // You can also run custom wasmer CLI commands like this:
+  // This will throw an exception if the command fails.
+  const output = await env.runWasmerCommand({
+    args: [...],
+    // Use the app directory as the working directory.
+    cwd: info.dir
+    env: {...},
+  });
+  assertEquals(output.stdout, 'my stdout...');
+  assertEquals(output.stderr, 'my stderr');
+});
+```
