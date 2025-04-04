@@ -158,6 +158,3 @@ Deno.test('app-create-from-package', async () => {
   assertEquals(output.stderr, 'my stderr');
 });
 ```
-If you're unsure where to place a test, simply write the test as a new file and
-place it under `./tests/general` with a name describing the functionality (for
-example `volumes.test.ts`).
