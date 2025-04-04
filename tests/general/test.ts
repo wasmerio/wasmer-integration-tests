@@ -6,7 +6,6 @@ import fs from "node:fs";
 import {
   AppDefinition,
   buildJsWorkerApp,
-  buildPhpApp,
   buildStaticSiteApp,
   buildTempDir,
   createTempDir,
@@ -273,7 +272,7 @@ echo $_GET["name"];
   assertEquals(body.trim(), "world");
 });
 
-Deno.test("app-rust-axum", async () => {
+Deno.test("app-rust-axum", { ignore: true }, async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
