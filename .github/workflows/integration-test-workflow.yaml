@@ -28,6 +28,7 @@ jobs:
   run-unspecified-tests:
     name: Run general tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Clone repository
@@ -58,6 +59,7 @@ jobs:
   job-tests:
     name: Run job tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Clone repository
@@ -92,6 +94,7 @@ jobs:
   wp-tests:
     name: Run WordPress tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Clone repository
@@ -123,6 +126,7 @@ jobs:
   autobuild-tests:
     name: Run autobuild tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Clone repository
