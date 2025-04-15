@@ -214,4 +214,41 @@ mutation($id:ID!) {
       throw new Error(`Failed to delete app: ${appId}`);
     }
   }
+
+  async banApp(
+    { appId, reason, blackhole }: {
+      appId: string;
+      reason: string;
+      blackhole: boolean;
+    },
+  ): Promise<string> {
+    const Input = z.object({
+      banApp: z.object({
+        app: z.object({ id: z.string() }),
+      }),
+    });
+    type Input = z.infer<typeof Input>;
+
+    const query = `
+      mutation($appId:ID!, $reason:String!,$blackholed:Boolean!) {
+        banApp(input:{appId:$appId, reason:$reason, blackholed:$blackholed}) {
+          app {
+            id
+          }
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery<Input>(query, {
+      appId,
+      reason,
+      blackholed: blackhole,
+    });
+
+    const id = res.data?.banApp?.app?.id;
+    if (!id) {
+      throw new Error("banApp mutation did not return an app id");
+    }
+    return id;
+  }
 }
