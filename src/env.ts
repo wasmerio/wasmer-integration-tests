@@ -523,6 +523,50 @@ subscription PublishAppFromRepoAutobuild(
     }
   }
 
+  // Resolve the A/AAAA records for the main app domain.
+  //
+  // Uses the Edge DNS servers.
+  async resolveAppDns(app: AppInfo): Promise<{ a: string[]; aaaa: string[] }> {
+    const domain = (new URL(app.url)).host;
+
+    // Must use an edge server IP to avoid caching.
+    const edgeServerIps = await Deno.resolveDns(this.appDomain, "A");
+    if (edgeServerIps.length === 0) {
+      throw new Error(
+        `Could not DNS-resolve IPs found for app domain ${this.appDomain}`,
+      );
+    }
+    const edgeServerIp = edgeServerIps[0];
+
+    const opts = {
+      nameServer: { ipAddr: edgeServerIp },
+    };
+
+    let a: string[] = [];
+    // Must catch NotFound errors to allow testing of empty record sets.
+    try {
+      a = await Deno.resolveDns(domain, "A", opts);
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound)) {
+        throw err;
+      }
+    }
+
+    let aaaa: string[] = [];
+    try {
+      aaaa = await Deno.resolveDns(domain, "AAAA", opts);
+    } catch (err) {
+      if (!(err instanceof Deno.errors.NotFound)) {
+        throw err;
+      }
+    }
+
+    return {
+      a: a,
+      aaaa: aaaa,
+    };
+  }
+
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
