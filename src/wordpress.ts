@@ -11,8 +11,35 @@ export async function validateWordpressIsLive(
   }
 
   await t.step("validate properly setup", async () => {
-    const got = await env.httpClient.fetch(app_url, { method: "GET" });
-    const body = await got.text();
+    // retry with backoff until the body (stripped) is not empty
+    const MAX_RETRIES = 10;
+    const RETRY_DELAY_MS = 2000;
+
+    let body = "";
+    let got: Response | null = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        got = await env.httpClient.fetch(app_url, { method: "GET" });
+        body = await got.text();
+
+        if (body.trim() !== "") {
+          break;
+        }
+      } catch (_err) {
+        // Could log or collect errors if needed
+      }
+
+      const backoff = RETRY_DELAY_MS * Math.pow(1.5, attempt);
+      const jitter = Math.random() * 300;
+      await new Promise((resolve) => setTimeout(resolve, backoff + jitter));
+    }
+
+    if (!got || !got.ok) {
+      fail(
+        `Failed to fetch deployed WordPress app. Response not OK or missing. Body:\n${body}`,
+      );
+    }
     if (!got.ok) {
       fail(
         `Failed to fetch deployed wordpress app. Response not OK. Body: ${body}

@@ -88,5 +88,7 @@ Deno.test("app-wordpress", {}, async (t) => {
     );
   });
 
+  console.log("Validating app: ", appInfo!.url);
+
   await validateWordpressIsLive(t, appInfo!.url, env);
 });
