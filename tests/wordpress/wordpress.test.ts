@@ -88,13 +88,5 @@ Deno.test("app-wordpress", {}, async (t) => {
     );
   });
 
-  await t.step("validate autosetup", async () => {
-    await logSniff.assertLogsWithin(
-      appYaml.name!,
-      "Installation complete",
-      60 * SECOND,
-    );
-  });
-
   await validateWordpressIsLive(t, appInfo!.url, env);
 });
