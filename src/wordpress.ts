@@ -29,7 +29,9 @@ export async function validateWordpressIsLive(
       } catch (_err) {
         // Could log or collect errors if needed
       }
-
+      if (attempt > 0) {
+        console.warn("Trying to get response. Retry attempt: ", attempt);
+      }
       const backoff = RETRY_DELAY_MS * Math.pow(1.5, attempt);
       const jitter = Math.random() * 300;
       await new Promise((resolve) => setTimeout(resolve, backoff + jitter));
