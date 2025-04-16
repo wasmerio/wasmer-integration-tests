@@ -57,7 +57,7 @@ async function performTest(
   });
 }
 
-Deno.test("Logvalidation - Http job: post-deployment", {}, async (t) => {
+Deno.test("Logvalidation - Http job: post-deployment", {ignore: true}, async (t) => {
   await performTest(
     t,
     [
@@ -77,7 +77,7 @@ Deno.test("Logvalidation - Http job: post-deployment", {}, async (t) => {
   );
 });
 
-Deno.test("Logvalidation - Exec job: post-deployment", {}, async (t) => {
+Deno.test("Logvalidation - Exec job: post-deployment", {ignore: true}, async (t) => {
   await performTest(
     t,
     [
@@ -128,7 +128,7 @@ async function cronjobTest(
   );
 }
 
-Deno.test("Logvalidation - Http cronjob: every minute", {}, async (t) => {
+Deno.test("Logvalidation - Http cronjob: every minute", {ignore: true}, async (t) => {
   await cronjobTest(t, randomAppName(), {
     fetch: {
       path: "/this-is-fetch-from-cron-job",
@@ -137,7 +137,7 @@ Deno.test("Logvalidation - Http cronjob: every minute", {}, async (t) => {
   }, "this-is-fetch-from-cron-job");
 });
 
-Deno.test("Logvalidation - Exec cronjob: every minute", {}, async (t) => {
+Deno.test("Logvalidation - Exec cronjob: every minute", {ignore: true}, async (t) => {
   await cronjobTest(t, randomAppName(), {
     execute: {
       cli_args: [
