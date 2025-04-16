@@ -81,7 +81,9 @@ a new domain?
 It's all very fluffy. But if it feels radically different to other features
 (such as, Agentic Workloads vs php webserver), perhaps it's a new domain.
 
-If you're unsure where to place a test, simply write the test as a new file and place it under `./tests/general` with a name describing the functionality (for example `volumes.test.ts`).
+If you're unsure where to place a test, simply write the test as a new file and
+place it under `./tests/general` with a name describing the functionality (for
+example `volumes.test.ts`).
 
 ### Test example, with comments:
 
