@@ -12,7 +12,8 @@ export async function validateWordpressIsLive(
   }
 
   await t.step("validate properly setup", async () => {
-    await sleep(10000);
+    // fetch a few times first
+    await env.httpClient.fetch(app_url, { method: "GET" });
     const got = await env.httpClient.fetch(app_url, { method: "GET" });
     const body = await got.text();
     if (!got.ok) {
