@@ -1,6 +1,5 @@
 import { fail } from "jsr:@std/assert/fail";
 import { TestEnv } from "./index.ts";
-import { sleep } from "./util.ts";
 
 export async function validateWordpressIsLive(
   t: Deno.TestContext,

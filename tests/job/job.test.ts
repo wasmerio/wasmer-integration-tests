@@ -57,48 +57,56 @@ async function performTest(
   });
 }
 
-Deno.test("Logvalidation - Http job: post-deployment", {ignore: true}, async (t) => {
-  await performTest(
-    t,
-    [
-      {
-        name: randomAppName(),
-        trigger: "post-deployment",
-        action: {
-          fetch: {
-            path: "/this-is-fetch-from-post-deploy-job",
-            timeout: "30s",
+Deno.test(
+  "Logvalidation - Http job: post-deployment",
+  { ignore: true },
+  async (t) => {
+    await performTest(
+      t,
+      [
+        {
+          name: randomAppName(),
+          trigger: "post-deployment",
+          action: {
+            fetch: {
+              path: "/this-is-fetch-from-post-deploy-job",
+              timeout: "30s",
+            },
           },
         },
-      },
-    ],
-    "this-is-fetch-from-post-deploy-job",
-    15,
-  );
-});
+      ],
+      "this-is-fetch-from-post-deploy-job",
+      15,
+    );
+  },
+);
 
-Deno.test("Logvalidation - Exec job: post-deployment", {ignore: true}, async (t) => {
-  await performTest(
-    t,
-    [
-      {
-        name: randomAppName(),
-        trigger: "post-deployment",
-        action: {
-          execute: {
-            cli_args: [
-              "-r",
-              "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-post-deployment');",
-            ],
-            command: "php",
+Deno.test(
+  "Logvalidation - Exec job: post-deployment",
+  { ignore: true },
+  async (t) => {
+    await performTest(
+      t,
+      [
+        {
+          name: randomAppName(),
+          trigger: "post-deployment",
+          action: {
+            execute: {
+              cli_args: [
+                "-r",
+                "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-post-deployment');",
+              ],
+              command: "php",
+            },
           },
         },
-      },
-    ],
-    "cronjob-exec-post-deployment",
-    15,
-  );
-});
+      ],
+      "cronjob-exec-post-deployment",
+      15,
+    );
+  },
+);
 
 async function cronjobTest(
   t: Deno.TestContext,
@@ -128,23 +136,31 @@ async function cronjobTest(
   );
 }
 
-Deno.test("Logvalidation - Http cronjob: every minute", {ignore: true}, async (t) => {
-  await cronjobTest(t, randomAppName(), {
-    fetch: {
-      path: "/this-is-fetch-from-cron-job",
-      timeout: "30s",
-    },
-  }, "this-is-fetch-from-cron-job");
-});
+Deno.test(
+  "Logvalidation - Http cronjob: every minute",
+  { ignore: true },
+  async (t) => {
+    await cronjobTest(t, randomAppName(), {
+      fetch: {
+        path: "/this-is-fetch-from-cron-job",
+        timeout: "30s",
+      },
+    }, "this-is-fetch-from-cron-job");
+  },
+);
 
-Deno.test("Logvalidation - Exec cronjob: every minute", {ignore: true}, async (t) => {
-  await cronjobTest(t, randomAppName(), {
-    execute: {
-      cli_args: [
-        "-r",
-        "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-every-1-min');",
-      ],
-      command: "php",
-    },
-  }, "cronjob-exec-every-1-min");
-});
+Deno.test(
+  "Logvalidation - Exec cronjob: every minute",
+  { ignore: true },
+  async (t) => {
+    await cronjobTest(t, randomAppName(), {
+      execute: {
+        cli_args: [
+          "-r",
+          "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-every-1-min');",
+        ],
+        command: "php",
+      },
+    }, "cronjob-exec-every-1-min");
+  },
+);
