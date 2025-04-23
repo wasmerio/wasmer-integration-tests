@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import { env } from "node:process";
 import * as toml from "jsr:@std/toml";
 
 import { z } from "zod";
@@ -16,7 +17,8 @@ export interface WasmerConfig {
 
 // Load the wasmer CLI config file.
 export function loadWasmerConfig(): WasmerConfig {
-  const p = path.join(os.homedir(), ".wasmer/wasmer.toml");
+  const wasmer_dir = env.WASMER_DIR ?? path.join(os.homedir(), ".wasmer");
+  const p = path.join(wasmer_dir, "wasmer.toml");
   const contents = fs.readFileSync(p, "utf-8");
   const data = toml.parse(contents);
   return data;
