@@ -1,0 +1,16 @@
+name: Code QA
+on:
+  schedule:
+    - cron: "0 2 * * *"
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/integration-test-workflow.yaml
+    with:
+      test_branch: ${{ github.head_ref }}
+    secrets:
+      token: ${{ secrets.WAPM_DEV_TOKEN }}
