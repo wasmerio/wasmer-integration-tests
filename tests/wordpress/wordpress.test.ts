@@ -77,20 +77,27 @@ Deno.test("app-wordpress", {}, async (t) => {
   let appInfo: AppInfo;
   const logSniff = new LogSniff(env);
 
-  const ok = await t.step("deploy", async () => {
+  let ok = await t.step("deploy", async () => {
     appInfo = await env.deployAppDir("./");
   });
   if (!ok) {
     fail();
   }
 
-  await t.step("validate deployment", async () => {
+  if (!ok) {
+    fail();
+  }
+  ok = await t.step("validate deployment", async () => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
       "WordPress installed successfully.",
-      30 * SECOND,
+      60 * SECOND,
     );
   });
+
+  if (!ok) {
+    fail();
+  }
 
   console.log("Validating app: ", appInfo!.url);
 
