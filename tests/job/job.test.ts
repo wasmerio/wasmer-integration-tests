@@ -1,20 +1,17 @@
-import fs from "node:fs";
+import * as fs from "node:fs";
 
 import {
-  AppInfo,
   AppJob,
   buildPhpApp,
   JobAction,
   randomAppName,
   TestEnv,
-} from "../../src/index.ts";
-import { LogSniff } from "../../src/log.ts";
-import { stringify } from "jsr:@std/yaml";
+} from "../../src/index";
+import { LogSniff } from "../../src/log";
 
 const SECOND = 1000;
 
 async function performTest(
-  t: Deno.TestContext,
   jobs: AppJob[],
   logValidationStr: string,
   timeoutSec: number,
@@ -23,99 +20,80 @@ async function performTest(
 ) {
   const env = TestEnv.fromEnv();
   const appName = randomAppName();
-  let deployedApp: AppInfo;
 
   const filePath = "./fixtures/php/path-logger.php";
   const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
 
-  await t.step("Deploy app", async () => {
-    const spec = buildPhpApp(phpPathLogger, { name: appName });
-    spec.appYaml.name = appName;
-    spec.appYaml.jobs = jobs;
-    // NOTE: This is added to ensure that the job only runs once. If a region
-    // isn't specified, it'll run once per region, skewing the logs
-    spec.appYaml.locality = {
-      regions: ["be-mons"],
-    };
-    console.debug(stringify(spec));
-    deployedApp = await env.deployApp(spec);
-  });
+  const spec = buildPhpApp(phpPathLogger, { name: appName });
+  spec.appYaml.name = appName;
+  spec.appYaml.jobs = jobs;
+  // NOTE: This is added to ensure that the job only runs once. If a region
+  // isn't specified, it'll run once per region, skewing the logs
+  spec.appYaml.locality = {
+    regions: ["be-mons"],
+  };
+  console.debug(JSON.stringify(spec));
+  const deployedApp = await env.deployApp(spec);
 
-  await t.step("check logs", async () => {
-    const logSniff = new LogSniff(env);
-    await logSniff.assertLogsWithin(
-      appName,
-      logValidationStr,
-      timeoutSec * SECOND,
-      expectLogOccurance,
-      minimumTimeoutSec,
-    );
-  });
+  const logSniff = new LogSniff(env);
+  await logSniff.assertLogsWithin(
+    appName,
+    logValidationStr,
+    timeoutSec * SECOND,
+    expectLogOccurance,
+    minimumTimeoutSec,
+  );
 
-  await t.step("delete app", async () => {
-    await env.deleteApp(deployedApp);
-  });
+  await env.deleteApp(deployedApp);
 }
 
-Deno.test(
-  "Logvalidation - Http job: post-deployment",
-  { ignore: true },
-  async (t) => {
-    await performTest(
-      t,
-      [
-        {
-          name: randomAppName(),
-          trigger: "post-deployment",
-          action: {
-            fetch: {
-              path: "/this-is-fetch-from-post-deploy-job",
-              timeout: "30s",
-            },
+test.skip("Logvalidation - Http job: post-deployment", async () => {
+  await performTest(
+    [
+      {
+        name: randomAppName(),
+        trigger: "post-deployment",
+        action: {
+          fetch: {
+            path: "/this-is-fetch-from-post-deploy-job",
+            timeout: "30s",
           },
         },
-      ],
-      "this-is-fetch-from-post-deploy-job",
-      15,
-    );
-  },
-);
+      },
+    ],
+    "this-is-fetch-from-post-deploy-job",
+    15,
+  );
+});
 
-Deno.test(
-  "Logvalidation - Exec job: post-deployment",
-  { ignore: true },
-  async (t) => {
-    await performTest(
-      t,
-      [
-        {
-          name: randomAppName(),
-          trigger: "post-deployment",
-          action: {
-            execute: {
-              cli_args: [
-                "-r",
-                "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-post-deployment');",
-              ],
-              command: "php",
-            },
+test.skip("Logvalidation - Exec job: post-deployment", async () => {
+  await performTest(
+    [
+      {
+        name: randomAppName(),
+        trigger: "post-deployment",
+        action: {
+          execute: {
+            cli_args: [
+              "-r",
+              "fwrite(fopen('php://stderr', 'w'), 'cronjob-exec-post-deployment');",
+            ],
+            command: "php",
           },
         },
-      ],
-      "cronjob-exec-post-deployment",
-      15,
-    );
-  },
-);
+      },
+    ],
+    "cronjob-exec-post-deployment",
+    15,
+  );
+});
 
 async function cronjobTest(
-  t: Deno.TestContext,
   name: string,
   action: JobAction,
   logValidationStr: string,
 ) {
   await performTest(
-    t,
     [
       {
         name: name,
@@ -136,24 +114,23 @@ async function cronjobTest(
   );
 }
 
-Deno.test(
-  "Logvalidation - Http cronjob: every minute",
-  { ignore: true },
-  async (t) => {
-    await cronjobTest(t, randomAppName(), {
+test.skip("Logvalidation - Http cronjob: every minute", async () => {
+  await cronjobTest(
+    randomAppName(),
+    {
       fetch: {
         path: "/this-is-fetch-from-cron-job",
         timeout: "30s",
       },
-    }, "this-is-fetch-from-cron-job");
-  },
-);
+    },
+    "this-is-fetch-from-cron-job",
+  );
+});
 
-Deno.test(
-  "Logvalidation - Exec cronjob: every minute",
-  { ignore: true },
-  async (t) => {
-    await cronjobTest(t, randomAppName(), {
+test.skip("Logvalidation - Exec cronjob: every minute", async () => {
+  await cronjobTest(
+    randomAppName(),
+    {
       execute: {
         cli_args: [
           "-r",
@@ -161,6 +138,7 @@ Deno.test(
         ],
         command: "php",
       },
-    }, "cronjob-exec-every-1-min");
-  },
-);
+    },
+    "cronjob-exec-every-1-min",
+  );
+});

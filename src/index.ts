@@ -1,9 +1,9 @@
 // Re-export common dependencies.
 
-export { TestEnv } from "./env.ts";
-export { sleep } from "./util.ts";
+export { TestEnv } from "./env";
+export { sleep } from "./util";
 
-export type { AppDefinition } from "./app/construct.ts";
+export type { AppDefinition } from "./app/construct";
 export {
   AppJob,
   AppYaml,
@@ -16,16 +16,16 @@ export {
   saveAppYaml,
   SECOND,
   writeAppDefinition,
-} from "./app/construct.ts";
-export { LogSniff } from "./log.ts";
-export type { AppInfo } from "./backend.ts";
-export { buildPhpApp, buildPythonApp } from "./app/construct.ts";
+} from "./app/construct";
+export { LogSniff } from "./log";
+export type { AppInfo } from "./backend";
+export { buildPhpApp, buildPythonApp } from "./app/construct";
 export {
   EDGE_HEADER_JOURNAL_STATUS,
   EDGE_HEADER_PURGE_INSTANCES,
   HEADER_INSTANCE_ID,
   HEADER_PURGE_INSTANCES,
-} from "./edge.ts";
-export { buildTempDir, createTempDir } from "./fs.ts";
-export { wasmopticonDir } from "./deps.ts";
-export { parseDeployOutput } from "./wasmer_cli.ts";
+} from "./edge";
+export { buildTempDir, createTempDir } from "./fs";
+export { wasmopticonDir } from "./deps";
+export { parseDeployOutput } from "./wasmer_cli";

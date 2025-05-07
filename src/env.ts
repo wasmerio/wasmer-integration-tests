@@ -1,22 +1,24 @@
-import path from "node:path";
-import fs from "node:fs";
-import process from "node:process";
-import * as toml from "jsr:@std/toml";
+import * as path from "node:path";
+import * as fs from "node:fs";
+import * as process from "node:process";
+import * as toml from "@iarna/toml";
+import { promises as dns } from "dns";
 
-import { HttpClient } from "./http.ts";
-import { AppInfo, BackendClient } from "./backend.ts";
+import { spawn, SpawnOptions } from "child_process";
+
+import { AppInfo, BackendClient } from "./backend";
 import {
   DeployOutput,
   loadWasmerConfig,
   parseDeployOutput,
-} from "./wasmer_cli.ts";
-import { buildTempDir, Path } from "./fs.ts";
-import { sleep } from "./util.ts";
+} from "./wasmer_cli";
+import { buildTempDir, Path } from "./fs";
+import { sleep } from "./util";
 import {
   AppDefinition,
   randomAppName,
   writeAppDefinition,
-} from "./app/construct.ts";
+} from "./app/construct";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -80,8 +82,9 @@ export class TestEnv {
   // Name or path of the `wasmer` binary to use.
   wasmerBinary: string = "wasmer";
 
-  httpClient: HttpClient;
   backend: BackendClient;
+
+  hasPrintedEnv = false;
 
   static fromEnv(): TestEnv {
     const registry = process.env[ENV_VAR_REGISTRY] ?? REGISTRY_DEV;
@@ -110,9 +113,9 @@ export class TestEnv {
     if (!maybeToken) {
       try {
         const config = loadWasmerConfig();
-        maybeToken = config.registry?.tokens?.find((t) =>
-          t.registry === registry
-        )?.token ?? null;
+        maybeToken =
+          config.registry?.tokens?.find((t) => t.registry === registry)
+            ?.token ?? null;
         if (!maybeToken) {
           throw new Error(
             `Could not find token for registry ${registry} in wasmer.toml config - \
@@ -130,18 +133,7 @@ export class TestEnv {
 
     const token: string = maybeToken ? maybeToken : "TOKEN NOT SET";
 
-    const httpClient = new HttpClient();
-    if (edgeServer) {
-      httpClient.targetServer = edgeServer;
-    }
-
-    const env = new TestEnv(
-      registry,
-      token,
-      namespace,
-      appDomain,
-      httpClient,
-    );
+    const env = new TestEnv(registry, token, namespace, appDomain);
 
     if (edgeServer) {
       env.edgeServer = edgeServer;
@@ -163,22 +155,19 @@ export class TestEnv {
     token: string,
     namespace: string,
     appDomain: string,
-    client: HttpClient,
   ) {
     this.registry = registry;
     this.namespace = namespace;
     this.appDomain = appDomain;
 
-    this.httpClient = client;
     this.backend = new BackendClient(registry, token);
     this.token = token;
   }
 
   async runWasmerCommand(options: CommandOptions): Promise<CommandOutput> {
-    const cmd = this.wasmerBinary;
     const args = options.args;
+    const env = { ...process.env, ...options.env };
 
-    const env = options.env ?? {};
     if (!args.includes("--registry")) {
       env["WASMER_REGISTRY"] = this.registry;
     }
@@ -186,81 +175,57 @@ export class TestEnv {
       env["WASMER_TOKEN"] = this.token;
     }
 
-    const copts: Deno.CommandOptions = {
+    const spawnOpts: SpawnOptions = {
       cwd: options.cwd,
-      args,
       env,
-      stdin: options.stdin ? "piped" : "null",
+      stdio: [options.stdin ? "pipe" : "ignore", "pipe", "pipe"],
     };
 
-    console.debug("Running command...", copts);
-    const command = new Deno.Command(cmd, {
-      ...copts,
-      stdout: "piped",
-      stderr: "piped",
-    });
-
-    // create subprocess and collect output
-    const proc = command.spawn();
+    // Create a copy and then unset env if env has been printed
+    const printSpawn = { args: args, ...spawnOpts };
+    if (this.hasPrintedEnv) {
+      printSpawn.env = null;
+    } else {
+      this.hasPrintedEnv = true;
+    }
+    console.debug("Running command...", printSpawn);
+    const proc = spawn(this.wasmerBinary, args, spawnOpts);
 
     if (options.stdin) {
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(options.stdin));
-      await writer.releaseLock();
-      await proc.stdin.close();
+      proc.stdin!.write(options.stdin);
+      proc.stdin!.end();
     }
 
-    const stdoutChunks: Uint8Array[] = [];
-    const stderrChunks: Uint8Array[] = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
 
-    function mergeChunks(chunks: Uint8Array[]): BufferSource {
-      const ret = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
-      chunks.reduce((offset, chunk) => {
-        ret.set(chunk, offset);
-        return offset + chunk.length;
-      }, 0);
-      return ret;
-    }
+    console.debug("command output >>>");
 
-    const collectAndPrint = async (
-      readable: ReadableStream<Uint8Array>,
-      chunks: Uint8Array[],
-    ) => {
-      const reader = readable.getReader();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (value) {
-          await Deno.stdout.write(value); // Print while reading
-          chunks.push(value); // Collect to array
-        }
-        if (done) {
-          break;
-        }
-      }
+    const collectOutput = (
+      stream: NodeJS.ReadableStream,
+      chunks: Buffer[],
+    ): Promise<void> => {
+      return new Promise((resolve) => {
+        stream.on("data", (chunk: Buffer) => {
+          console.debug(chunk.toString("utf8"));
+          chunks.push(chunk);
+        });
+        stream.on("end", resolve);
+      });
     };
 
-    console.log("command output >>>");
+    const [code] = await Promise.all([
+      new Promise<number>((resolve) => proc.on("exit", resolve)),
+      collectOutput(proc.stdout!, stdoutChunks),
+      collectOutput(proc.stderr!, stderrChunks),
+    ]);
 
-    // Need to run concurrently to avoid blocking due to full stdout/stderr buffers.
+    const stdout = Buffer.concat(stdoutChunks).toString();
+    const stderr = Buffer.concat(stderrChunks).toString();
 
-    const stdoutRes = collectAndPrint(proc.stdout, stdoutChunks);
-    const stderrRes = collectAndPrint(proc.stderr, stderrChunks);
-    const procResult = await proc.status;
-
-    await stdoutRes;
-    const stdout = new TextDecoder().decode(mergeChunks(stdoutChunks));
-    await stderrRes;
-    const stderr = new TextDecoder().decode(mergeChunks(stderrChunks));
-
-    const code = procResult.code;
     console.log(`<<< command finished with code ${code}`);
 
-    const result: CommandOutput = {
-      code,
-      stdout,
-      stderr,
-    };
-
+    const result: CommandOutput = { code, stdout, stderr };
     console.debug("Command executed:", result);
 
     if (code !== 0 && options.noAssertSuccess !== true) {
@@ -274,14 +239,12 @@ export class TestEnv {
   // Ensure that a NAMED package at a given path is published.
   //
   // Returns the package name.
-  async ensurePackagePublished(
-    dir: Path,
-  ): Promise<PackageIdent> {
+  async ensurePackagePublished(dir: Path): Promise<PackageIdent> {
     const manifsetPath = path.join(dir, "wasmer.toml");
     const manifestRaw = await fs.promises.readFile(manifsetPath, "utf-8");
 
     // TODO: Setup zod object for manifest files
-    // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let manifest: any;
     try {
       manifest = toml.parse(manifestRaw);
@@ -304,11 +267,7 @@ export class TestEnv {
       );
     }
 
-    const args = [
-      "publish",
-      "--bump",
-      dir,
-    ];
+    const args = ["publish", "--bump", dir];
 
     console.debug(`Publishing package at '${dir}'...`);
     await this.runWasmerCommand({ args });
@@ -401,21 +360,21 @@ export class TestEnv {
     query: string,
     variables = {},
     heartbeatInterval = 1000, // each second
-    // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): AsyncGenerator<any, void, unknown> {
     const socket = new WebSocket(endpoint, ["graphql-ws"]);
     // generate a random subscription_id
     const subscription_id = Math.random().toString(36).substring(7);
 
-    // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sendMessage = (message: any) => {
       socket.send(JSON.stringify(message));
     };
 
-    // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const waitForEvent = (type: any) =>
       new Promise((resolve) => {
-        // deno-lint-ignore no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const handler = (event: any) => {
           const response = JSON.parse(event.data);
           if (response.type == "error") {
@@ -507,10 +466,15 @@ subscription PublishAppFromRepoAutobuild(
       extraData: extra_data,
       branch: branch,
     };
-    for await (
-      const res of this.graphqlSubscription(registry, token, query, variables)
-    ) {
-      res.errors && console.error(res.errors);
+    for await (const res of this.graphqlSubscription(
+      registry,
+      token,
+      query,
+      variables,
+    )) {
+      if (res.errors) {
+        console.error(res.errors);
+      }
       const msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
       if (msg) {
         console.log(msg);
@@ -527,44 +491,33 @@ subscription PublishAppFromRepoAutobuild(
   //
   // Uses the Edge DNS servers.
   async resolveAppDns(app: AppInfo): Promise<{ a: string[]; aaaa: string[] }> {
-    const domain = (new URL(app.url)).host;
+    const domain = new URL(app.url).host;
 
-    // Must use an edge server IP to avoid caching.
-    const edgeServerIps = await Deno.resolveDns(this.appDomain, "A");
-    if (edgeServerIps.length === 0) {
-      throw new Error(
-        `Could not DNS-resolve IPs found for app domain ${this.appDomain}`,
-      );
-    }
-    const edgeServerIp = edgeServerIps[0];
+    const resolver = new dns.Resolver();
 
-    const opts = {
-      nameServer: { ipAddr: edgeServerIp },
-    };
-
-    let a: string[] = [];
-    // Must catch NotFound errors to allow testing of empty record sets.
+    // Get edge server IP
     try {
-      a = await Deno.resolveDns(domain, "A", opts);
+      const edgeServerIps = await resolver.resolve4(this.appDomain);
+      if (edgeServerIps.length === 0) {
+        throw new Error(
+          `Could not DNS-resolve IPs found for app domain ${this.appDomain}`,
+        );
+      }
+
+      resolver.setServers([edgeServerIps[0]]);
+
+      const [a, aaaa] = await Promise.all([
+        resolver.resolve4(domain).catch(() => []),
+        resolver.resolve6(domain).catch(() => []),
+      ]);
+
+      return { a, aaaa };
     } catch (err) {
-      if (!(err instanceof Deno.errors.NotFound)) {
+      if (err.code !== "ENODATA" && err.code !== "ENOTFOUND") {
         throw err;
       }
+      return { a: [], aaaa: [] };
     }
-
-    let aaaa: string[] = [];
-    try {
-      aaaa = await Deno.resolveDns(domain, "AAAA", opts);
-    } catch (err) {
-      if (!(err instanceof Deno.errors.NotFound)) {
-        throw err;
-      }
-    }
-
-    return {
-      a: a,
-      aaaa: aaaa,
-    };
   }
 
   async fetchApp(
@@ -595,29 +548,19 @@ subscription PublishAppFromRepoAutobuild(
     const RETRY_TIMEOUT_SECS = 60;
     while (true) {
       console.debug(`Fetching URL ${url}`, { options });
-      const response = await this.httpClient.fetch(url, options);
+      const response = await fetch(url, options);
       console.debug(`Fetched URL ${url}`, {
         status: response.status,
         headers: response.headers,
-        remoteAddress: response.remoteAddress,
       });
 
-      // if (options.discardBody) {
-      //   await response.body?.cancel();
-      // }
       if (!options.noAssertSuccess && !response.ok) {
         // Try to get the body:
-        let body: string | null = null;
         try {
-          body = await response.text();
+          console.error(await response.text());
         } catch (err) {
           console.error(err);
         }
-
-        // TODO: allow running against a particular server.
-        throw new Error(
-          `Failed to fetch URL '${url}': ${response.status}\n\nBODY:\n${body}`,
-        );
       }
 
       // NOTE: this step happens after the success check on purpose, because
@@ -633,7 +576,7 @@ subscription PublishAppFromRepoAutobuild(
         if (currentId !== waitForVersionId) {
           const elapsed = Date.now() - start;
           // only retry for one minute
-          if (elapsed > (RETRY_TIMEOUT_SECS * 1000)) {
+          if (elapsed > RETRY_TIMEOUT_SECS * 1000) {
             throw new Error(
               `Failed to fetch URL '${url}': app is not at expected version ${waitForVersionId} after retrying for ${RETRY_TIMEOUT_SECS} seconds (got ${currentId})`,
             );

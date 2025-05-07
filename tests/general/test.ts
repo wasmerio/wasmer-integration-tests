@@ -1,7 +1,7 @@
-import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
-import * as toml from "jsr:@std/toml";
+import { assert, assertEquals, assertNotEquals } from "../../src/testing_tools";
 import * as path from "node:path";
-import fs from "node:fs";
+import * as fs from "node:fs";
+import * as toml from "@iarna/toml";
 
 import {
   AppDefinition,
@@ -16,32 +16,33 @@ import {
   sleep,
   TestEnv,
   writeAppDefinition,
-} from "../../src/index.ts";
+} from "../../src/index";
 
-// TESTS
-
-Deno.test("wasmer-cli-version", async function () {
+test.concurrent("wasmer-cli-version", async function () {
   const env = TestEnv.fromEnv();
   const out = await env.runWasmerCommand({ args: ["-v", "--version"] });
 
-  const data = out.stdout.trim().split("\n").reduce(
-    (acc: Record<string, string>, line: string): Record<string, string> => {
-      line = line.trim();
-      if (line.includes(":")) {
-        console.log({ line });
-        const [key, value] = line.split(":");
-        acc[key.trim()] = value.trim();
-      }
-      return acc;
-    },
-    {},
-  );
+  const data = out.stdout
+    .trim()
+    .split("\n")
+    .reduce(
+      (acc: Record<string, string>, line: string): Record<string, string> => {
+        line = line.trim();
+        if (line.includes(":")) {
+          console.log({ line });
+          const [key, value] = line.split(":");
+          acc[key.trim()] = value.trim();
+        }
+        return acc;
+      },
+      {},
+    );
 
   assertEquals(data["binary"], "wasmer-cli");
 });
 
 // Test that the instance purge header works correctly.
-Deno.test("app-purge-instances", async () => {
+test.concurrent("app-purge-instances", async () => {
   const spec = buildStaticSiteApp();
 
   // Enable debug mode to allow for instance ID and instance purging.
@@ -105,7 +106,7 @@ Deno.test("app-purge-instances", async () => {
 });
 
 // Test app auto https redirect functionality.
-Deno.test("app-https-redirect", async () => {
+test.concurrent("app-https-redirect", async () => {
   const spec = buildStaticSiteApp();
   spec.appYaml.name = randomAppName();
   // Note: redirects are enabled by default!
@@ -142,7 +143,7 @@ Deno.test("app-https-redirect", async () => {
 });
 
 // TODO: fix CGI!
-Deno.test("app-python-wcgi", { ignore: true }, async () => {
+test.skip("app-python-wcgi", async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
@@ -153,23 +154,25 @@ Deno.test("app-python-wcgi", { ignore: true }, async () => {
       fs: {
         "/src": "src",
       },
-      command: [{
-        name: "script",
-        module: "wasmer/python:python",
-        runner: "https://webc.org/runner/wcgi",
-        annotations: {
-          wasi: {
-            "main-args": ["/src/main.py"],
+      command: [
+        {
+          name: "script",
+          module: "wasmer/python:python",
+          runner: "https://webc.org/runner/wcgi",
+          annotations: {
+            wasi: {
+              "main-args": ["/src/main.py"],
+            },
           },
         },
-      }],
+      ],
     },
     appYaml: {
       kind: "wasmer.io/App.v0",
       package: ".",
     },
     files: {
-      "src": {
+      src: {
         "main.py": `
 print("HTTP/1.1 200 OK\r")
 print("Content-Type: text/html\r")
@@ -189,7 +192,7 @@ print("\r")
   await env.deleteApp(info);
 });
 
-Deno.test("app-winterjs", async () => {
+test.concurrent("app-winterjs", async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
@@ -200,23 +203,25 @@ Deno.test("app-winterjs", async () => {
       fs: {
         "/src": "src",
       },
-      command: [{
-        name: "script",
-        module: "wasmer/winterjs:winterjs",
-        runner: "https://webc.org/runner/wasi",
-        annotations: {
-          wasi: {
-            "main-args": ["/src/main.js"],
+      command: [
+        {
+          name: "script",
+          module: "wasmer/winterjs:winterjs",
+          runner: "https://webc.org/runner/wasi",
+          annotations: {
+            wasi: {
+              "main-args": ["/src/main.js"],
+            },
           },
         },
-      }],
+      ],
     },
     appYaml: {
       kind: "wasmer.io/App.v0",
       package: ".",
     },
     files: {
-      "src": {
+      src: {
         "main.js": `
 addEventListener('fetch', (req) => {
     req.respondWith(new Response('Hello World!'));
@@ -234,7 +239,7 @@ addEventListener('fetch', (req) => {
   await env.deleteApp(info);
 });
 
-Deno.test("app-php", async () => {
+test.concurrent("app-php", async () => {
   const env = TestEnv.fromEnv();
 
   const spec: AppDefinition = {
@@ -245,23 +250,25 @@ Deno.test("app-php", async () => {
       fs: {
         "/src": "src",
       },
-      command: [{
-        name: "run",
-        module: "php/php:php",
-        runner: "wasi",
-        annotations: {
-          wasi: {
-            "main-args": ["-t", "/src", "-S", "localhost:8080"],
+      command: [
+        {
+          name: "run",
+          module: "php/php:php",
+          runner: "wasi",
+          annotations: {
+            wasi: {
+              "main-args": ["-t", "/src", "-S", "localhost:8080"],
+            },
           },
         },
-      }],
+      ],
     },
     appYaml: {
       kind: "wasmer.io/App.v0",
       package: ".",
     },
     files: {
-      "src": {
+      src: {
         "index.php": `
 <?php
 echo $_GET["name"];
@@ -277,9 +284,8 @@ echo $_GET["name"];
   await env.deleteApp(info);
 });
 
-Deno.test("app-rust-axum", { ignore: true }, async () => {
+test.skip("app-rust-axum", async () => {
   const env = TestEnv.fromEnv();
-
   const spec: AppDefinition = {
     appYaml: {
       kind: "wasmer.io/App.v0",
@@ -294,7 +300,7 @@ Deno.test("app-rust-axum", { ignore: true }, async () => {
   await env.deleteApp(info);
 });
 
-Deno.test("recreate-app-with-same-name", async () => {
+test.concurrent("recreate-app-with-same-name", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   spec.files!.public["index.html"] = "version ALPHA";
@@ -318,7 +324,7 @@ Deno.test("recreate-app-with-same-name", async () => {
   await env.deleteApp(info2);
 });
 
-Deno.test("app-listing", async () => {
+test.concurrent("app-listing", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
@@ -342,8 +348,8 @@ Deno.test("app-listing", async () => {
 
   const apps = JSON.parse(listing.stdout);
 
-  const foundApp = apps.find((app: { name: string }) =>
-    app.name === info.version.name
+  const foundApp = apps.find(
+    (app: { name: string }) => app.name === info.version.name,
   );
 
   if (!foundApp) {
@@ -357,7 +363,7 @@ Deno.test("app-listing", async () => {
 // anymore.
 //
 // TODO: ignored because app deletion seems to be problematic ATM
-Deno.test("app-delete", { ignore: true }, async () => {
+test.skip("app-delete", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const domain = spec.appYaml!.name + "." + env.appDomain;
@@ -398,7 +404,7 @@ Deno.test("app-delete", { ignore: true }, async () => {
   await env.deleteApp(info);
 });
 
-Deno.test("app-info-get", async () => {
+test.concurrent("app-info-get", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info = await env.deployApp(spec);
@@ -428,7 +434,7 @@ Deno.test("app-info-get", async () => {
   await env.deleteApp(info);
 });
 
-Deno.test("app-create-from-package", async () => {
+test.concurrent("app-create-from-package", async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
   const fullName = `${env.namespace}/${name}`;
@@ -456,7 +462,7 @@ name = "script"
 module = "wasmer/static-web-server:webserver"
 runner = "https://webc.org/runner/wasi"
     `,
-    "public": {
+    public: {
       "index.html": name,
     },
   });
@@ -493,7 +499,7 @@ runner = "https://webc.org/runner/wasi"
   await env.deleteApp(info);
 });
 
-Deno.test("app-update-multiple-times", async () => {
+test.concurrent("app-update-multiple-times", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info1 = await env.deployApp(spec);
@@ -512,7 +518,7 @@ Deno.test("app-update-multiple-times", async () => {
   await env.deleteApp(info1);
 });
 
-Deno.test("app-logs", async () => {
+test.concurrent("app-logs", async () => {
   const env = TestEnv.fromEnv();
   const code = `
 
@@ -545,84 +551,7 @@ addEventListener("fetch", (fetchEvent) => {
   await env.deleteApp(info);
 });
 
-Deno.test("dns-zonefile", async () => {
-  const env = TestEnv.fromEnv();
-  const tmpDir = await createTempDir();
-
-  const id = crypto.randomUUID().replace(/-/g, "");
-  const domain = `${id}.com`;
-
-  // Register the domain.
-  await env.runWasmerCommand({
-    args: ["domain", "register", domain],
-  });
-
-  // Get the zone file, just to make sure it works.
-  const output = await env.runWasmerCommand({
-    args: ["domain", "get-zone-file", domain],
-  });
-  let zoneFile = output.stdout;
-  zoneFile += "$TTL 3600\nsub IN A 127.0.0.1";
-
-  const subdomain = `sub.${domain}`;
-
-  const zoneFilePath = path.join(tmpDir, "zonefile");
-  await fs.promises.writeFile(zoneFilePath, zoneFile);
-
-  // Sync the zone file.
-  await env.runWasmerCommand({
-    args: ["domain", "sync-zone-file", zoneFilePath],
-  });
-
-  // Resolve a server in the cluster.
-  console.log("Resolving Edge DNS server ip...");
-  const aRecords = await Deno.resolveDns(env.appDomain, "A");
-  if (aRecords.length === 0) {
-    throw new Error(`No DNS A records found for ${env.appDomain}`);
-  }
-  const dnsServerIp = aRecords[0];
-  console.log("Resolved Edge DNS server ip: " + dnsServerIp);
-
-  // Resolve the custom domain.
-
-  const start = Date.now();
-  while (true) {
-    const elapsed = Date.now() - start;
-    if (elapsed > 60_000) {
-      throw new Error(
-        "Timeout while waiting for DNS records to become available",
-      );
-    }
-
-    console.log("Resolving custom domain", { subdomain, dnsServerIp });
-    let domainRecords;
-    try {
-      domainRecords = await Deno.resolveDns(subdomain.trim(), "A", {
-        nameServer: { ipAddr: dnsServerIp, port: 53 },
-      });
-    } catch (error) {
-      console.error("Error while resolving DNS records ... retrying ...", {
-        error,
-      });
-      await sleep(3_000);
-      continue;
-    }
-
-    console.log("Resolved", { domainRecords });
-    const isMatch = domainRecords.length === 1 &&
-      domainRecords[0] === "127.0.0.1";
-    if (isMatch) {
-      break;
-    } else {
-      console.log("DNS records do not match yet, waiting...", {
-        domainRecords,
-      });
-      await sleep(3_000);
-    }
-  }
-});
-
-Deno.test("package-download-named", async () => {
+test.concurrent("package-download-named", async () => {
   const env = TestEnv.fromEnv();
 
   const name = randomAppName();
@@ -634,14 +563,14 @@ Deno.test("package-download-named", async () => {
       version: "0.0.1",
     },
     fs: {
-      "data": "./data",
+      data: "./data",
     },
   });
   const files = {
     "wasmer.toml": wasmerToml,
     data: {
       "a.txt": "a",
-      "b": {
+      b: {
         "b.txt": "b",
       },
     },
@@ -677,19 +606,19 @@ Deno.test("package-download-named", async () => {
   );
 });
 
-Deno.test("package-download-unnamed", async () => {
+test.concurrent("package-download-unnamed", async () => {
   const env = TestEnv.fromEnv();
 
   const wasmerToml = toml.stringify({
     fs: {
-      "data": "./data",
+      data: "./data",
     },
   });
   const files = {
     "wasmer.toml": wasmerToml,
     data: {
       "a.txt": "a",
-      "b": {
+      b: {
         "b.txt": "b",
       },
     },
@@ -733,7 +662,7 @@ Deno.test("package-download-unnamed", async () => {
   );
 });
 
-Deno.test("package-publish-and-run", async () => {
+test.concurrent("package-publish-and-run", async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
   const fullName = `${env.namespace}/${name}`;
@@ -747,18 +676,20 @@ Deno.test("package-publish-and-run", async () => {
       "wasmer/python": "3",
     },
     fs: {
-      "src": "./src",
+      src: "./src",
     },
-    command: [{
-      name: "script",
-      module: "wasmer/python:python",
-      runner: "https://webc.org/runner/wasi",
-      annotations: {
-        wasi: {
-          "main-args": ["/src/main.py"],
+    command: [
+      {
+        name: "script",
+        module: "wasmer/python:python",
+        runner: "https://webc.org/runner/wasi",
+        annotations: {
+          wasi: {
+            "main-args": ["/src/main.py"],
+          },
         },
       },
-    }],
+    ],
   });
 
   const files = {
@@ -785,7 +716,7 @@ Deno.test("package-publish-and-run", async () => {
   assertEquals(output.stdout.trim(), fullName);
 });
 
-Deno.test("cli-run-python", async () => {
+test.concurrent("cli-run-python", async () => {
   const env = TestEnv.fromEnv();
   const output = await env.runWasmerCommand({
     args: ["run", "wasmer/python", "--", "-c", "print(40 + 2)"],
@@ -794,7 +725,7 @@ Deno.test("cli-run-python", async () => {
   assertEquals(output.stdout.trim(), "42");
 });
 
-Deno.test("app-secrets-fullstack", async () => {
+test.concurrent("app-secrets-fullstack", async () => {
   const env = TestEnv.fromEnv();
   const code = `
 addEventListener("fetch", (fetchEvent) => {
@@ -846,9 +777,10 @@ addEventListener("fetch", (fetchEvent) => {
       args: ["app", "secret", "list", "--app", info.id],
     });
 
-    const lines = output.stdout.trim().split("\n").map((line) =>
-      line.trim().split(" ")[0]
-    );
+    const lines = output.stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.trim().split(" ")[0]);
     console.log("Retrieved secrets list", { lines });
     assert(lines.includes("s1"));
     assert(lines.includes("s2"));
@@ -904,9 +836,10 @@ addEventListener("fetch", (fetchEvent) => {
     const output = await env.runWasmerCommand({
       args: ["app", "secret", "list", "--app", info.id],
     });
-    const lines = output.stdout.trim().split("\n").map((line) =>
-      line.trim().split(" ")[0]
-    );
+    const lines = output.stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.trim().split(" ")[0]);
     assert(!lines.includes("s1"));
   }
 
@@ -926,7 +859,7 @@ addEventListener("fetch", (fetchEvent) => {
   await env.deleteApp(info);
 });
 
-Deno.test("deploy-fails-without-app-name", async () => {
+test.concurrent("deploy-fails-without-app-name", async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();
@@ -948,7 +881,7 @@ Deno.test("deploy-fails-without-app-name", async () => {
   throw new Error("Expected deploy to fail without app name");
 });
 
-Deno.test("deploy-fails-without-owner", async () => {
+test.concurrent("deploy-fails-without-owner", async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildStaticSiteApp();

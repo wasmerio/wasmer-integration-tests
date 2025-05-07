@@ -1,9 +1,8 @@
-import { assert } from "jsr:@std/assert";
-
-import { buildStaticSiteApp, sleep, TestEnv } from "../../src/index.ts";
+import { buildStaticSiteApp, sleep, TestEnv } from "../../src/index";
+import { assert } from "../../src/testing_tools";
 
 // Test that blackholed apps do not serve DNS records anymore.
-Deno.test("app-ban-blackholed", async () => {
+test.concurrent("app-ban-blackholed", async () => {
   const spec = buildStaticSiteApp();
 
   // Enable debug mode to allow for instance ID and instance purging.
@@ -11,17 +10,21 @@ Deno.test("app-ban-blackholed", async () => {
 
   const env = TestEnv.fromEnv();
   const info = await env.deployApp(spec);
-  const domain = (new URL(info.url)).host;
+  const domain = new URL(info.url).host;
 
   const ips = await env.resolveAppDns(info);
-  assert(ips.a.length > 0, "No IPs found for app URL");
+  expect(ips.a.length).toBeGreaterThan(0)
 
   // Now blackhole-ban the app.
   console.log("Banning app through backend API...");
-  await env.backend.banApp({ appId: info.id, reason: "test", blackhole: true });
+  const appId = await env.backend.banApp({
+    appId: info.id,
+    reason: "test",
+    blackhole: true,
+  });
+  expect(appId).toBeTruthy()
 
   // Wait for the app to be blackholed.
-
   console.log("waiting for Edge server to stop serving DNS records...");
 
   const start = Date.now();

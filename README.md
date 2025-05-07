@@ -5,21 +5,36 @@ CLI, the backend and Edge.
 
 ## Running tests
 
-The tests are written in Typescript, and use the `deno` test runner.
+The tests are written in Typescript, and use the `jest` test runner.
 
-Follow the
-[Deno installation docs](https://docs.deno.com/runtime/fundamentals/installation/)
-to install deno on your system.
+## Prerequisites
 
-- Run all tests: `deno test --allow-all .`
-- Run specific test(s), filtered by name:
-  `deno test --allow-all --filter <TEST-NAME> .`
+You need `npm`, `node` and `pnpm`.
 
-Use the `--parallel` flag to run multiple tests in parallel. By default, this
-will run tests with a concurrency of local CPU cores. You can use the
-`DENO_JOBS` environment variable to control the number of parallel tests..
+1.  **Install Node.js and npm**: pnpm requires Node.js to run. If Node.js is not installed on your system, download and install it from the official Node.js website: [https://nodejs.org/](https://nodejs.org/).
 
-For example: `DENO_JOBS=8 deno test --allow-all --parallel .`
+2.  **Verify Node.js and npm installation**: Open your terminal and verify the installation with the following commands:
+
+    ```
+    node -v
+    npm -v
+    ```
+
+3.  **Install pnpm**:
+    Run the following command to install pnpm globally:
+
+    ```
+    npm install -g pnpm@10
+    ```
+
+4.  **Verify pnpm installation**:
+    Check the installed version of pnpm to ensure it has been installed correctly:
+
+    ```
+    pnpm -v
+    ```
+
+Validate it's OK by running `make setup`
 
 ### Test target environment
 
@@ -88,8 +103,8 @@ example `volumes.test.ts`).
 ### Test example, with comments:
 
 ```
-// Register a test with the Deno test runner.
-Deno.test('app-create-from-package', async () => {
+// Register a test with the test runner.
+test('app-create-from-package', async () => {
   // Determine the test environment.
   const env = TestEnv.fromEnv();
 

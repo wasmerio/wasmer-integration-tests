@@ -1,8 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
-import * as toml from "jsr:@std/toml";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as toml from "@iarna/toml";
 
-import { createTempDir, Path } from "./fs.ts";
+import { createTempDir, Path } from "./fs";
 
 /// Copy a package directory to a new location and remove package name/version
 /// from wasmer.toml.
@@ -16,10 +16,7 @@ export async function copyPackageAnonymous(
   if (!dest) {
     dest = await createTempDir();
   }
-  await fs.promises.cp(src, dest);
-  const sourcename = path.basename(src);
-  dest = path.join(dest, sourcename);
-
+  await fs.promises.cp(src, dest, { recursive: true });
   const wasmerTomlPath = path.join(dest, "wasmer.toml");
   const tomlContents = await fs.promises.readFile(wasmerTomlPath, "utf-8");
   const manifest = toml.parse(tomlContents);

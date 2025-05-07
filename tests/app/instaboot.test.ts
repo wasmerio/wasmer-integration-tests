@@ -1,5 +1,3 @@
-import { assert, assertEquals } from "jsr:@std/assert";
-
 import {
   AppDefinition,
   EDGE_HEADER_JOURNAL_STATUS,
@@ -7,7 +5,8 @@ import {
   randomAppName,
   sleep,
   TestEnv,
-} from "../../src/index.ts";
+} from "../../src/index";
+import { assert, assertEquals } from "../../src/testing_tools";
 
 function buildPhpInstabootTimestampApp(): AppDefinition {
   const phpCode = `
@@ -47,16 +46,18 @@ router();
       fs: {
         "/src": "src",
       },
-      command: [{
-        name: "app",
-        module: "php/php:php",
-        runner: "https://webc.org/runner/wasi",
-        annotations: {
-          wasi: {
-            "main-args": ["-S", "localhost:8080", "/src/index.php"],
+      command: [
+        {
+          name: "app",
+          module: "php/php:php",
+          runner: "https://webc.org/runner/wasi",
+          annotations: {
+            wasi: {
+              "main-args": ["-S", "localhost:8080", "/src/index.php"],
+            },
           },
         },
-      }],
+      ],
     },
     appYaml: {
       kind: "wasmer.io/App.v0",
@@ -65,14 +66,12 @@ router();
       debug: true,
       capabilities: {
         instaboot: {
-          requests: [
-            { path: "/" },
-          ],
+          requests: [{ path: "/" }],
         },
       },
     },
     files: {
-      "src": {
+      src: {
         "index.php": phpCode,
       },
     },
@@ -85,7 +84,7 @@ router();
 ///
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
-Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
+test.skip("app-cache-purge-instaboot-php", async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildPhpInstabootTimestampApp();
@@ -139,7 +138,7 @@ Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test("instaboot-max-age", { ignore: true }, async () => {
+test.skip("instaboot-max-age", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities!.instaboot!.max_age = "5s";

@@ -1,11 +1,10 @@
 import * as path from "node:path";
-import os from "node:os";
-import fs from "node:fs";
+import * as os from "node:os";
+import * as fs from "node:fs";
+import * as toml from "@iarna/toml";
 import { env } from "node:process";
-import * as toml from "jsr:@std/toml";
-
 import { z } from "zod";
-import { Path } from "./fs.ts";
+import { Path } from "./fs";
 
 // The global wasmer config file.
 export interface WasmerConfig {
@@ -19,8 +18,8 @@ export interface WasmerConfig {
 export function loadWasmerConfig(): WasmerConfig {
   const wasmer_dir = env.WASMER_DIR ?? path.join(os.homedir(), ".wasmer");
   const p = path.join(wasmer_dir, "wasmer.toml");
-  const contents = fs.readFileSync(p, "utf-8");
-  const data = toml.parse(contents);
+  const conte = fs.readFileSync(p, "utf-8");
+  const data = toml.parse(conte);
   return data;
 }
 
@@ -34,7 +33,7 @@ export interface DeployOutput {
   path: Path;
 }
 
-const deployOutputSchema = z.object({
+const deployOutpchema = z.object({
   json_config: z.string(),
   id: z.string(),
   app: z.object({
@@ -46,7 +45,7 @@ const deployOutputSchema = z.object({
 });
 
 export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
-  const parsedData = deployOutputSchema.parse(JSON.parse(stdout));
+  const parsedData = deployOutpchema.parse(JSON.parse(stdout));
 
   const jsonConfig = JSON.parse(parsedData.json_config);
   const fullName = jsonConfig?.meta?.name;
@@ -56,7 +55,7 @@ export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
     );
   }
 
-  const [_owner, name] = fullName.split("/");
+  const [, name] = fullName.split("/");
 
   return {
     name,

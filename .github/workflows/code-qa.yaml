@@ -27,12 +27,16 @@ jobs:
       - name: Clone repository
         uses: actions/checkout@v4
 
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
+      - name: Add pnpm
+        uses: pnpm/action-setup@v4
         with:
-          deno-version: v2.x
+          version: 10
 
-      - name: Format & fail on changes
+      - name: Setup project
+        shell: bash
+        run: make setup
+
+      - name: Check prettier
         run: |
           make fmt-check
 
@@ -44,11 +48,15 @@ jobs:
       - name: Clone repository
         uses: actions/checkout@v4
 
-      - name: Install Deno
-        uses: denoland/setup-deno@v2
+      - name: Add pnpm
+        uses: pnpm/action-setup@v4
         with:
-          deno-version: v2.x
+          version: 10
 
-      - name: Run deno lint
+      - name: Setup project
+        shell: bash
+        run: make setup
+
+      - name: Check tsc and eslint
         run: |
           make check

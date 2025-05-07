@@ -10,10 +10,13 @@ runs:
   using: "composite"
   steps:
     - uses: wasmerio/setup-wasmer@v2
-    - name: Install Deno
-      uses: denoland/setup-deno@v2
+    - name: Add pnpm
+      uses: pnpm/action-setup@v4
       with:
-        deno-version: v2.2
+        version: 10
+    - name: Setup jest
+      shell: bash
+      run: make setup
     - uses: actions/download-artifact@v4
       if: inputs.fetch_artifact != ''
       with:

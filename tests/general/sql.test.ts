@@ -1,11 +1,13 @@
-import { assertEquals } from "jsr:@std/assert/equals";
-import { assertNotEquals } from "jsr:@std/assert/not-equals";
-import { assertStringIncludes } from "jsr:@std/assert/string-includes";
-import { TestEnv } from "../../src/env.ts";
-import { buildPhpApp } from "../../src/index.ts";
-import fs from "node:fs";
+import { TestEnv } from "../../src/env";
+import { buildPhpApp } from "../../src/index";
+import * as fs from "node:fs";
+import {
+  assertEquals,
+  assertNotEquals,
+  assertStringIncludes,
+} from "../../src/testing_tools";
 
-Deno.test("sql-connectivity", async () => {
+test.concurrent("sql-connectivity", async () => {
   const env = TestEnv.fromEnv();
   const filePath = "./fixtures/php/mysql-check.php";
   const testCode = await fs.promises.readFile(filePath, "utf-8");

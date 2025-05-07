@@ -1,8 +1,8 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
-import { assertEquals } from "jsr:@std/assert";
 
-import { buildStaticSiteApp, TestEnv } from "../src/index.ts";
+import { buildStaticSiteApp, TestEnv } from "../src/index";
+import assertEquals from "node:assert/strict";
 
 async function updateStaticSiteLoop() {
   const env = TestEnv.fromEnv();

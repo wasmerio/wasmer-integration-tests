@@ -1,9 +1,10 @@
 // Volume tests
-import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
 import * as path from "node:path";
 
-import { copyPackageAnonymous } from "../../src/package.ts";
-import { randomAppName } from "../../src/app/construct.ts";
+import { assertEquals, assert, assertNotEquals } from "../../src/testing_tools";
+
+import { copyPackageAnonymous } from "../../src/package";
+import { randomAppName } from "../../src/app/construct";
 
 import {
   AppDefinition,
@@ -12,11 +13,9 @@ import {
   TestEnv,
   wasmopticonDir,
   writeAppDefinition,
-} from "../../src/index.ts";
+} from "../../src/index";
 
-Deno.test("app-volumes", {
-  sanitizeResources: false,
-}, async () => {
+test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(
@@ -76,9 +75,7 @@ Deno.test("app-volumes", {
 });
 
 // Test that a volume can be mounted inside a directory mounted from a package.
-Deno.test("volume-mount-inside-package-dir", {
-  sanitizeResources: false,
-}, async () => {
+test("volume-mount-inside-package-dir", async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(
@@ -128,7 +125,7 @@ Deno.test("volume-mount-inside-package-dir", {
     assertEquals(body, file1Content);
     const id = resp.headers.get(HEADER_INSTANCE_ID);
     assert(id);
-    firstInstanceId = id;
+    firstInstanceId = id!;
   }
   assert(firstInstanceId);
 

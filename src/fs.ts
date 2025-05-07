@@ -1,10 +1,12 @@
-import path from "node:path";
-import fs from "node:fs";
-import os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
+import * as os from "node:os";
 
 export type Path = string;
 
-export interface DirEntry extends Record<Path, string | DirEntry> {}
+export interface DirEntry extends Record<Path, string | DirEntry> {
+  [key: Path]: string | DirEntry;
+}
 
 // Build a file system directory from the provided directory tree.
 export async function buildDir(path: Path, files: DirEntry): Promise<void> {
