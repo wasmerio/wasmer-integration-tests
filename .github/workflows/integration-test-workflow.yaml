@@ -54,11 +54,14 @@ jobs:
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
   job-tests:
@@ -89,11 +92,14 @@ jobs:
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
           curl -X POST \
             -H 'Content-type: application/json' \
-          --data '{"text":"Integration tests for jobs failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Integration tests for Jobs failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
   wp-tests:
@@ -121,11 +127,14 @@ jobs:
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"WordPress integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Integration tests for WordPress failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
   autobuild-tests:
@@ -152,9 +161,12 @@ jobs:
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure() && env.TEST_FAILURE_WEBHOOK != ''
         run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data '{"text":"Autobuild integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data "{\"text\":\"Integration tests for Autobuild failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
