@@ -85,7 +85,7 @@ router();
 ///
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
-Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
+test.skip("app-cache-purge-instaboot-php", async () => {
   const env = TestEnv.fromEnv();
 
   const spec = buildPhpInstabootTimestampApp();
@@ -139,7 +139,7 @@ Deno.test("app-cache-purge-instaboot-php", { ignore: true }, async () => {
 /// Uses a PHP app that creates a timestamp file during instaboot, and
 /// then returns that timestamp value in responses.
 ///
-Deno.test("instaboot-max-age", { ignore: true }, async () => {
+test.skip("instaboot-max-age", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildPhpInstabootTimestampApp();
   spec.appYaml.capabilities!.instaboot!.max_age = "5s";

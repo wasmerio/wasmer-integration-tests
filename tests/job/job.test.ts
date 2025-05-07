@@ -9,12 +9,11 @@ import {
   TestEnv,
 } from "../../src/index.ts";
 import { LogSniff } from "../../src/log.ts";
-import { stringify } from "jsr:@std/yaml";
 
 const SECOND = 1000;
 
 async function performTest(
-  t: Deno.TestContext,
+  t: TestContext,
   jobs: AppJob[],
   logValidationStr: string,
   timeoutSec: number,
@@ -57,9 +56,8 @@ async function performTest(
   });
 }
 
-Deno.test(
+test.skip(
   "Logvalidation - Http job: post-deployment",
-  { ignore: true },
   async (t) => {
     await performTest(
       t,
@@ -81,9 +79,8 @@ Deno.test(
   },
 );
 
-Deno.test(
+test.skip(
   "Logvalidation - Exec job: post-deployment",
-  { ignore: true },
   async (t) => {
     await performTest(
       t,
@@ -136,9 +133,8 @@ async function cronjobTest(
   );
 }
 
-Deno.test(
+test.skip(
   "Logvalidation - Http cronjob: every minute",
-  { ignore: true },
   async (t) => {
     await cronjobTest(t, randomAppName(), {
       fetch: {
@@ -149,9 +145,8 @@ Deno.test(
   },
 );
 
-Deno.test(
+test.skip(
   "Logvalidation - Exec cronjob: every minute",
-  { ignore: true },
   async (t) => {
     await cronjobTest(t, randomAppName(), {
       execute: {

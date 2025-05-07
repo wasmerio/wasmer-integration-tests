@@ -68,7 +68,7 @@ function updateAppYaml(env: TestEnv): AppYaml {
  * into cache. Instead, we reverse it and use wordpress as a submodule, update app.yaml
  * and then deploy. Since we update app.yaml, we still control app ID, secrets etc.
  */
-Deno.test("app-wordpress", {}, async (t) => {
+test("app-wordpress", {}, async (t) => {
   const env = TestEnv.fromEnv();
   // NOTE: Instead of setting up app.yaml/deployment manually, use wordpress as submodule
   // This might force resetting the repo on local runs

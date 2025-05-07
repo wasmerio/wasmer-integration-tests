@@ -5,7 +5,7 @@ import { TestEnv } from "../../src/env.ts";
 import { buildPhpApp } from "../../src/index.ts";
 import fs from "node:fs";
 
-Deno.test("sql-connectivity", async () => {
+test("sql-connectivity", async () => {
   const env = TestEnv.fromEnv();
   const filePath = "./fixtures/php/mysql-check.php";
   const testCode = await fs.promises.readFile(filePath, "utf-8");

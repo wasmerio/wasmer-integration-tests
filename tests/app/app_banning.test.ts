@@ -1,9 +1,9 @@
-import { assert } from "jsr:@std/assert";
-
 import { buildStaticSiteApp, sleep, TestEnv } from "../../src/index.ts";
+import test from "node:test";
+import assert from "node:assert/strict"
 
 // Test that blackholed apps do not serve DNS records anymore.
-Deno.test("app-ban-blackholed", async () => {
+test("app-ban-blackholed", async () => {
   const spec = buildStaticSiteApp();
 
   // Enable debug mode to allow for instance ID and instance purging.

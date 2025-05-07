@@ -15,7 +15,7 @@ import {
   writeAppDefinition,
 } from "../../src/index.ts";
 
-Deno.test("app-volumes", async () => {
+test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(
@@ -74,7 +74,7 @@ Deno.test("app-volumes", async () => {
 });
 
 // Test that a volume can be mounted inside a directory mounted from a package.
-Deno.test("volume-mount-inside-package-dir", async () => {
+test("volume-mount-inside-package-dir", async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(

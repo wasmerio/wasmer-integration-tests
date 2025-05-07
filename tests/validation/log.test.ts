@@ -10,7 +10,7 @@ import {
   TestEnv,
 } from "../../src/index.ts";
 
-Deno.test(
+test(
   "Log test: Check fetch is logged on simple logging app",
   {},
   async (t) => {
@@ -43,7 +43,7 @@ Deno.test(
   },
 );
 
-Deno.test("Unittest: countSubstrings", async (t) => {
+test("Unittest: countSubstrings", async (t) => {
   await t.step("counts single occurrence", () => {
     assertEquals(countSubstrings("hello world", "world"), 1);
   });

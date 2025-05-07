@@ -88,8 +88,8 @@ example `volumes.test.ts`).
 ### Test example, with comments:
 
 ```
-// Register a test with the Deno test runner.
-Deno.test('app-create-from-package', async () => {
+// Register a test with the test runner.
+test('app-create-from-package', async () => {
   // Determine the test environment.
   const env = TestEnv.fromEnv();
 
