@@ -1,7 +1,7 @@
 name: Integration Test Workflow
 
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.ref }}-${{ inputs.registry }}
   cancel-in-progress: true
 
 on:
@@ -16,6 +16,11 @@ on:
         type: string
         description: "Checkout a specific branch of the integration tests"
         default: "main"
+      registry:
+        required: false
+        type: string
+        description: Which registry to target, which also choses which environment to test
+        default: wasmer.wtf
     secrets:
       token:
         required: true
@@ -43,7 +48,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: deno test --allow-all --parallel --quiet ./tests/general/
       - name: Notify failure in Slack
@@ -73,7 +78,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           # Run test which only passes if logging works
@@ -108,7 +113,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
@@ -140,7 +145,7 @@ jobs:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Test
         env:
-          WASMER_REGISTRY: https://registry.wasmer.wtf/graphql
+          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
           deno test --allow-all --parallel --quiet ./tests/autobuild

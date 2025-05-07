@@ -1,16 +1,21 @@
-name: Code QA
+name: Nightly Tests
 on:
+  push:
   schedule:
     - cron: "0 2 * * *"
 
-concurrency:
-  group: nightly
-  cancel-in-progress: true
-
 jobs:
-  tests:
+  dev-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
+  prod-environment:
+    uses: ./.github/workflows/integration-test-workflow.yaml
+    with:
+      test_branch: ${{ github.head_ref }}
+      registry: wasmer.io
+    secrets:
+      token: ${{ secrets.WAPM_PROD_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_DEV_SRE_WEBHOOK }}
