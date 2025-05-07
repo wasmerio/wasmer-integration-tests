@@ -1,3 +1,4 @@
+import { fail } from "node:assert";
 import {
   AppInfo,
   AppYaml,
@@ -76,9 +77,12 @@ Deno.test("app-wordpress", {}, async (t) => {
   let appInfo: AppInfo;
   const logSniff = new LogSniff(env);
 
-  await t.step("deploy", async () => {
+  const ok = await t.step("deploy", async () => {
     appInfo = await env.deployAppDir("./");
   });
+  if (!ok) {
+    fail();
+  }
 
   await t.step("validate deployment", async () => {
     await logSniff.assertLogsWithin(
@@ -91,4 +95,5 @@ Deno.test("app-wordpress", {}, async (t) => {
   console.log("Validating app: ", appInfo!.url);
 
   await validateWordpressIsLive(t, appInfo!.url, env);
+  await env.deleteApp(appInfo!);
 });
