@@ -720,48 +720,6 @@ Deno.test("package-download-unnamed", async () => {
   );
 });
 
-// async fn test_publish() {
-//     let dir = TempDir::new().unwrap().into_path();
-//     // registry requires package names to start with non number
-//     let name = format!("a{}", Uuid::new_v4().to_string());
-//     write(
-//         dir.join("wasmer.toml"),
-//         format!(
-//             r#"
-// [package]
-// name = "wasmer-integration-tests/{name}"
-// version = "0.1.0"
-// [dependencies]
-// "wasmer/python" = "3"
-//     "#
-//         ),
-//     )
-//     .unwrap();
-//
-//     assert!(Command::new("wasmer")
-//         .args(["publish"])
-//         .current_dir(&dir)
-//         .status()
-//         .unwrap()
-//         .success());
-//     let output = String::from_utf8(
-//         Command::new("wasmer")
-//             .args([
-//                 "run",
-//                 &format!("wasmer-integration-tests/{name}"),
-//                 "--",
-//                 "-c",
-//                 "print('Hello World!')",
-//             ])
-//             .current_dir(dir)
-//             .output()
-//             .unwrap()
-//             .stdout,
-//     )
-//     .unwrap();
-//     assert!(output.contains("Hello World!"), "output={output}");
-// }
-
 Deno.test("package-publish-and-run", async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
@@ -837,7 +795,6 @@ addEventListener("fetch", (fetchEvent) => {
   const info = await env.deployApp(spec, { noWait: true });
 
   // Create secrets.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "create", "--app", info.id, "s1", "v1"],
   });
@@ -900,7 +857,6 @@ addEventListener("fetch", (fetchEvent) => {
   }
 
   // Update a secret value.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "update", "--app", info.id, "s1", "v1-updated"],
   });
@@ -926,7 +882,6 @@ addEventListener("fetch", (fetchEvent) => {
   }
 
   // Delete a secret.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "delete", "--app", info.id, "s1"],
   });

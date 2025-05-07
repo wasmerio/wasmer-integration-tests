@@ -13,7 +13,6 @@ Deno.test("app-ban-blackholed", async () => {
   const info = await env.deployApp(spec);
   const domain = (new URL(info.url)).host;
 
-  const _res = await env.fetchApp(info, "/");
   const ips = await env.resolveAppDns(info);
   assert(ips.a.length > 0, "No IPs found for app URL");
 
