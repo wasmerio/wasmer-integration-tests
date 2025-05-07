@@ -19,7 +19,7 @@ export {
 } from "./app/construct.ts";
 export { LogSniff } from "./log.ts";
 export type { AppInfo } from "./backend.ts";
-export { buildPhpApp } from "./app/php.ts";
+export { buildPhpApp } from "./app/construct.ts";
 export {
   EDGE_HEADER_JOURNAL_STATUS,
   EDGE_HEADER_PURGE_INSTANCES,
