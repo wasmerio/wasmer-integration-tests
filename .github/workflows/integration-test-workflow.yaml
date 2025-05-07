@@ -170,3 +170,37 @@ jobs:
             -H 'Content-type: application/json' \
             --data "{\"text\":\"Integration tests for Autobuild failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
+
+  app-deployment-tests:
+    name: Run app deployment tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
+          submodules: true
+      - uses: ./.github/actions/setup-test-env
+        with:
+          fetch_artifact: ${{ inputs.fetch_artifact }}
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
+          WASMER_TOKEN: ${{ secrets.token }}
+        run: |
+          deno test --allow-all --parallel --quiet ./tests/deploy
+      - name: Notify failure in Slack
+        env:
+          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "{\"text\":\"Integration tests for App Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            ${TEST_FAILURE_WEBHOOK}

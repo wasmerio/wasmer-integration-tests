@@ -9,12 +9,12 @@ jobs:
     with:
       test_branch: ${{ github.head_ref }}
     secrets:
-      token: ${{ secrets.WAPM_DEV_TOKEN }}
+      token: ${{ secrets.WASMER_DEV_TOKEN }}
   prod-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
       registry: wasmer.io
     secrets:
-      token: ${{ secrets.WAPM_PROD_TOKEN }}
+      token: ${{ secrets.WASMER_PROD_TOKEN }}
       test_failure_webhook: ${{ secrets.SLACK_DEV_SRE_WEBHOOK }}
