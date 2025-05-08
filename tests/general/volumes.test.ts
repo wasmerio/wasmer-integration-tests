@@ -1,5 +1,4 @@
 // Volume tests
-
 import { assert, assertEquals, assertNotEquals } from "jsr:@std/assert";
 import * as path from "node:path";
 
@@ -15,7 +14,9 @@ import {
   writeAppDefinition,
 } from "../../src/index.ts";
 
-Deno.test("app-volumes", async () => {
+Deno.test("app-volumes", {
+  sanitizeResources: false,
+}, async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(
@@ -71,10 +72,13 @@ Deno.test("app-volumes", async () => {
     const body = await resp.text();
     assertEquals(body, file1Content);
   }
+  await env.deleteApp(info);
 });
 
 // Test that a volume can be mounted inside a directory mounted from a package.
-Deno.test("volume-mount-inside-package-dir", async () => {
+Deno.test("volume-mount-inside-package-dir", {
+  sanitizeResources: false,
+}, async () => {
   const env = TestEnv.fromEnv();
 
   const rootPackageDir = path.join(
@@ -144,4 +148,5 @@ Deno.test("volume-mount-inside-package-dir", async () => {
     // Make sure the response was served from a different instance.
     assertNotEquals(firstInstanceId, secondInstanceId);
   }
+  await env.deleteApp(info);
 });

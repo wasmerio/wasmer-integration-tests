@@ -1,0 +1,51 @@
+name: Deployment Superpanic Tests
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  app-deployment-tests:
+    name: Run app deployment tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: main
+          submodules: true
+      - uses: ./.github/actions/setup-test-env
+        with:
+          fetch_artifact: ${{ inputs.fetch_artifact }}
+      - name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.io/graphql
+          WASMER_TOKEN: ${{ secrets.WASMER_PROD_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          deno test --allow-all --parallel --quiet ./tests/deploy
+          # If we reach here, we can assume tests pass
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"ok\", \"title\":\"Deployment Superpanic\"}" \
+              ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
+      - name: Notify failure in Slack
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: failure()
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "{\"text\":\"Superpanic Deployments tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            ${{ secrets.SLACK_DEV_SRE_WEBHOOK }}
+
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"alerting\", \"title\":\"Deployment Superpanic\"}" \
+            ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}

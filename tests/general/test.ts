@@ -101,6 +101,7 @@ Deno.test("app-purge-instances", async () => {
     );
   }
   assertEquals(instanceId3, instanceId4);
+  await env.deleteApp(info);
 });
 
 // Test app auto https redirect functionality.
@@ -137,6 +138,7 @@ Deno.test("app-https-redirect", async () => {
   );
   console.log(await res2.text());
   assertEquals(res2.status, 200);
+  await env.deleteApp(info);
 });
 
 // TODO: fix CGI!
@@ -184,6 +186,7 @@ print("\r")
   const res = await env.fetchApp(info, "/");
   const body = await res.text();
   assertEquals(body.trim(), "<html><body><h1>Hello, World!</h1></body></html>");
+  await env.deleteApp(info);
 });
 
 Deno.test("app-winterjs", async () => {
@@ -228,6 +231,7 @@ addEventListener('fetch', (req) => {
   const body = await res.text();
 
   assertEquals(body, "Hello World!");
+  await env.deleteApp(info);
 });
 
 Deno.test("app-php", async () => {
@@ -270,6 +274,7 @@ echo $_GET["name"];
   const res = await env.fetchApp(info, "/?name=world");
   const body = await res.text();
   assertEquals(body.trim(), "world");
+  await env.deleteApp(info);
 });
 
 Deno.test("app-rust-axum", { ignore: true }, async () => {
@@ -286,6 +291,7 @@ Deno.test("app-rust-axum", { ignore: true }, async () => {
   const res = await env.fetchApp(info, "/?name=world");
   const body = await res.text();
   assertEquals(body.trim(), '{"name": "world"}');
+  await env.deleteApp(info);
 });
 
 Deno.test("recreate-app-with-same-name", async () => {
@@ -309,6 +315,7 @@ Deno.test("recreate-app-with-same-name", async () => {
   const res2 = await env.fetchApp(info2, "/");
   const body2 = await res2.text();
   assertEquals(body2, "version BETA");
+  await env.deleteApp(info);
 });
 
 Deno.test("app-listing", async () => {
@@ -343,6 +350,7 @@ Deno.test("app-listing", async () => {
     throw new Error(`App not found in listing: ${info.version.name}`);
   }
   console.log("App found in listing:", { app: foundApp });
+  await env.deleteApp(info);
 });
 
 // Create an app, delete it again and ensure that the app is not accessible
@@ -387,6 +395,7 @@ Deno.test("app-delete", { ignore: true }, async () => {
       await sleep(10_000);
     }
   }
+  await env.deleteApp(info);
 });
 
 Deno.test("app-info-get", async () => {
@@ -416,6 +425,7 @@ Deno.test("app-info-get", async () => {
   const json = JSON.parse(output2.stdout);
   assertEquals(json.name, info.version.name);
   assertEquals(json.url, expectedUrl);
+  await env.deleteApp(info);
 });
 
 Deno.test("app-create-from-package", async () => {
@@ -480,6 +490,7 @@ runner = "https://webc.org/runner/wasi"
   const res = await env.fetchApp(info, "/");
   const body = await res.text();
   assertEquals(body.trim(), name);
+  await env.deleteApp(info);
 });
 
 Deno.test("app-update-multiple-times", async () => {
@@ -498,6 +509,7 @@ Deno.test("app-update-multiple-times", async () => {
     const body = await res.text();
     assertEquals(body.trim(), content);
   }
+  await env.deleteApp(info1);
 });
 
 Deno.test("app-logs", async () => {
@@ -530,6 +542,7 @@ addEventListener("fetch", (fetchEvent) => {
       }
     }
   }
+  await env.deleteApp(info);
 });
 
 Deno.test("dns-zonefile", async () => {
@@ -720,48 +733,6 @@ Deno.test("package-download-unnamed", async () => {
   );
 });
 
-// async fn test_publish() {
-//     let dir = TempDir::new().unwrap().into_path();
-//     // registry requires package names to start with non number
-//     let name = format!("a{}", Uuid::new_v4().to_string());
-//     write(
-//         dir.join("wasmer.toml"),
-//         format!(
-//             r#"
-// [package]
-// name = "wasmer-integration-tests/{name}"
-// version = "0.1.0"
-// [dependencies]
-// "wasmer/python" = "3"
-//     "#
-//         ),
-//     )
-//     .unwrap();
-//
-//     assert!(Command::new("wasmer")
-//         .args(["publish"])
-//         .current_dir(&dir)
-//         .status()
-//         .unwrap()
-//         .success());
-//     let output = String::from_utf8(
-//         Command::new("wasmer")
-//             .args([
-//                 "run",
-//                 &format!("wasmer-integration-tests/{name}"),
-//                 "--",
-//                 "-c",
-//                 "print('Hello World!')",
-//             ])
-//             .current_dir(dir)
-//             .output()
-//             .unwrap()
-//             .stdout,
-//     )
-//     .unwrap();
-//     assert!(output.contains("Hello World!"), "output={output}");
-// }
-
 Deno.test("package-publish-and-run", async () => {
   const env = TestEnv.fromEnv();
   const name = randomAppName();
@@ -837,7 +808,6 @@ addEventListener("fetch", (fetchEvent) => {
   const info = await env.deployApp(spec, { noWait: true });
 
   // Create secrets.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "create", "--app", info.id, "s1", "v1"],
   });
@@ -900,7 +870,6 @@ addEventListener("fetch", (fetchEvent) => {
   }
 
   // Update a secret value.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "update", "--app", info.id, "s1", "v1-updated"],
   });
@@ -926,7 +895,6 @@ addEventListener("fetch", (fetchEvent) => {
   }
 
   // Delete a secret.
-
   await env.runWasmerCommand({
     args: ["app", "secret", "delete", "--app", info.id, "s1"],
   });
@@ -955,6 +923,7 @@ addEventListener("fetch", (fetchEvent) => {
     assertEquals(data.env["slong"], valueLong);
     assertEquals(data.env["s1"], undefined);
   }
+  await env.deleteApp(info);
 });
 
 Deno.test("deploy-fails-without-app-name", async () => {

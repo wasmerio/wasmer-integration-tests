@@ -160,7 +160,6 @@ addEventListener("fetch", (fetchEvent) => {
       },
       fs: {
         "/src": "src",
-        // "/settings": "settings",
       },
       command: [{
         name: "script",
@@ -181,6 +180,83 @@ addEventListener("fetch", (fetchEvent) => {
     files: {
       "src": {
         "index.js": code,
+      },
+    },
+  };
+}
+
+export const DEFAULT_APP_YAML = {
+  kind: "wasmer.io/App.v0",
+  name: randomAppName(),
+  package: ".",
+};
+export function buildPhpApp(
+  phpCode: string,
+  additionalAppYamlSettings?: Record<string, unknown>,
+): AppDefinition {
+  const spec: AppDefinition = {
+    wasmerToml: {
+      dependencies: {
+        "php/php": "8.*",
+      },
+      fs: {
+        "/src": "src",
+      },
+      command: [{
+        name: "app",
+        module: "php/php:php",
+        runner: "https://webc.org/runner/wasi",
+        annotations: {
+          wasi: {
+            "main-args": ["-S", "localhost:8080", "/src/index.php"],
+          },
+        },
+      }],
+    },
+    appYaml: AppYaml.parse({
+      ...DEFAULT_APP_YAML,
+      ...additionalAppYamlSettings,
+    }),
+    files: {
+      "src": {
+        "index.php": phpCode,
+      },
+    },
+  };
+
+  return spec;
+}
+
+export function buildPythonApp(
+  pyCode: string,
+  additionalAppYamlSettings?: Record<string, unknown>,
+): AppDefinition & { files: { "src": { "main.py": string } } } {
+  return {
+    wasmerToml: {
+      dependencies: {
+        "wasmer/python": "^3.12.6",
+      },
+      fs: {
+        "/src": "src",
+      },
+      command: [{
+        name: "script",
+        module: "wasmer/python:python",
+        runner: "https://webc.org/runner/wasi",
+        annotations: {
+          wasi: {
+            "main-args": ["/src/main.py"],
+          },
+        },
+      }],
+    },
+    appYaml: AppYaml.parse({
+      ...DEFAULT_APP_YAML,
+      ...additionalAppYamlSettings,
+    }),
+    files: {
+      "src": {
+        "main.py": pyCode,
       },
     },
   };
