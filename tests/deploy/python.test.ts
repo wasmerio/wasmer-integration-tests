@@ -13,8 +13,14 @@ Deno.test("deploy python app", {
   testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
   const app = buildPythonApp(testCode);
   const appInfo = await env.deployApp(app);
-  const res = await env.fetchApp(appInfo, "ping");
+
+  const uniquePing = Math.random();
+  const res = await env.fetchApp(appInfo, `${uniquePing}`);
   const gotJson = await res.json();
-  assertStringIncludes(gotJson.echo, "ping", "Expected ping from echo server");
+  assertStringIncludes(
+    gotJson.echo,
+    `${uniquePing}`,
+    `Expected ${uniquePing} from echo server`,
+  );
   await env.deleteApp(appInfo);
 });
