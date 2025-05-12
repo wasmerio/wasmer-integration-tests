@@ -315,7 +315,7 @@ Deno.test("recreate-app-with-same-name", async () => {
   const res2 = await env.fetchApp(info2, "/");
   const body2 = await res2.text();
   assertEquals(body2, "version BETA");
-  await env.deleteApp(info);
+  await env.deleteApp(info2);
 });
 
 Deno.test("app-listing", async () => {
