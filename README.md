@@ -108,7 +108,7 @@ test('app-create-from-package', async () => {
   // Determine the test environment.
   const env = TestEnv.fromEnv();
 
-  // An app definition is a structured object that describes app configration
+  // An app definition is a structured object that describes app configuration
   // with an optional package definition.
   // This can be created and deployed with TestEnv.deployApp().
   const spec: AppDefinition = {
@@ -143,15 +143,14 @@ test('app-create-from-package', async () => {
     }
   };
 
-
   // Create a directory with the package contents and app.yaml.
   // Then use the `wasmer deploy` command to deploy the app.
   const info = await env.deployApp(spec);
 
   // Send an HTTP request to the app running on Edge
-  // `fetchApp` is the same as the regular Javascript `fetch()`, but it
+  // `fetchApp` is the same as the regular Node.js `http` or `https` module, but it
   // ensures that requests are sent to the right target.
-  const res = await env.fetchApp(info, '/', {headers: {...})
+  const res = await env.fetchApp(info, '/', {headers: {...}})
   const body = await res.text();
 
   // Assert that the response is as expected.
@@ -161,14 +160,14 @@ test('app-create-from-package', async () => {
   // NOTE: you can use a full url instead of a path as well, in which case
   // the wrapper will make sure the request is sent to the Edge target server
   // if EDGE_SERVER is specified.
-  const res = await env.fetchApp(info, 'https://....', {headers: {...})
+  const res = await env.fetchApp(info, 'https://....', {headers: {...}})
 
   // You can also run custom wasmer CLI commands like this:
   // This will throw an exception if the command fails.
   const output = await env.runWasmerCommand({
     args: [...],
     // Use the app directory as the working directory.
-    cwd: info.dir
+    cwd: info.dir,
     env: {...},
   });
   assertEquals(output.stdout, 'my stdout...');
