@@ -14,10 +14,6 @@ test.concurrent("deploy python app", async () => {
   const uniquePing = Math.random();
   const res = await env.fetchApp(appInfo, `${uniquePing}`);
   const gotJson = (await res.json()) as { echo: string };
-  assertStringIncludes(
-    gotJson.echo,
-    `${uniquePing}`,
-    `Expected ${uniquePing} from echo server`,
-  );
+  expect(gotJson.echo).toBe(uniquePing)
   await env.deleteApp(appInfo);
 });
