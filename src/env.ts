@@ -504,7 +504,11 @@ subscription PublishAppFromRepoAutobuild(
         );
       }
 
-      resolver.setServers([edgeServerIps[0]]);
+      if (this.edgeServer) {
+        resolver.setServers([this.edgeServer])
+      } else {
+        resolver.setServers([edgeServerIps[0]]);
+      }
 
       const [a, aaaa] = await Promise.all([
         resolver.resolve4(domain).catch(() => []),
@@ -526,6 +530,13 @@ subscription PublishAppFromRepoAutobuild(
     options: AppFetchOptions = {},
   ): Promise<Response> {
     let url: string;
+    if (this.edgeServer) {
+      if (!options.headers) {
+        options.headers = {}
+      }
+      options.headers["host"] = url
+      url = this.edgeServer
+    }
     if (urlOrPath.startsWith("http")) {
       url = urlOrPath;
     } else {
@@ -543,6 +554,8 @@ subscription PublishAppFromRepoAutobuild(
     if (!options.redirect) {
       options.redirect = "manual";
     }
+
+
 
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;
