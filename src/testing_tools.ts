@@ -4,7 +4,7 @@ export function assert<T>(isOk: T, purpose?: string) {
       console.error("Failure:", purpose);
     }
   }
-  expect(isOk).toBe(true)
+  expect(isOk).toBe(true);
 }
 
 /**

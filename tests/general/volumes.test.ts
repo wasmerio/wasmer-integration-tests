@@ -1,7 +1,7 @@
 // Volume tests
 import * as path from "node:path";
 
-import { assertEquals, assert, assertNotEquals } from "../../src/testing_tools";
+import { assertEquals } from "../../src/testing_tools";
 
 import { copyPackageAnonymous } from "../../src/package";
 import { randomAppName } from "../../src/app/construct";
@@ -124,10 +124,10 @@ test("volume-mount-inside-package-dir", async () => {
     const body = await resp.text();
     assertEquals(body, file1Content);
     const id = resp.headers.get(HEADER_INSTANCE_ID);
-    assert(id);
+    expect(id).toBeTruthy();
     firstInstanceId = id!;
   }
-  assert(firstInstanceId);
+  expect(firstInstanceId).toBeTruthy();
 
   // Now read again, but force a fresh instance to make sure it wasn't just
   // stored in memory.
@@ -141,9 +141,9 @@ test("volume-mount-inside-package-dir", async () => {
     assertEquals(body, file1Content);
 
     const secondInstanceId = resp.headers.get(HEADER_INSTANCE_ID);
-    assert(secondInstanceId);
+    expect(secondInstanceId).toBeTruthy();
     // Make sure the response was served from a different instance.
-    assertNotEquals(firstInstanceId, secondInstanceId);
+    expect(firstInstanceId).not.toBe(secondInstanceId);
   }
   await env.deleteApp(info);
 });

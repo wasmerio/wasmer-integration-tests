@@ -505,7 +505,7 @@ subscription PublishAppFromRepoAutobuild(
       }
 
       if (this.edgeServer) {
-        resolver.setServers([this.edgeServer])
+        resolver.setServers([this.edgeServer]);
       } else {
         resolver.setServers([edgeServerIps[0]]);
       }
@@ -532,10 +532,10 @@ subscription PublishAppFromRepoAutobuild(
     let url: string;
     if (this.edgeServer) {
       if (!options.headers) {
-        options.headers = {}
+        options.headers = {};
       }
-      options.headers["host"] = url
-      url = this.edgeServer
+      options.headers["host"] = url;
+      url = this.edgeServer;
     }
     if (urlOrPath.startsWith("http")) {
       url = urlOrPath;
@@ -554,8 +554,6 @@ subscription PublishAppFromRepoAutobuild(
     if (!options.redirect) {
       options.redirect = "manual";
     }
-
-
 
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;

@@ -1,5 +1,4 @@
 import { buildStaticSiteApp, sleep, TestEnv } from "../../src/index";
-import { assert } from "../../src/testing_tools";
 
 // Test that blackholed apps do not serve DNS records anymore.
 test.concurrent("app-ban-blackholed", async () => {
@@ -13,7 +12,7 @@ test.concurrent("app-ban-blackholed", async () => {
   const domain = new URL(info.url).host;
 
   const ips = await env.resolveAppDns(info);
-  expect(ips.a.length).toBeGreaterThan(0)
+  expect(ips.a.length).toBeGreaterThan(0);
 
   // Now blackhole-ban the app.
   console.log("Banning app through backend API...");
@@ -22,7 +21,7 @@ test.concurrent("app-ban-blackholed", async () => {
     reason: "test",
     blackhole: true,
   });
-  expect(appId).toBeTruthy()
+  expect(appId).toBeTruthy();
 
   // Wait for the app to be blackholed.
   console.log("waiting for Edge server to stop serving DNS records...");
