@@ -3,10 +3,10 @@
 // Helper script to purge old apps from the test namespace.
 // This should be run periodically to keep the namespace clean.
 
-import { TestEnv } from "../src/env.ts";
-import { ApiAppsInNamespace } from "../src/backend.ts";
+import { TestEnv } from "../src/env";
+import { ApiAppsInNamespace } from "../src/backend";
 
-// Clean up all old apps created by tests.
+// Clean up all old apps created by te.
 async function purgeOldApps(
   env: TestEnv,
   minimumAgeSeconds: number = 60 * 15,

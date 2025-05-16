@@ -50,7 +50,7 @@ jobs:
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
-        run: deno test --allow-all --parallel --quiet ./tests/general/
+        run: npx jest ./tests/general/
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -84,11 +84,8 @@ jobs:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
-          # Run test which only passes if logging works
-          deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
-          # ... and then the tests which depend on logging for validation. Doesn't make any
-          # sense to run these if we know that logging doesn't work: just a waste of resources
-          deno test --allow-all --parallel --quiet ./tests/job
+          npx jest ./tests/validation/log.test.ts
+          npx jest ./tests/job
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -122,8 +119,8 @@ jobs:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
-          deno test --filter "Log test: Check fetch is logged on simple logging app" --allow-all --quiet
-          deno test --allow-all --parallel --quiet ./tests/wordpress
+          npx jest ./tests/validation/log.test.ts
+          npx jest ./tests/wordpress
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -157,7 +154,7 @@ jobs:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
-          deno test --allow-all --parallel --quiet ./tests/deploy
+          npx jest ./tests/deploy
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}

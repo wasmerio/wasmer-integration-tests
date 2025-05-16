@@ -17,7 +17,7 @@
             devShells.default = mkShell {
               buildInputs = [ deno ];
               shellHook = ''
-                alias test-all='deno test --allow-all --parallel'
+                alias test-all='npm run test'
                 echo "Run tests with: test-all"
               '';
             };

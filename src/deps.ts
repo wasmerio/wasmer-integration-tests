@@ -1,14 +1,21 @@
-import path from "node:path";
-import process from "node:process";
-import fs from "node:fs";
+import * as path from "path";
+import * as process from "process";
+import * as fs from "fs";
 
-import { exists } from "jsr:@std/fs";
+import { sleep } from "./util";
 
-import { sleep } from "./util.ts";
+import { ENV_VAR_WASMOPTICON_DIR } from "./env";
+import { spawn } from "child_process";
 
-import { ENV_VAR_WASMOPTICON_DIR } from "./env.ts";
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-// Path to the wasmopticon repo.
 export async function wasmopticonDir(): Promise<string> {
   const WASMOPTICON_GIT_URL = "https://github.com/wasix-org/wasmopticon.git";
   const dir = process.env[ENV_VAR_WASMOPTICON_DIR];
@@ -22,19 +29,14 @@ export async function wasmopticonDir(): Promise<string> {
     return dir;
   }
 
-  // No env var set, check the default location.
   const localDir = path.join(process.cwd(), "wasmopticon");
 
-  // Acquire a lock to prevent multiple concurrent clones.
   const lockPath = path.join(process.cwd(), "wasmopticon-clone.lock");
   while (true) {
     try {
       fs.promises.writeFile(lockPath, "", { flag: "wx" });
-      // Lock acquired, start cloning.
       break;
     } catch {
-      // Lock already exists.
-      // Wait a bit and try again.
       await sleep(1000);
     }
   }
@@ -43,7 +45,6 @@ export async function wasmopticonDir(): Promise<string> {
     await fs.promises.unlink(lockPath);
   };
 
-  // Lock acquired.
   if (await exists(localDir)) {
     await freeLock();
     return localDir;
@@ -52,13 +53,17 @@ export async function wasmopticonDir(): Promise<string> {
   console.log("wasmopticon dir not found");
   console.log(`Cloning ${WASMOPTICON_GIT_URL} to ${localDir}...`);
 
-  const cmd = new Deno.Command("git", {
-    args: ["clone", WASMOPTICON_GIT_URL, localDir],
+  await new Promise<void>((resolve, reject) => {
+    const cmd = spawn("git", ["clone", WASMOPTICON_GIT_URL, localDir]);
+    cmd.on("exit", (code: number) => {
+      if (code !== 0) {
+        reject(new Error(`Failed to clone wasmopticon: ${code}`));
+      } else {
+        resolve();
+      }
+    });
   });
-  const output = await cmd.output();
+
   await freeLock();
-  if (!output.success) {
-    throw new Error(`Failed to clone wasmopticon: ${output.code}`);
-  }
   return localDir;
 }

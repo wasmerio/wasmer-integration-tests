@@ -1,71 +1,62 @@
-import fs from "node:fs";
-import { assertEquals } from "jsr:@std/assert/equals";
-
-import { countSubstrings, LogSniff } from "../../src/log.ts";
+import * as fs from "fs/promises";
 import {
-  AppInfo,
-  buildPhpApp,
   randomAppName,
+  buildPhpApp,
+  LogSniff,
   SECOND,
   TestEnv,
-} from "../../src/index.ts";
+} from "../../src";
+import { countSubstrings } from "../../src/log";
 
-Deno.test(
-  "Log test: Check fetch is logged on simple logging app",
-  {},
-  async (t) => {
+describe("Log tests", () => {
+  it("Check fetch is logged on simple logging app", async () => {
     const filePath = "./fixtures/php/path-logger.php";
-    const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
+    const phpPathLogger = await fs.readFile(filePath, "utf-8");
     const env = TestEnv.fromEnv();
     const appName = randomAppName();
-    let deployedApp: AppInfo;
 
-    await t.step("Deploy app", async () => {
-      const spec = buildPhpApp(phpPathLogger, { name: appName });
-      spec.appYaml.name = appName;
-      console.log(JSON.stringify(spec, null, " "));
-      deployedApp = await env.deployApp(spec);
-      await env.fetchApp(deployedApp, "/this-is-a-unique-path");
-    });
+    // Deploy app
+    const spec = buildPhpApp(phpPathLogger, { name: appName });
+    spec.appYaml.name = appName;
+    console.log(JSON.stringify(spec, null, " "));
+    const deployedApp = await env.deployApp(spec);
+    await env.fetchApp(deployedApp, "/this-is-a-unique-path");
 
-    await t.step("check logs", async () => {
-      const logSniff = new LogSniff(env);
-      await logSniff.assertLogsWithin(
-        appName,
-        "this-is-a-unique-path",
-        15 * SECOND,
-      );
-    });
+    // Check logs
+    const logSniff = new LogSniff(env);
+    await logSniff.assertLogsWithin(
+      appName,
+      "this-is-a-unique-path",
+      15 * SECOND,
+    );
 
-    await t.step("delete app", async () => {
-      await env.deleteApp(deployedApp);
-    });
-  },
-);
+    // Cleanup
+    await env.deleteApp(deployedApp);
+  });
+});
 
-Deno.test("Unittest: countSubstrings", async (t) => {
-  await t.step("counts single occurrence", () => {
-    assertEquals(countSubstrings("hello world", "world"), 1);
+describe("countSubstrings", () => {
+  it("counts single occurrence", () => {
+    expect(countSubstrings("hello world", "world")).toBe(1);
   });
 
-  await t.step("counts multiple occurrences", () => {
-    assertEquals(countSubstrings("hello hello hello", "hello"), 3);
+  it("counts multiple occurrences", () => {
+    expect(countSubstrings("hello hello hello", "hello")).toBe(3);
   });
 
-  await t.step("returns 0 for no occurrences", () => {
-    assertEquals(countSubstrings("hello world", "goodbye"), 0);
+  it("returns 0 for no occurrences", () => {
+    expect(countSubstrings("hello world", "goodbye")).toBe(0);
   });
 
-  await t.step("handles empty string", () => {
-    assertEquals(countSubstrings("", "test"), 0);
+  it("handles empty string", () => {
+    expect(countSubstrings("", "test")).toBe(0);
   });
 
-  await t.step("handles empty substring", () => {
-    assertEquals(countSubstrings("hello world", ""), 0);
+  it("handles empty substring", () => {
+    expect(countSubstrings("hello world", "")).toBe(0);
   });
 
-  await t.step("handles overlapping substrings", () => {
-    // Hmm.. Not great, not terrible
-    assertEquals(countSubstrings("aaaaa", "aa"), 4);
+  it("handles overlapping substrings", () => {
+    expect(countSubstrings("aaaaa", "aa")).toBe(4);
   });
 });

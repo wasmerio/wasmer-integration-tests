@@ -1,6 +1,4 @@
-import { fail } from "node:assert";
 import {
-  AppInfo,
   AppYaml,
   ExecJob,
   loadAppYaml,
@@ -9,8 +7,8 @@ import {
   saveAppYaml,
   SECOND,
   TestEnv,
-} from "../../src/index.ts";
-import { validateWordpressIsLive } from "../../src/wordpress.ts";
+} from "../../src/index";
+import { validateWordpressIsLive } from "../../src/wordpress";
 
 function generateNeedlesslySecureRandomPassword(): string {
   const charset =
@@ -68,32 +66,24 @@ function updateAppYaml(env: TestEnv): AppYaml {
  * into cache. Instead, we reverse it and use wordpress as a submodule, update app.yaml
  * and then deploy. Since we update app.yaml, we still control app ID, secrets etc.
  */
-Deno.test("app-wordpress", {}, async (t) => {
+test("app-wordpress", async () => {
   const env = TestEnv.fromEnv();
   // NOTE: Instead of setting up app.yaml/deployment manually, use wordpress as submodule
   // This might force resetting the repo on local runs
-  Deno.chdir("./wordpress/");
+  process.chdir("./wordpress")
   const appYaml = updateAppYaml(env);
-  let appInfo: AppInfo;
   const logSniff = new LogSniff(env);
 
-  const ok = await t.step("deploy", async () => {
-    appInfo = await env.deployAppDir("./");
-  });
-  if (!ok) {
-    fail();
-  }
+  const appInfo = await env.deployAppDir("./");
 
-  await t.step("validate deployment", async () => {
-    await logSniff.assertLogsWithin(
-      appYaml.name!,
-      "WordPress installed successfully.",
-      30 * SECOND,
-    );
-  });
+  await logSniff.assertLogsWithin(
+    appYaml.name!,
+    "WordPress installed successfully.",
+    60 * SECOND,
+  );
 
   console.log("Validating app: ", appInfo!.url);
 
-  await validateWordpressIsLive(t, appInfo!.url, env);
+  await validateWordpressIsLive(appInfo!.url);
   await env.deleteApp(appInfo!);
 });

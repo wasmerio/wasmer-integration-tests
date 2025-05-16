@@ -1,5 +1,5 @@
-import { DeployOutput } from "./wasmer_cli.ts";
-import { Path } from "./fs.ts";
+import { DeployOutput } from "./wasmer_cli";
+import { Path } from "./fs";
 
 import { z } from "zod";
 
@@ -25,7 +25,7 @@ export interface AppInfo {
 }
 
 export interface ApiAppsInNamespace {
-  apps: { id: string; deleted: boolean; createdAt: string }[];
+  apps: { id?: string; deleted?: boolean; createdAt?: string }[];
   lastCursor: string | null;
 }
 
@@ -49,7 +49,7 @@ export class BackendClient {
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "Accept": "application/json",
+      Accept: "application/json",
     };
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
@@ -215,13 +215,15 @@ mutation($id:ID!) {
     }
   }
 
-  async banApp(
-    { appId, reason, blackhole }: {
-      appId: string;
-      reason: string;
-      blackhole: boolean;
-    },
-  ): Promise<string> {
+  async banApp({
+    appId,
+    reason,
+    blackhole,
+  }: {
+    appId: string;
+    reason: string;
+    blackhole: boolean;
+  }): Promise<string> {
     const Input = z.object({
       banApp: z.object({
         app: z.object({ id: z.string() }),

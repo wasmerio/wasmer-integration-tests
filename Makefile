@@ -2,21 +2,21 @@
 JSPATHS = ./src ./tests ./bin
 
 setup:
-	@command -v deno >/dev/null 2>&1 || { echo >&2 "Deno is not installed. Installing..."; curl -fsSL https://deno.land/install.sh | sh; }
+	@node -v | awk -F. '{ if ($$1 < 22) { print "Node version 22+ is required. Please install it."; exit 1; } }'
+	@pnpm install
+	@pnpm add -D jest
 
 fmt: setup
-	deno fmt $(JSPATHS)
+	@npx prettier "**/*" --ignore-path .prettierignore --write
 
 fmt-check: setup
-	deno fmt --check $(JSPATHS)
+	@npx prettier "**/*" --ignore-path .prettierignore --check
 
 check: setup
-	deno check $(JSPATHS)
-	deno lint $(JSPATHS)
+	@npx tsc --noEmit 
+	@npx eslint $(JSPATHS)
 
 lint: setup fmt-check check
 
 test: setup
-	deno test --allow-all --quiet --parallel .
-
-
+	pnpm run test

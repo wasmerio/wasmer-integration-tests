@@ -1,8 +1,7 @@
-import { assertEquals } from "jsr:@std/assert/equals";
-import { TestEnv } from "../../src/env.ts";
-import { assertArrayIncludes } from "jsr:@std/assert/array-includes";
+import { TestEnv } from "../../src/env";
+import { assertArrayIncludes, assertEquals } from "../../src/testing_tools";
 
-Deno.test("ssh", { ignore: true }, async () => {
+test.skip("ssh", async () => {
   const env = TestEnv.fromEnv();
 
   const runSsh = async (args: string[], stdin?: string) => {
@@ -27,7 +26,10 @@ Deno.test("ssh", { ignore: true }, async () => {
 
   {
     const res = await runSsh(["wasmer/bash", "--", "-c", "ls"]);
-    const lines = res.trim().split("\n").map((line) => line.trim());
+    const lines = res
+      .trim()
+      .split("\n")
+      .map((line) => line.trim());
     assertArrayIncludes(lines, ["bin"]);
     assertArrayIncludes(lines, ["dev"]);
     assertArrayIncludes(lines, ["etc"]);

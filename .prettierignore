@@ -1,0 +1,10 @@
+wasmopticon
+wordpress
+node_modules
+.gitignore
+.gitmodules
+.prettierignore
+fixtures
+flake.nix
+Makefile
+pnpm-lock.yaml

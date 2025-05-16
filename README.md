@@ -5,21 +5,36 @@ CLI, the backend and Edge.
 
 ## Running tests
 
-The tests are written in Typescript, and use the `deno` test runner.
+The tests are written in Typescript, and use the `jest` test runner.
 
-Follow the
-[Deno installation docs](https://docs.deno.com/runtime/fundamentals/installation/)
-to install deno on your system.
+## Prerequisites
 
-- Run all tests: `deno test --allow-all .`
-- Run specific test(s), filtered by name:
-  `deno test --allow-all --filter <TEST-NAME> .`
+You need `npm`, `node` and `pnpm`.
 
-Use the `--parallel` flag to run multiple tests in parallel. By default, this
-will run tests with a concurrency of local CPU cores. You can use the
-`DENO_JOBS` environment variable to control the number of parallel tests..
+1.  **Install Node.js and npm**: pnpm requires Node.js to run. If Node.js is not installed on your system, download and install it from the official Node.js website: [https://nodejs.org/](https://nodejs.org/).
 
-For example: `DENO_JOBS=8 deno test --allow-all --parallel .`
+2.  **Verify Node.js and npm installation**: Open your terminal and verify the installation with the following commands:
+
+    ```
+    node -v
+    npm -v
+    ```
+
+3.  **Install pnpm**:
+    Run the following command to install pnpm globally:
+
+    ```
+    npm install -g pnpm@10
+    ```
+
+4.  **Verify pnpm installation**:
+    Check the installed version of pnpm to ensure it has been installed correctly:
+
+    ```
+    pnpm -v
+    ```
+
+Validate it's OK by running `make setup`
 
 ### Test target environment
 
@@ -88,12 +103,12 @@ example `volumes.test.ts`).
 ### Test example, with comments:
 
 ```
-// Register a test with the Deno test runner.
-Deno.test('app-create-from-package', async () => {
+// Register a test with the test runner.
+test('app-create-from-package', async () => {
   // Determine the test environment.
   const env = TestEnv.fromEnv();
 
-  // An app definition is a structured object that describes app configration
+  // An app definition is a structured object that describes app configuration
   // with an optional package definition.
   // This can be created and deployed with TestEnv.deployApp().
   const spec: AppDefinition = {
@@ -128,15 +143,14 @@ Deno.test('app-create-from-package', async () => {
     }
   };
 
-
   // Create a directory with the package contents and app.yaml.
   // Then use the `wasmer deploy` command to deploy the app.
   const info = await env.deployApp(spec);
 
   // Send an HTTP request to the app running on Edge
-  // `fetchApp` is the same as the regular Javascript `fetch()`, but it
+  // `fetchApp` is the same as the regular Node.js `http` or `https` module, but it
   // ensures that requests are sent to the right target.
-  const res = await env.fetchApp(info, '/', {headers: {...})
+  const res = await env.fetchApp(info, '/', {headers: {...}})
   const body = await res.text();
 
   // Assert that the response is as expected.
@@ -146,14 +160,14 @@ Deno.test('app-create-from-package', async () => {
   // NOTE: you can use a full url instead of a path as well, in which case
   // the wrapper will make sure the request is sent to the Edge target server
   // if EDGE_SERVER is specified.
-  const res = await env.fetchApp(info, 'https://....', {headers: {...})
+  const res = await env.fetchApp(info, 'https://....', {headers: {...}})
 
   // You can also run custom wasmer CLI commands like this:
   // This will throw an exception if the command fails.
   const output = await env.runWasmerCommand({
     args: [...],
     // Use the app directory as the working directory.
-    cwd: info.dir
+    cwd: info.dir,
     env: {...},
   });
   assertEquals(output.stdout, 'my stdout...');
