@@ -2,6 +2,7 @@ import { DeployOutput } from "./wasmer_cli";
 import { Path } from "./fs";
 
 import { z } from "zod";
+import { sleep } from "./util";
 
 export interface GraphQlResponse<T> {
   data?: T;
@@ -115,23 +116,35 @@ export class BackendClient {
       { id: appId },
     );
 
-    const node = nodeLike.parse(res.data).node;
-    if (!node) {
-      console.debug({ res });
-      throw new Error(`App not found: ${appId}`);
+    const AM_RETRIES = 2;
+    let i = 0;
+    const errors: Error[] = [];
+    while (i < AM_RETRIES) {
+      i++
+      const nodeParse = nodeLike.safeParse(res.data);
+
+      if (!nodeParse.success) {
+        console.debug({ res });
+        errors.push(Error(`Failed to parse object for: ${appId}, error: ${nodeParse.error}`));
+
+        await sleep(5000)
+        continue
+      }
+      const node = nodeParse.data.node
+
+      const id = node.id;
+      const url = node.url;
+      const activeVersionId = node.activeVersion?.id ?? null;
+
+      const app: ApiDeployApp = {
+        id,
+        url,
+        activeVersionId,
+      };
+
+      return app;
     }
-
-    const id = node.id;
-    const url = node.url;
-    const activeVersionId = node.activeVersion?.id ?? null;
-
-    const app: ApiDeployApp = {
-      id,
-      url,
-      activeVersionId,
-    };
-
-    return app;
+    throw errors;
   }
 
   async appsInNamespace(
