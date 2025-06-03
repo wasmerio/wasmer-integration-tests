@@ -499,7 +499,7 @@ runner = "https://webc.org/runner/wasi"
   await env.deleteApp(info);
 });
 
-test.concurrent("app-update-multiple-times", async () => {
+test("app-update-multiple-times", async () => {
   const env = TestEnv.fromEnv();
   const spec = buildStaticSiteApp();
   const info1 = await env.deployApp(spec);
@@ -725,7 +725,7 @@ test.concurrent("cli-run-python", async () => {
   assertEquals(output.stdout.trim(), "42");
 });
 
-test.concurrent("app-secrets-fullstack", async () => {
+test("app-secrets-fullstack", async () => {
   const env = TestEnv.fromEnv();
   const code = `
 addEventListener("fetch", (fetchEvent) => {
