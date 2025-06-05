@@ -120,17 +120,21 @@ export class BackendClient {
     let i = 0;
     const errors: Error[] = [];
     while (i < AM_RETRIES) {
-      i++
+      i++;
       const nodeParse = nodeLike.safeParse(res.data);
 
       if (!nodeParse.success) {
         console.debug({ res });
-        errors.push(Error(`Failed to parse object for: ${appId}, error: ${nodeParse.error}`));
+        errors.push(
+          Error(
+            `Failed to parse object for: ${appId}, error: ${nodeParse.error}`,
+          ),
+        );
 
-        await sleep(5000)
-        continue
+        await sleep(5000);
+        continue;
       }
-      const node = nodeParse.data.node
+      const node = nodeParse.data.node;
 
       const id = node.id;
       const url = node.url;
