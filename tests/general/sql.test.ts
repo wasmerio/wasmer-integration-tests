@@ -1,11 +1,6 @@
 import { TestEnv } from "../../src/env";
 import { buildPhpApp } from "../../src/index";
 import * as fs from "node:fs";
-import {
-  assertEquals,
-  assertNotEquals,
-  assertStringIncludes,
-} from "../../src/testing_tools";
 
 test.concurrent("sql-connectivity", async () => {
   const env = TestEnv.fromEnv();
@@ -20,18 +15,10 @@ test.concurrent("sql-connectivity", async () => {
     const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
     const res = await env.fetchApp(withoutSqlInfo, "/results");
     const got = await res.text();
-    assertStringIncludes(
-      got,
-      want,
-      "Expected environment to NOT include SQL details, as the environment is not specified to include them",
-    );
+    expect(got).toContain(want)
     // Having environment variables set is bad, having the option to connect is worse: would
     // encourage and perhaps enable malicious use
-    assertNotEquals(
-      got,
-      "OK",
-      "It appears to be possible to connect to a DB from an unconfigured environment. Very not good!",
-    );
+    expect(got).not.toBe("OK")
     await env.deleteApp(withoutSqlInfo);
   }
 
@@ -54,7 +41,7 @@ test.concurrent("sql-connectivity", async () => {
   {
     const res = await env.fetchApp(withSqlInfo, "/results");
     const got = await res.text();
-    assertEquals(got, want);
+    expect(got).toBe(want)
   }
 
   // Also test the app version URL to make sure it is configured properly.
@@ -62,8 +49,8 @@ test.concurrent("sql-connectivity", async () => {
   {
     const url = withSqlInfo.version.url + "/results";
     const res = await fetch(url);
-    const body = await res.text();
-    assertEquals(body, want);
+    const got = await res.text();
+    expect(got).toBe(want)
   }
 
   await env.deleteApp(withSqlInfo);
