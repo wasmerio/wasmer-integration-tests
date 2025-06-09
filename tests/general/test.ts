@@ -795,7 +795,9 @@ addEventListener("fetch", (fetchEvent) => {
     const res = await env.fetchApp(info, "/");
     const body = await res.text();
     const data = JSON.parse(body);
-    console.log("Retrieved app response", { data });
+    if (env.verbose) {
+      console.log("Retrieved app response", { data });
+    }
     assertEquals(data.env["s1"], "v1");
     assertEquals(data.env["s2"], "v2");
     assertEquals(data.env["slong"], valueLong);
@@ -820,7 +822,9 @@ addEventListener("fetch", (fetchEvent) => {
     const res = await env.fetchApp(info, "/");
     const body = await res.text();
     const data = JSON.parse(body);
-    console.log("Retrieved app response", { data });
+    if (env.verbose) {
+      console.log("Retrieved app response", { data });
+    }
     assertEquals(data.env["s1"], "v1-updated");
     assertEquals(data.env["s2"], "v2");
     assertEquals(data.env["slong"], valueLong);
@@ -851,7 +855,9 @@ addEventListener("fetch", (fetchEvent) => {
     const res = await env.fetchApp(info, "/");
     const body = await res.text();
     const data = JSON.parse(body);
-    console.log("Retrieved app response", { data });
+    if (env.verbose) {
+      console.log("Retrieved app response", { data });
+    }
     assertEquals(data.env["s2"], "v2");
     assertEquals(data.env["slong"], valueLong);
     assertEquals(data.env["s1"], undefined);
