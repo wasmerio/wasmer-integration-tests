@@ -28,7 +28,7 @@ export const ENV_VAR_EDGE_SERVER: string = "EDGE_SERVER";
 export const ENV_VAR_WASMER_PATH: string = "WASMER_PATH";
 export const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
 export const ENV_VAR_VERBOSE: string = "VERBOSE";
-export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH"
+export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
@@ -152,9 +152,9 @@ export class TestEnv {
       env.token = maybeToken;
     }
 
-    const verbose = process.env[ENV_VAR_VERBOSE]
+    const verbose = process.env[ENV_VAR_VERBOSE];
     if (verbose) {
-      env.verbose = true
+      env.verbose = true;
     }
 
     return env;
@@ -217,9 +217,13 @@ export class TestEnv {
     ): Promise<void> => {
       return new Promise((resolve) => {
         stream.on("data", (chunk: Buffer) => {
-          let chunkStr = chunk.toString("utf8")
+          let chunkStr = chunk.toString("utf8");
           if (!this.verbose && chunkStr.length > this.maxRowLength) {
-            chunkStr = chunkStr.substring(0, this.maxRowLength - 3) + "... and " + (chunkStr.length - this.maxRowLength) + " more characters (env var VERBOSE=true to see all)";
+            chunkStr =
+              chunkStr.substring(0, this.maxRowLength - 3) +
+              "... and " +
+              (chunkStr.length - this.maxRowLength) +
+              " more characters (env var VERBOSE=true to see all)";
           }
           console.debug(chunkStr);
           chunks.push(chunk);
@@ -576,12 +580,12 @@ subscription PublishAppFromRepoAutobuild(
     while (true) {
       console.debug(`Fetching URL ${url}`, { options });
       const response = await fetch(url, options);
-      console.debug(`Fetched URL ${url}`,);
+      console.debug(`Fetched URL ${url}`);
       if (this.verbose) {
         console.debug({
           status: response.status,
           headers: response.headers,
-        })
+        });
       }
 
       if (!options.noAssertSuccess && !response.ok) {

@@ -1,2 +1,2 @@
-import console from "console"
-global.console = console
+import console from "console";
+global.console = console;
