@@ -8,4 +8,5 @@ export default {
   transform: {
     "^.+.tsx?$": ["ts-jest", {}],
   },
+  setupFilesAfterEnv: ["./jest-logging-config.ts"],
 };

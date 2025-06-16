@@ -27,6 +27,8 @@ export const ENV_VAR_APP_DOMAIN: string = "WASMER_APP_DOMAIN";
 export const ENV_VAR_EDGE_SERVER: string = "EDGE_SERVER";
 export const ENV_VAR_WASMER_PATH: string = "WASMER_PATH";
 export const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
+export const ENV_VAR_VERBOSE: string = "VERBOSE";
+export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
@@ -84,7 +86,10 @@ export class TestEnv {
 
   backend: BackendClient;
 
+  // Logging settings
   hasPrintedEnv = false;
+  verbose = false;
+  maxRowLength = 600;
 
   static fromEnv(): TestEnv {
     const registry = process.env[ENV_VAR_REGISTRY] ?? REGISTRY_DEV;
@@ -147,6 +152,11 @@ export class TestEnv {
       env.token = maybeToken;
     }
 
+    const verbose = process.env[ENV_VAR_VERBOSE];
+    if (verbose) {
+      env.verbose = true;
+    }
+
     return env;
   }
 
@@ -207,7 +217,15 @@ export class TestEnv {
     ): Promise<void> => {
       return new Promise((resolve) => {
         stream.on("data", (chunk: Buffer) => {
-          console.debug(chunk.toString("utf8"));
+          let chunkStr = chunk.toString("utf8");
+          if (!this.verbose && chunkStr.length > this.maxRowLength) {
+            chunkStr =
+              chunkStr.substring(0, this.maxRowLength - 3) +
+              "... and " +
+              (chunkStr.length - this.maxRowLength) +
+              " more characters (env var VERBOSE=true to see all)";
+          }
+          console.debug(chunkStr);
           chunks.push(chunk);
         });
         stream.on("end", resolve);
@@ -226,7 +244,9 @@ export class TestEnv {
     console.log(`<<< command finished with code ${code}`);
 
     const result: CommandOutput = { code, stdout, stderr };
-    console.debug("Command executed:", result);
+    if (this.verbose) {
+      console.debug("Command executed:", result);
+    }
 
     if (code !== 0 && options.noAssertSuccess !== true) {
       const data = JSON.stringify(result, null, 2);
@@ -560,10 +580,13 @@ subscription PublishAppFromRepoAutobuild(
     while (true) {
       console.debug(`Fetching URL ${url}`, { options });
       const response = await fetch(url, options);
-      console.debug(`Fetched URL ${url}`, {
-        status: response.status,
-        headers: response.headers,
-      });
+      console.debug(`Fetched URL ${url}`);
+      if (this.verbose) {
+        console.debug({
+          status: response.status,
+          headers: response.headers,
+        });
+      }
 
       if (!options.noAssertSuccess && !response.ok) {
         // Try to get the body:
