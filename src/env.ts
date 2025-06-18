@@ -565,6 +565,15 @@ subscription PublishAppFromRepoAutobuild(
 
     let waitForVersionId: string | null = null;
     if (!options.noWait && !urlOrPath.startsWith("http")) {
+      // Due to race conditions/state inconsitencies (?) in Backend, the router entry for the app is sometimes
+      // faster than the backend, so the active version ID here is the old app version id, not the new one.
+      //
+      // This will probably be fixed in one of the sweeping cache optimizations Backend is undergoing, but for now
+      // this timeout should suffice, even if it may increase test durations slightly.
+      //
+      // For details see: https://linear.app/wasmer/issue/BE-798/delay-in-activeversion-query-causing-race-condition
+      // and: https://linear.app/wasmer/issue/SRE-872/25-06-11-stabilize-integration-tests
+      await sleep(3000);
       // Fetch latest version
       const info = await this.backend.getAppById(app.id);
       waitForVersionId = info.activeVersionId;
@@ -619,7 +628,7 @@ subscription PublishAppFromRepoAutobuild(
           console.info(
             `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
           );
-          console.log(`Response body: ${await response.text()}`)
+          console.log(`Response: ${await response.text()}`);
           await sleep(1000);
           // Retry...
           continue;
