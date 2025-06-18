@@ -506,8 +506,9 @@ test.concurrent("app-update-multiple-times", async () => {
 
   const indexPath = path.join(info1.dir, "public/index.html");
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 10; i++) {
     const content = `hello-${i}`;
+    console.log(`Now I want to see: ${content}`);
     await fs.promises.writeFile(indexPath, content);
     await env.deployAppDir(info1.dir);
 

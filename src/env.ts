@@ -619,6 +619,7 @@ subscription PublishAppFromRepoAutobuild(
           console.info(
             `App is not at expected version ${waitForVersionId} (got ${currentId}), retrying after delay...`,
           );
+          console.log(`Response body: ${await response.text()}`)
           await sleep(1000);
           // Retry...
           continue;
