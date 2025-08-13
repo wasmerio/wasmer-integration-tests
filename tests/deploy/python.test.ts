@@ -5,7 +5,7 @@ const AM_TRIES = 2;
 // Test that we can deploy a simple python app
 test.concurrent("deploy python app", async () => {
   let i = 0;
-  while (i < AM_TRIES) {
+  while (true) {
     i++;
     try {
       const env = TestEnv.fromEnv();
@@ -24,6 +24,9 @@ test.concurrent("deploy python app", async () => {
       await env.deleteApp(appInfo);
       return;
     } catch (e) {
+      if ((AM_TRIES - i) < 0) {
+        throw e
+      }
       console.error(`Test failed, retries left: ${AM_TRIES - i}`);
       console.error(e);
     }
