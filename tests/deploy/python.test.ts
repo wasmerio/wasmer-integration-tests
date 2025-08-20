@@ -10,8 +10,9 @@ test.concurrent("deploy python app", async () => {
     try {
       const env = TestEnv.fromEnv();
       const filePath = "./fixtures/python/echo-server.py";
-      const testCode = await fs.promises.readFile(filePath, "utf-8");
-      testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
+      let testCode = await fs.promises.readFile(filePath, "utf-8");
+      testCode = testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
+      console.log(testCode)
       const app = buildPythonApp(testCode);
       const appInfo = await env.deployApp(app);
 
