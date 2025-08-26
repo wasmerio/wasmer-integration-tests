@@ -20,6 +20,8 @@ jobs:
         with:
           fetch_artifact: ${{ inputs.fetch_artifact }}
       - name: Catch setup failure and notify SRE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure()
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
@@ -28,6 +30,8 @@ jobs:
             -H 'Content-type: application/json' \
             --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"error\", \"title\":\"Deployment Setup Failed\"}" \
             ${{ secrets.SRE_FAILURE_WEBHOOK }}
+          exit 1
+
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.io/graphql
