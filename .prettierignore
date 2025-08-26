@@ -6,5 +6,6 @@ node_modules
 .prettierignore
 fixtures
 flake.nix
+flake.lock
 Makefile
 pnpm-lock.yaml

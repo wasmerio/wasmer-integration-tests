@@ -12,7 +12,7 @@ test.concurrent("deploy python app", async () => {
       const filePath = "./fixtures/python/echo-server.py";
       let testCode = await fs.promises.readFile(filePath, "utf-8");
       testCode = testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
-      console.log(testCode)
+      console.log(testCode);
       const app = buildPythonApp(testCode);
       const appInfo = await env.deployApp(app);
 
@@ -25,8 +25,8 @@ test.concurrent("deploy python app", async () => {
       await env.deleteApp(appInfo);
       return;
     } catch (e) {
-      if ((AM_TRIES - i) < 0) {
-        throw e
+      if (AM_TRIES - i < 0) {
+        throw e;
       }
       console.error(`Test failed, retries left: ${AM_TRIES - i}`);
       console.error(e);
