@@ -8,21 +8,21 @@ import * as pathModule from "path";
 export const SECOND = 1000;
 
 export const SshPassword = z.object({
-   password: z.string(),
-   type: z.string().optional(),
- });
- 
- export const SshUser = z.object({
-   username: z.string().optional(),
-   authorized_keys: z.array(z.string()).optional(),
-   passwords: z.array(SshPassword).optional(),
- });
- 
- export const SshCapability = z.object({
-   enabled: z.boolean(),
-   users: z.array(SshUser),
- });
- 
+  password: z.string(),
+  type: z.string().optional(),
+});
+
+export const SshUser = z.object({
+  username: z.string().optional(),
+  authorized_keys: z.array(z.string()).optional(),
+  passwords: z.array(SshPassword).optional(),
+});
+
+export const SshCapability = z.object({
+  enabled: z.boolean(),
+  users: z.array(SshUser),
+});
+
 export const AppCapabilities = z.object({
   database: z
     .object({
@@ -35,7 +35,7 @@ export const AppCapabilities = z.object({
       requests: z.array(z.object({})),
     })
     .optional(),
-  ssh_server: SshCapability.optional()
+  ssh: SshCapability.optional(),
 });
 
 export const AppVolumes = z.object({

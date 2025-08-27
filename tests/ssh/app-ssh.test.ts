@@ -1,5 +1,5 @@
 import path from "node:path";
-import { TestEnv, wasmopticonDir } from "../../src";
+import { sleep, TestEnv, wasmopticonDir } from "../../src";
 import {
   AppCapabilities,
   AppDefinition,
@@ -9,133 +9,8 @@ import {
 } from "../../src/app/construct";
 import { copyPackageAnonymous } from "../../src/package";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
-
-/**
- *
- * Plan:
- - Cover connectivity, auth, exec, sftp, isolation, lifecycle.
- - Use both programmatic (ssh2) and native ssh e2e (child_process).
- - Add retries and timeouts for cold starts and ephemeral failures.
- - Isolate known_hosts and config per test run.
- - Randomize users/passwords per deployment.
- - Log diagnostics when failing; keep output redacted.
- 
- Node libs:
- - ssh2 (client) for exec and sftp channels.
- - ssh2-sftp-client for higher-level sftp ops.
- - execa for subprocess ssh/scp/sftp with timeouts.
- - tcp-port-used or wait-on to await port readiness.
- 
- Native ssh usage:
- - ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=<tmp>
- - scp/sftp for file transfer e2e parity with users.
- - Use -F <tmp_config> to override defaults per test.
- - Capture exit codes/stdout/stderr with execa.
- 
- Test cases:
- - Connect with valid password; whoami; printenv; pwd.
- - Wrong password denied; error includes "Permission denied".
- - Exec non-interactive command; assert exit code/stdout/stderr.
- - SFTP: upload, list, download, integrity check, delete.
- - File perms in mounted volume; persistence across redeploy.
- - Working dir confinement; cannot escape expected root.
- - Multiple users: separate homes/permissions.
- - Host key: stable across restarts or spec-compliant rotation.
- - Idle timeout disconnect behavior; active keepalive ok.
- - Rate limiting/backoff after repeated failed logins (if enabled).
- - Channel close on app purge/redeploy; reconnect succeeds.
- - Large stdout/stderr streaming; no truncation.
- - PTY interactive smoke: run tty, basic input/output.
- 
- Setup/teardown:
- - Deploy app with ssh_server and generated users/passwords.
- - Wait until TCP port responds before attempting auth.
- - Create temp ssh config and known_hosts per test file.
- - After tests, purge instances and delete temp dirs.
- 
- Jest scaffolding:
- - jest.setTimeout(120_000) for slow CI.
- - Use describe.each to vary users/auth methods.
- - Use beforeAll to deploy; afterAll to cleanup.
- - Wrap connect with retry (e.g., 5x, 2s backoff).
- 
- ssh2 exec example:
- - import { Client } from "ssh2";
- - const conn = new Client();
- - await new Promise((res, rej) => {
- -   conn.on("ready", res)
- -       .on("error", rej)
- -       .connect({ host, port: 22, username, password });
- - });
- - const execRes = await new Promise((res, rej) => {
- -   conn.exec("echo ok && exit 0", (err, stream) => {
- -     if (err) return rej(err);
- -     let out = "", errOut = "", code = -1;
- -     stream.on("close", (c) => { code = c; res({ out, errOut, code }); })
- -           .on("data", (d) => (out += d.toString()))
- -           .stderr.on("data", (d) => (errOut += d.toString()));
- -   });
- - });
- - expect(execRes.code).toBe(0);
- - expect(execRes.out.trim()).toBe("ok");
- - conn.end();
- 
- ssh2-sftp example:
- - const sftp = await new Promise((res, rej) =>
- -   conn.sftp((e, s) => (e ? rej(e) : res(s))));
- - await new Promise((res, rej) =>
- -   sftp.writeFile("/data/test.txt", Buffer.from("abc"), (e) =>
- -     e ? rej(e) : res(null)));
- - const buf = await new Promise((res, rej) =>
- -   sftp.readFile("/data/test.txt", (e, b) => (e ? rej(e) : res(b))));
- - expect(buf.toString()).toBe("abc");
- 
- OpenSSH exec example:
- - const { execa } = await import("execa");
- - const sshArgs = [
- -   "-o", "StrictHostKeyChecking=no",
- -   "-o", `UserKnownHostsFile=${knownHosts}`,
- -   `${username}@${host}`, "--", "uname -a"
- - ];
- - const r = await execa("ssh", sshArgs, { timeout: 20000 });
- - expect(r.exitCode).toBe(0);
- - expect(r.stdout).toMatch(/Linux|Darwin|WSL/);
- 
- OpenSSH sftp example:
- - await execa("ssh", [
- -   "-o", "StrictHostKeyChecking=no",
- -   "-o", `UserKnownHostsFile=${knownHosts}`,
- -   `${username}@${host}`, "--",
- -   "sh", "-lc", "printf abc > /data/test2.txt"
- - ]);
- - const r2 = await execa("ssh", [
- -   "-o", "StrictHostKeyChecking=no",
- -   "-o", `UserKnownHostsFile=${knownHosts}`,
- -   `${username}@${host}`, "--",
- -   "cat", "/data/test2.txt"
- - ]);
- - expect(r2.stdout).toBe("abc");
- 
- Readiness helper:
- - async function waitForSsh(host, port = 22, tries = 20, ms = 2000) {
- -   for (let i = 0; i < tries; i++) {
- -     try {
- -       await execa("sh", ["-lc", `</dev/tcp/${host}/${port}`], {
- -         timeout: 3000
- -       });
- -       return;
- -     } catch {}
- -     await new Promise(r => setTimeout(r, ms));
- -   }
- -   throw new Error("SSH not ready");
- - }
- 
- CI considerations:
- - Mark test suite as e2e; run in nightly or gated CI job.
- - Mask passwords in logs; redact ssh command lines.
- - Parallelize by namespace isolation; avoid port collisions.
-
- */
+import { Client } from "ssh2";
+import SftpClient from "ssh2-sftp-client";
 
 const setupApp = async (env: TestEnv) => {
   const rootPackageDir = path.join(
@@ -162,18 +37,11 @@ const setupApp = async (env: TestEnv) => {
   };
   writeAppDefinition(dir, definition);
   const info = await env.deployAppDir(dir);
-  return { info, dir, definition };
-};
-
-test("app-ssh", async () => {
-  const env = TestEnv.fromEnv();
-  const { info, dir, definition } = await setupApp(env);
-
   const permalinkID = await env.getAppPermalinkID(info.id);
   const sshUsername = `${permalinkID}_`;
-  const password = generateNeedlesslySecureRandomPassword(8);
+  const password = generateNeedlesslySecureRandomPassword(12);
   definition.appYaml.capabilities = AppCapabilities.parse({});
-  definition.appYaml.capabilities.ssh_server = SshCapability.parse({
+  definition.appYaml.capabilities.ssh = SshCapability.parse({
     enabled: true,
     users: [
       {
@@ -194,7 +62,241 @@ test("app-ssh", async () => {
   writeAppDefinition(dir, definition);
 
   const sshDeployment = await env.deployAppDir(dir);
-  console.info(sshDeployment);
+  return {
+    sshUsername,
+    password,
+    sshDeployment,
+  };
+};
+
+async function connectWithRetry(
+  host: string,
+  username: string,
+  password: string,
+  tries = 5,
+  delayMs = 3000,
+): Promise<Client> {
+  console.time("ssh-con");
+  let lastErr: unknown = null;
+  for (let i = 0; i < tries; i++) {
+    const conn = new Client();
+    try {
+      const conOpt = { host, port: 22, username, password, readyTimeout: 5000 };
+      console.log(JSON.stringify(conOpt, null, " "));
+      console.info(`Connection attempt [${i + 1}/${tries}]`);
+      conn
+        .on("ready", () => () => {
+          console.info("client ready");
+        })
+        .on("error", (e) => {
+          throw e;
+        })
+        .connect(conOpt);
+      console.timeEnd("ssh-con");
+      return conn;
+    } catch (e) {
+      console.error(`Connect error: ${e}`);
+      lastErr = e;
+      conn.end();
+      await sleep(delayMs);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : lastErr;
+}
+
+async function sshShellExec(
+  conn: Client,
+  command: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const START = `__START_${Math.random().toString(36).slice(2)}__`;
+  const END = `__END_${Math.random().toString(36).slice(2)}__`;
+  return await new Promise((resolve, reject) => {
+    console.info(`Ssh client trying to run: ${command}`);
+    conn.shell((err, stream) => {
+      console.info("Hello, I reach?");
+      if (err) return reject(err);
+      let stdout = "";
+      let stderr = "";
+      let code = -1;
+      const onData = (d: Buffer) => {
+        stdout += d.toString();
+        const idx = stdout.indexOf(`${END}:`);
+        if (idx !== -1) {
+          const tail = stdout.substring(idx + END.length + 1).trim();
+          const match = tail.match(/^(\d+)/);
+          if (match) {
+            code = parseInt(match[1], 10);
+          }
+          const startIdx = stdout.indexOf(START);
+          const cmdOut =
+            startIdx !== -1
+              ? stdout
+                .substring(startIdx + START.length)
+                .split("\n")
+                .slice(1)
+                .join("\n")
+                .split(`\n${END}:`)[0]
+              : stdout;
+          stream.removeListener("data", onData);
+          stream.end();
+          resolve({ code, stdout: cmdOut, stderr });
+        }
+      };
+      stream.on("data", onData);
+      stream.stderr.on("data", (d: Buffer) => {
+        stderr += d.toString();
+      });
+      stream.on("close", () => {
+        console.log("Stream :: close");
+        conn.end();
+      });
+      stream.write(`echo ${START}\n${command}\nRC=$?\necho ${END}:$RC\n`);
+      stream.end("ls -l\nexit\n");
+    });
+  });
+}
+
+test("app-ssh", async () => {
+  // const env = TestEnv.fromEnv();
+  // const { sshUsername, password, sshDeployment } = await setupApp(env);
+  //
+  // const hostname = new URL(sshDeployment.url).host;
+  //
+  // console.log(
+  //   `SSH: userrname: ${sshUsername}, password: ${password}, hostname: ${hostname}`,
+  // );
+  const sshUsername = "r3dhki1t8w03_";
+  const hostname = "t-b32ae3a876954909bf4d.wasmer.dev";
+  const password = "@N)Q*e_dn0N9";
+  const sshClient = await connectWithRetry(hostname, sshUsername, password);
+  try {
+    console.info(`Starting tests on with ${sshUsername}@${hostname}`);
+    // const who = await sshShellExec(sshClient, "whoami");
+    // expect(who.code).toBe(0);
+    // expect(who.stdout.trim()).toBe(sshUsername);
+    //
+    // const testData =
+    //   "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
+    // const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
+    // const io = await sshShellExec(sshClient, writeCmd);
+    // expect(io.code).toBe(0);
+    // expect(io.stdout.trim()).toBe("abc123");
+    //
+    // const checkData = await sshShellExec(
+    //   sshClient,
+    //   "test -d /data && echo ok || echo missing",
+    // );
+    // expect(checkData.code).toBe(0);
+    // expect(checkData.stdout).toContain("ok");
+    //
+    // const errCase = await sshShellExec(sshClient, "echo oops 1>&2; false");
+    // expect(errCase.code).not.toBe(0);
+    // expect(errCase.stderr).toContain("oops");
+  } finally {
+    sshClient.end();
+  }
+
+  await expect(
+    connectWithRetry(hostname, sshUsername, password + "x", 1, 500),
+  ).rejects.toBeTruthy();
+});
+
+test("app-sftp", async () => {
+  const env = TestEnv.fromEnv();
+  const { sshUsername, password, sshDeployment } = await setupApp(env);
+
   const hostname = new URL(sshDeployment.url).host;
-  const sshURI = `${sshUsername}:${password}@${hostname}`;
+
+  console.log(
+    `SSH: userrname: ${sshUsername}, password: ${password}, hostname: ${hostname}`,
+  );
+  const sftp = new SftpClient();
+  async function connectSftpWithRetry(
+    tries = 5,
+    delayMs = 3000,
+  ): Promise<void> {
+    let lastErr: unknown = null;
+    for (let i = 0; i < tries; i++) {
+      console.info(`Connection attempt [${i}/${tries}]`);
+      try {
+        await sftp.connect({
+          host: hostname,
+          port: 22,
+          username: sshUsername,
+          password,
+          readyTimeout: 5000,
+        });
+        return;
+      } catch (e) {
+        console.error(`Connection failed: ${e}`);
+        lastErr = e;
+        await sleep(delayMs);
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  }
+
+  const t0 = performance.now();
+
+  await connectSftpWithRetry();
+  const remotePath =
+    "/data/node-lib-test-" + Math.random().toString(36).slice(2) + ".txt";
+  try {
+    console.info(
+      `Connection OK! It took: ${performance.now() - t0}ms. Proceeding with tests`,
+    );
+    const data = Buffer.from("abc123");
+    console.log(`Putting file to: ${remotePath}`);
+    await sftp.put(data, remotePath);
+    const list = await sftp.list("/data");
+    const names = list.map((e: { name: string }) => e.name);
+    console.log(`Checking file exists: ${JSON.stringify(list, null, " ")}`);
+    expect(names).toContain(remotePath.split("/").pop() as string);
+    const got = (await sftp.get(remotePath)) as Buffer;
+    const text = Buffer.isBuffer(got)
+      ? got.toString()
+      : Buffer.from(got as ArrayBuffer).toString();
+    console.log(`Validating file contents`);
+    expect(text).toBe("abc123");
+    await sftp.delete(remotePath);
+  } finally {
+    await sftp.end();
+  }
+
+  // Connect again, expect files to still exist
+  await connectSftpWithRetry();
+  try {
+    const list = await sftp.list("/data");
+    const names = list.map((e: { name: string }) => e.name);
+    console.log(
+      `Validating that file exists after reconnect: ${JSON.stringify(list, null, " ")}`,
+    );
+    expect(names).toContain(remotePath.split("/").pop() as string);
+    const got = (await sftp.get(remotePath)) as Buffer;
+    const text = Buffer.isBuffer(got)
+      ? got.toString()
+      : Buffer.from(got as ArrayBuffer).toString();
+    console.log(`Validating file contents`);
+    expect(text).toBe("abc123");
+    await sftp.delete(remotePath);
+  } finally {
+    await sftp.end();
+  }
+
+  await expect(
+    (async () => {
+      const bad = new SftpClient();
+      try {
+        await bad.connect({
+          host: hostname,
+          port: 22,
+          username: sshUsername,
+          password: password + "x",
+          readyTimeout: 15000,
+        });
+      } finally {
+        await bad.end();
+      }
+    })(),
+  ).rejects.toBeTruthy();
 });
