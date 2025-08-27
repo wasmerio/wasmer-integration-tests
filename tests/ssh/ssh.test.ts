@@ -1,7 +1,6 @@
 import { TestEnv } from "../../src/env";
-import { assertArrayIncludes, assertEquals } from "../../src/testing_tools";
 
-test.skip("ssh", async () => {
+test("ssh", async () => {
   const env = TestEnv.fromEnv();
 
   const runSsh = async (args: string[], stdin?: string) => {
@@ -16,12 +15,12 @@ test.skip("ssh", async () => {
 
   {
     const res = await runSsh(["wasmer/bash", "--", "-c", "pwd"]);
-    assertEquals(res, "/");
+    expect(res).toBe("/");
   }
 
   {
     const res = await runSsh([], "pwd\n");
-    assertEquals(res, "/");
+    expect(res).toBe("/");
   }
 
   {
@@ -30,14 +29,14 @@ test.skip("ssh", async () => {
       .trim()
       .split("\n")
       .map((line) => line.trim());
-    assertArrayIncludes(lines, ["bin"]);
-    assertArrayIncludes(lines, ["dev"]);
-    assertArrayIncludes(lines, ["etc"]);
-    assertArrayIncludes(lines, ["tmp"]);
+    expect(lines).toContain("bin");
+    expect(lines).toContain("dev");
+    expect(lines).toContain("etc");
+    expect(lines).toContain("tmp");
   }
 
   {
     const res = await runSsh([], "echo -n hello > test && cat test\n");
-    assertEquals(res, "hello");
+    expect(res).toBe("hello");
   }
 });
