@@ -258,7 +258,6 @@ test("app-sftp", async () => {
       : Buffer.from(got as ArrayBuffer).toString();
     console.log(`Validating file contents`);
     expect(text).toBe("abc123");
-    await sftp.delete(remotePath);
   } finally {
     await sftp.end();
   }
@@ -266,8 +265,8 @@ test("app-sftp", async () => {
   // Connect again, expect files to still exist
   await connectSftpWithRetry();
   try {
-    const list = await sftp.list("/data");
-    const names = list.map((e: { name: string }) => e.name);
+    let list = await sftp.list("/data");
+    let names = list.map((e: { name: string }) => e.name);
     console.log(
       `Validating that file exists after reconnect: ${JSON.stringify(list, null, " ")}`,
     );
@@ -278,7 +277,11 @@ test("app-sftp", async () => {
       : Buffer.from(got as ArrayBuffer).toString();
     console.log(`Validating file contents`);
     expect(text).toBe("abc123");
-    await sftp.delete(remotePath);
+    console.log(`Deleting file: ${remotePath}`);
+    sftp.delete(remotePath);
+    list = await sftp.list("/data");
+    names = list.map((e: { name: string }) => e.name);
+    expect(names).not.toContain(remotePath.split("/").pop() as string);
   } finally {
     await sftp.end();
   }
@@ -299,4 +302,7 @@ test("app-sftp", async () => {
       }
     })(),
   ).rejects.toBeTruthy();
+
+  // Cleanup app
+  env.deleteApp(sshDeployment);
 });
