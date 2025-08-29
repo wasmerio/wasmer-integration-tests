@@ -131,9 +131,6 @@ async function sshShellExec(
         if (startIdx !== -1) {
           endIdx = stdout.indexOf(END, startIdx);
         }
-        console.log(
-          `start: ${START}, startIdx: ${startIdx}, end: ${END}, endIdx: ${endIdx}, stdout:-----\n${stdout}\n------`,
-        );
         let cmdOut = "";
         if (startIdx !== -1 && endIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length, endIdx);
@@ -230,7 +227,6 @@ test("app-ssh", async () => {
     const io = await sshShellExec(conn, writeCmd);
     expect(io.code).toBe(0);
     // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
-    console.log(`abc test is: ${io.stdout}`);
     expect(io.stdout).toContain("abc123");
     const checkData = await sshShellExec(
       conn,
