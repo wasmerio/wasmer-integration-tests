@@ -1,4 +1,4 @@
-CRUSH quick reference for wasmer-integration-tests
+Overview on contribution requirements & guidelines
 
 ## Build, lint, test
 
