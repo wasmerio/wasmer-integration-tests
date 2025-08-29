@@ -3,6 +3,7 @@ wordpress
 node_modules
 .gitignore
 .gitmodules
+.crush
 .prettierignore
 fixtures
 flake.nix

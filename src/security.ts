@@ -1,5 +1,5 @@
 export function generateNeedlesslySecureRandomPassword(
-  length: number | undefined,
+  length: number | undefined = undefined,
 ): string {
   const charset =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
