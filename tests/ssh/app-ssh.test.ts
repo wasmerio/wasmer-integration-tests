@@ -77,8 +77,7 @@ const setupApp = async (env: TestEnv) => {
  * - Opens conn.shell() and writes START/END sentinels.
  * - Waits for END in stdout to detect command completion.
  * - Extracts text between the second START and the END marker.
- * - Strips a leading "$ " prompt from each stdout line.
- *   It does this to achieve best effort stdout, but since the write
+ * - Does this to achieve best effort stdout, but since the write
  *   is also output in stdout, as well as any shell formating, it's difficult
  *   to isolate the command's stdout using the shell alone
  * - Collects stderr from stream.stderr.
@@ -87,7 +86,7 @@ const setupApp = async (env: TestEnv) => {
  *
  * @param {Client} conn SSH2 client already connected.
  * @param {string} command Remote shell command to execute.
- * @returns {Promise<object>} Resolves with { code, stdout-ish, stderr }.
+ * @returns {Promise<object>} Resolves with { code, stdout-ish, stderr-ish }.
  * Rejects on shell errors.
  */
 async function sshShellExec(
@@ -135,14 +134,6 @@ async function sshShellExec(
         console.log(
           `start: ${START}, startIdx: ${startIdx}, end: ${END}, endIdx: ${endIdx}, stdout:-----\n${stdout}\n------`,
         );
-        /**
-         * Output from above:
-         *
-         * start: __START_hz439o2brb__, startIdx: -1, end: __END_j36fz2y9zv__, endIdx: -1, stdout:-----
-         * __START_hz439o2brb__
-         * abc123__END_j36fz2y9zv__:0
-         * ------
-         */
         let cmdOut = "";
         if (startIdx !== -1 && endIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length, endIdx);
@@ -254,6 +245,8 @@ test("app-ssh", async () => {
   } finally {
     conn.end();
   }
+  // Cleanup app on success. If not, we can inspect the app via creds listed above
+  env.deleteApp(sshDeployment);
 });
 
 test("app-sftp", async () => {
@@ -358,6 +351,6 @@ test("app-sftp", async () => {
     })(),
   ).rejects.toBeTruthy();
 
-  // Cleanup app
+  // Cleanup app on success. If not, we can inspect the app via creds listed above
   env.deleteApp(sshDeployment);
 });
