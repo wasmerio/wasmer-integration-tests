@@ -372,8 +372,8 @@ export class TestEnv {
     });
   }
 
-  // appGetInfo returns more info than app info
-  async appGetInfo(appID: string): Promise<AppGet> {
+  // wasmerAppGet returns more info than app info, using command wasmer app get <app-id>
+  async wasmerAppGet(appID: string): Promise<AppGet> {
     const args: string[] = ["app", "get", appID, "--format", "json"];
     const { stdout } = await this.runWasmerCommand({
       args,
@@ -382,8 +382,8 @@ export class TestEnv {
   }
 
   async getAppPermalinkID(appID: string): Promise<string> {
-    const fullAppInfo = await this.appGetInfo(appID);
-    const permalink = fullAppInfo.permalink;
+    const appInfo = await this.backend.getAppById(appID);
+    const permalink = appInfo.permalink;
     if (!permalink) {
       throw new Error(`Missing permalink for app ${appID}`);
     }
