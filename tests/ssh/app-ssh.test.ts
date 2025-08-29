@@ -69,6 +69,27 @@ const setupApp = async (env: TestEnv) => {
   };
 };
 
+/**
+ * Executes a command over an interactive SSH shell and returns
+ * its exit code, stdout and stderr.
+ *
+ * Implementation details:
+ * - Opens conn.shell() and writes START/END sentinels.
+ * - Waits for END in stdout to detect command completion.
+ * - Extracts text between the second START and the END marker.
+ * - Strips a leading "$ " prompt from each stdout line.
+ *   It does this to achieve best effort stdout, but since the write
+ *   is also output in stdout, as well as any shell formating, it's difficult
+ *   to isolate the command's stdout using the shell alone
+ * - Collects stderr from stream.stderr.
+ *
+ * Note: assumes a POSIX-like shell on the remote side.
+ *
+ * @param {Client} conn SSH2 client already connected.
+ * @param {string} command Remote shell command to execute.
+ * @returns {Promise<object>} Resolves with { code, stdout-ish, stderr }.
+ * Rejects on shell errors.
+ */
 async function sshShellExec(
   conn: Client,
   command: string,
@@ -82,37 +103,78 @@ async function sshShellExec(
       let stdout = "";
       let stderr = "";
       let code = -1;
-      const onData = (d: Buffer) => {
+      let done = false;
+      const parseCode = (buf: string): boolean => {
+        const idx = buf.indexOf(`${END}:`);
+        if (idx === -1) return false;
+        const tail = buf.substring(idx + END.length + 1).trim();
+        const match = tail.match(/(\d+)/);
+        if (match) {
+          code = parseInt(match[1], 10);
+        }
+        return true;
+      };
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try {
+          stream.removeListener("data", onStdout);
+        } catch (e) {
+          console.error(`failed to remove listener from stdout: ${e}`);
+        }
+        try {
+          stream.stderr.removeListener("data", onStderr);
+        } catch (e) {
+          console.error(`failed to remove listener from stderr: ${e}`);
+        }
+        const startIdx = stdout.indexOf(START);
+        let endIdx = -1;
+        if (startIdx !== -1) {
+          endIdx = stdout.indexOf(END, startIdx);
+        }
+        console.log(
+          `start: ${START}, startIdx: ${startIdx}, end: ${END}, endIdx: ${endIdx}, stdout:-----\n${stdout}\n------`,
+        );
+        /**
+         * Output from above:
+         *
+         * start: __START_hz439o2brb__, startIdx: -1, end: __END_j36fz2y9zv__, endIdx: -1, stdout:-----
+         * __START_hz439o2brb__
+         * abc123__END_j36fz2y9zv__:0
+         * ------
+         */
+        let cmdOut = "";
+        if (startIdx !== -1 && endIdx !== -1) {
+          cmdOut = stdout.substring(startIdx + START.length, endIdx);
+        } else if (startIdx !== -1) {
+          cmdOut = stdout.substring(startIdx + START.length);
+        }
+        stream.end();
+        resolve({ code, stdout: cmdOut, stderr });
+      };
+      const onStdout = (d: Buffer) => {
         stdout += d.toString();
-        const idx = stdout.indexOf(`${END}:`);
-        if (idx !== -1) {
-          const tail = stdout.substring(idx + END.length + 1).trim();
-          const match = tail.match(/(\d+)/);
-          if (match) {
-            code = parseInt(match[1], 10);
-          }
-          let startIdx = stdout.indexOf(`${START}`);
-          startIdx = stdout.indexOf(`${START}`, startIdx + START.length);
-          const endIdx = stdout.indexOf(END, startIdx);
-          const cmdOut = stdout.substring(startIdx + START.length, endIdx);
-          const cleaned = cmdOut
-            .split(/\r?\n/)
-            .map((l) => (l.startsWith("$ ") ? l.slice(2) : l))
-            .slice(0, -1)
-            .join("\n");
-          stream.removeListener("data", onData);
-          stream.end();
-          resolve({ code, stdout: cleaned, stderr });
+        if (parseCode(stdout)) {
+          finish();
         }
       };
-      stream.on("data", onData);
-      stream.stderr.on("data", (d: Buffer) => {
-        stderr += d.toString();
-      });
+      const onStderr = (d: Buffer) => {
+        const t = d.toString();
+        stderr += t;
+        if (parseCode(stderr)) {
+          finish();
+        }
+      };
+      stream.on("data", onStdout);
+      stream.stderr.on("data", onStderr);
       stream.on("close", () => {
         console.log("stream close");
       });
-      stream.write(`echo ${START}\n${command}\nRC=$?\necho ${END}:$?\n`);
+      stream.write(`echo ${START}\n`);
+      stream.write(`${command}\n`);
+      stream.write(`RC=$?\n`);
+      stream.write(`echo ${END}:$RC\n`);
+      stream.write(`echo ${END}:$RC 1>&2\n`);
     });
   });
 }
@@ -169,16 +231,16 @@ test("app-ssh", async () => {
     console.info(`Starting tests on with ${sshUsername}@${hostname}`);
     const who = await sshShellExec(conn, "whoami");
     expect(who.code).toBe(0);
+    // TODO(WAX-495): Enable test after done
     // expect(who.stdout.trim()).toBe(sshUsername);
-
     const testData =
       "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
     const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
     const io = await sshShellExec(conn, writeCmd);
     expect(io.code).toBe(0);
     // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
-    expect(io.stdout.trim()).toContain("abc123");
-
+    console.log(`abc test is: ${io.stdout}`);
+    expect(io.stdout).toContain("abc123");
     const checkData = await sshShellExec(
       conn,
       "test -d /data && echo ok || echo missing",
