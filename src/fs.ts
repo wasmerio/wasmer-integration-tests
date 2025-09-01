@@ -13,7 +13,13 @@ export async function buildDir(path: Path, files: DirEntry): Promise<void> {
   for (const [name, value] of Object.entries(files)) {
     const subPath = `${path}/${name}`;
     if (typeof value === "string") {
-      console.log("writing file", { path, value, subPath });
+      if (process.env.VERBOSE) {
+        console.log("writing file", { path, value, subPath });
+      } else {
+        console.log(
+          `File writes obfuscated, please set VERBOSE=<truthy> to see file writes`,
+        );
+      }
       await fs.promises.writeFile(subPath, value);
     } else {
       await fs.promises.mkdir(subPath, { recursive: true });
