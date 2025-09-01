@@ -68,6 +68,10 @@ export interface AppFetchOptions extends RequestInit {
   discardBody?: boolean;
   // Do not wait for the latest version to be deployed.
   noWait?: boolean;
+  // Explicitly try to wait for version to be deployed. The logic to determine if app should wait or not is
+  // quite heavy cognitive load, and causes integration test failures if altered. This field is appended
+  // to handle edge cases when we most certainly want to wait
+  forceWait?: boolean;
 }
 
 export class TestEnv {
@@ -564,7 +568,10 @@ subscription PublishAppFromRepoAutobuild(
     }
 
     let waitForVersionId: string | null = null;
-    if (!options.noWait && !urlOrPath.startsWith("http")) {
+    if (
+      (!options.noWait && !urlOrPath.startsWith("http")) ||
+      options.forceWait
+    ) {
       // Fetch latest version
       const info = await this.backend.getAppById(app.id);
       waitForVersionId = info.activeVersionId;
