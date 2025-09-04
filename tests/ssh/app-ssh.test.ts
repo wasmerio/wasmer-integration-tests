@@ -11,6 +11,8 @@ import { copyPackageAnonymous } from "../../src/package";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { Client } from "ssh2";
 import SftpClient from "ssh2-sftp-client";
+import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 
 const setupApp = async (env: TestEnv) => {
   const rootPackageDir = path.join(
@@ -55,6 +57,10 @@ const setupApp = async (env: TestEnv) => {
             password: password,
             type: "plain",
           },
+        ],
+        // This is from id_rsa_test.pub
+        authorized_keys: [
+          "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCdn8+RxPD9QnKQJgVlZurVh3AwyeEtbdA79YKrOmekzgrkcwBslUw49Q2fzJubF+7bgyTnyK7U3Rr33bcbr8tPoSJgiRnnOfFBVbPOQJBBCGxD2Lx1MKkR/RwDacTeNAucK20snYazZLWUL1xHTjyv77bp0VcGGNLg8J3RPeJo6vyUtUuGQDOUlauyTXZXmnAvTXurl7JC3mrRZxusqe64HN2Tsom6Gn5MB55oaeoyVEdSGKsPjuCifYIWPj3SBdumcxPu3yo0vORTMPoEqMjCQZtqa1AYW7VFKb65sunJYCDelpmGOLWWI2M4UdXqBrg4X12AFPdRAPFTR/qgMYUljKIKe+WWwgofk4w2CsXUWlYbruVtqNroAW6y4FWQtDnYnwON5FdCINKcrNNnem+SA3zNrXKJjvv4cfUG+IIBuYUvUh3BaFX6ds6lL6Pio+HYqTXIzoeWiM3hpZHRMRWem5tW9OsEt0U8T9KevkKYRwm2XNCZPJmZsYW/hCLtN5ULr7RQNRzPjJJvsg4t71nK5M1qt0D6VrFkvAUAf7zubJsUddnkxudCp303/uYq6CooblaeGms2CswqAV8ur7uJNiI/g3S289AZIl5ilB4IMNFAohZs2AH355Bk22WzmnWAo5DiW1qqUlo7bQonfzxM7+xBULgky/vBzsLZo/3iSw== lorkin@wasmerburk",
         ],
       },
     ],
@@ -175,7 +181,11 @@ test("app-ssh", async () => {
 
   console.log(`SSH to ${sshUsername}@${hostname}, password: ${password}`);
   const conn = new Client();
-  async function connectSshWithRetry(tries = 5, delayMs = 3000): Promise<void> {
+  async function connectSshWithRetry(
+    tries = 5,
+    delayMs = 3000,
+    withKey = "",
+  ): Promise<void> {
     let lastErr: unknown = null;
     for (let i = 0; i < tries; i++) {
       console.info(`Connection attempt [${i}/${tries}]`);
@@ -191,13 +201,23 @@ test("app-ssh", async () => {
           };
           conn.once("ready", onReady);
           conn.once("error", onError);
-          conn.connect({
-            host: hostname,
-            port: 22,
-            username: sshUsername,
-            password,
-            readyTimeout: 5000,
-          });
+          if (withKey) {
+            conn.connect({
+              host: hostname,
+              port: 22,
+              username: sshUsername,
+              privateKey: readFileSync(withKey),
+              readyTimeout: 5000,
+            });
+          } else {
+            conn.connect({
+              host: hostname,
+              port: 22,
+              username: sshUsername,
+              password,
+              readyTimeout: 5000,
+            });
+          }
         });
         return;
       } catch (e) {
@@ -214,6 +234,8 @@ test("app-ssh", async () => {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
+  const fileToAdd =
+    "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
   await connectSshWithRetry();
   try {
     console.info(`Starting tests on with ${sshUsername}@${hostname}`);
@@ -221,8 +243,7 @@ test("app-ssh", async () => {
     expect(who.code).toBe(0);
     // TODO(WAX-495): Enable test after done
     // expect(who.stdout.trim()).toBe(sshUsername);
-    const testData =
-      "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
+    const testData = fileToAdd;
     const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
     const io = await sshShellExec(conn, writeCmd);
     expect(io.code).toBe(0);
@@ -241,6 +262,18 @@ test("app-ssh", async () => {
   } finally {
     conn.end();
   }
+
+  // Connect with key
+  console.log("Connect with key");
+  await connectSshWithRetry(5, 5000, "./tests/ssh/id_rsa_test");
+  try {
+    const checkData = await sshShellExec(conn, `cat ${fileToAdd}`);
+    expect(checkData.code).toBe(0);
+    expect(checkData.stdout).toContain("abc123");
+  } finally {
+    conn.end();
+  }
+
   // Cleanup app on success. If not, we can inspect the app via creds listed above
   env.deleteApp(sshDeployment);
 });
