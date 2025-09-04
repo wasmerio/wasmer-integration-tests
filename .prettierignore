@@ -3,7 +3,10 @@ wordpress
 node_modules
 .gitignore
 .gitmodules
+.crush
 .prettierignore
+tests/ssh/id_rsa_test
+tests/ssh/id_rsa_test.pub
 fixtures
 flake.nix
 flake.lock

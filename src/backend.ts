@@ -12,6 +12,7 @@ export interface GraphQlResponse<T> {
 export interface ApiDeployApp {
   id: string;
   url: string;
+  permalink: string;
   activeVersionId: string | null;
 }
 
@@ -93,6 +94,7 @@ export class BackendClient {
       node: z.object({
         id: z.string(),
         url: z.string(),
+        permalink: z.string(),
         activeVersion: z.object({
           id: z.string(),
         }),
@@ -106,6 +108,7 @@ export class BackendClient {
           ... on DeployApp {
             id
             url
+            permalink
             activeVersion {
               id
             }
@@ -139,10 +142,12 @@ export class BackendClient {
       const id = node.id;
       const url = node.url;
       const activeVersionId = node.activeVersion?.id ?? null;
+      const permalink = node.permalink;
 
       const app: ApiDeployApp = {
         id,
         url,
+        permalink,
         activeVersionId,
       };
 

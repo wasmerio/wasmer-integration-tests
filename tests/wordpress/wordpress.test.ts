@@ -8,17 +8,9 @@ import {
   SECOND,
   TestEnv,
 } from "../../src/index";
+import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { validateWordpressIsLive } from "../../src/wordpress";
 
-function generateNeedlesslySecureRandomPassword(): string {
-  const charset =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => charset[b % charset.length])
-    .join("");
-}
 
 function randomizeJobDatabaseEnvVarsForWP(appYaml: AppYaml): void {
   if (appYaml.jobs) {

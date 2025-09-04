@@ -19,6 +19,7 @@ import {
   randomAppName,
   writeAppDefinition,
 } from "./app/construct";
+import { AppGet } from "./app/appGet";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -91,9 +92,8 @@ export class TestEnv {
   backend: BackendClient;
 
   // Logging settings
-  hasPrintedEnv = false;
   verbose = false;
-  maxRowLength = 600;
+  maxRowLength = 300;
 
   static fromEnv(): TestEnv {
     const registry = process.env[ENV_VAR_REGISTRY] ?? REGISTRY_DEV;
@@ -197,10 +197,8 @@ export class TestEnv {
 
     // Create a copy and then unset env if env has been printed
     const printSpawn = { args: args, ...spawnOpts };
-    if (this.hasPrintedEnv) {
-      printSpawn.env = null;
-    } else {
-      this.hasPrintedEnv = true;
+    if (!this.verbose) {
+      printSpawn.env = { OBFUSCATED: "Rerun with VERBOSE=true to see." };
     }
     console.debug("Running command...", printSpawn);
     const proc = spawn(this.wasmerBinary, args, spawnOpts);
@@ -376,6 +374,30 @@ export class TestEnv {
     await this.runWasmerCommand({
       args: ["app", "delete", app.id],
     });
+  }
+
+  // wasmerAppGet returns more info than app info, using command wasmer app get <app-id>
+  async wasmerAppGet(appID: string): Promise<AppGet> {
+    const args: string[] = ["app", "get", appID, "--format", "json"];
+    const { stdout } = await this.runWasmerCommand({
+      args,
+    });
+    return AppGet.parse(JSON.parse(stdout));
+  }
+
+  async getAppPermalinkID(appID: string): Promise<string> {
+    const appInfo = await this.backend.getAppById(appID);
+    const permalink = appInfo.permalink;
+    if (!permalink) {
+      throw new Error(`Missing permalink for app ${appID}`);
+    }
+    const match = permalink.match(
+      /^https?:\/\/([a-z0-9-]+)\.id\.wasmer\.(?:app|dev|fun)(?:\/|$)/i,
+    );
+    if (!match) {
+      throw new Error(`Invalid permalink format: ${permalink}`);
+    }
+    return match[1];
   }
 
   async *graphqlSubscription(
