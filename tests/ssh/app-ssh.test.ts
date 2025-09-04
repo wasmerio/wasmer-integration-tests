@@ -11,7 +11,6 @@ import { copyPackageAnonymous } from "../../src/package";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { Client } from "ssh2";
 import SftpClient from "ssh2-sftp-client";
-import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 
 const setupApp = async (env: TestEnv) => {
