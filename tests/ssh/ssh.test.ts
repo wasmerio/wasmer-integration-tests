@@ -19,6 +19,11 @@ test("ssh", async () => {
   }
 
   {
+    const res = await runSsh(["--", "bash", "-c", "'echo hello'"]);
+    expect(res).toBe("/");
+  }
+
+  {
     const res = await runSsh([], "pwd\n");
     expect(res).toBe("/");
   }
