@@ -14,7 +14,7 @@ test("ssh", async () => {
   };
 
   {
-    const res = await runSsh(["--", "bash", "pwd"]);
+    const res = await runSsh(["wasmer/bash", "--", "-c", "pwd"]);
     expect(res).toBe("/");
   }
 
@@ -29,7 +29,7 @@ test("ssh", async () => {
   }
 
   {
-    const res = await runSsh(["ls"]);
+    const res = await runSsh(["wasmer/bash", "--", "-c", "ls"]);
     const lines = res
       .trim()
       .split("\n")
