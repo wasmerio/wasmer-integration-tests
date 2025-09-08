@@ -20,7 +20,7 @@ test("ssh", async () => {
 
   {
     const res = await runSsh(["--", "bash", "-c", "'echo hello'"]);
-    expect(res).toBe("/");
+    expect(res).toBe("hello");
   }
 
   {
