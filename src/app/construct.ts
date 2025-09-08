@@ -311,7 +311,9 @@ export async function writeAppDefinition(
     files["wasmer.toml"] = toml.stringify(app.wasmerToml);
   }
 
-  console.debug(`Writing app definition to ${path}`, { files });
+  if (process.env.VERBOSE) {
+    console.debug(`Writing app definition to ${path}`, { files });
+  }
 
   async function buildDir(
     basePath: string,
