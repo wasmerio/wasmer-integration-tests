@@ -14,7 +14,7 @@ import { truncateOutput } from "../../src/util";
 // Increase timeout: deploying multiple apps can take time.
 jest.setTimeout(20 * 60 * 1000);
 
-// findPackageDirs by recursively crawling some directory root looking for 'wasmer.toml'
+// findPackageDirs by recursively crawling some directory root looking for indicators of a deployable project
 export function findPackageDirs(root: string): string[] {
   let foundDirs: string[] = [];
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -34,43 +34,6 @@ export function findPackageDirs(root: string): string[] {
     }
   }
   return foundDirs;
-}
-
-function parsePossibleDeployJson(stdout: string, cwd: string) {
-  // Try strict parse first
-  try {
-    return parseDeployOutput(stdout, cwd);
-  } catch {
-    // Fallback: scan lines for a JSON object matching expected shape
-    const lines = stdout
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i];
-      if (!line.startsWith("{")) continue;
-      try {
-        const obj = JSON.parse(line);
-        if (
-          obj &&
-          typeof obj === "object" &&
-          typeof obj.json_config === "string" &&
-          typeof obj.id === "string" &&
-          obj.app &&
-          typeof obj.app.id === "string" &&
-          typeof obj.url === "string"
-        ) {
-          // Reuse the same parser to normalize fields
-          return parseDeployOutput(line, cwd);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    throw new Error(
-      `Could not locate wasmer deploy JSON in command output. Cwd: ${cwd}, Output on newline:\n${stdout}`,
-    );
-  }
 }
 
 async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
@@ -116,7 +79,6 @@ async function runShellCommand(
     process.env[ENV_VAR_MAX_PRINT_LENGTH] || "1024",
     10,
   );
-
 
   return await new Promise((resolve, reject) => {
     proc.on("error", (err) => {
@@ -176,9 +138,43 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
     // and convert to AppInfo
     return appGetToAppInfo(await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")));
   }
+}
 
-
-
+function parsePossibleDeployJson(stdout: string, cwd: string) {
+  // Try strict parse first
+  try {
+    return parseDeployOutput(stdout, cwd);
+  } catch {
+    // Fallback: scan lines for a JSON object matching expected shape
+    const lines = stdout
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line.startsWith("{")) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (
+          obj &&
+          typeof obj === "object" &&
+          typeof obj.json_config === "string" &&
+          typeof obj.id === "string" &&
+          obj.app &&
+          typeof obj.app.id === "string" &&
+          typeof obj.url === "string"
+        ) {
+          // Reuse the same parser to normalize fields
+          return parseDeployOutput(line, cwd);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    throw new Error(
+      `Could not locate wasmer deploy JSON in command output. Cwd: ${cwd}, Output on newline:\n${stdout}`,
+    );
+  }
 }
 
 describe("wasmopticon: Crawl and deploy", () => {
