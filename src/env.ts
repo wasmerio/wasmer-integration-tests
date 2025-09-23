@@ -297,6 +297,16 @@ export class TestEnv {
     return name;
   }
 
+  async getAppGetFromDir(dir: string): Promise<AppGet> {
+    const args: string[] = ["app", "get", "--format", "json"];
+    const { stdout } = await this.runWasmerCommand({
+      args,
+      cwd: dir,
+    });
+
+    return AppGet.parse(JSON.parse(stdout));
+  }
+
   async deployAppDir(dir: Path, options?: DeployOptions): Promise<AppInfo> {
     const extraArgs = options?.extraCliArgs ?? [];
     const noWait = options?.noWait ?? false;

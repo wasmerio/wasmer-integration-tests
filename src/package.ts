@@ -18,7 +18,16 @@ export async function copyPackageAnonymous(
   }
   await fs.promises.cp(src, dest, { recursive: true });
   const wasmerTomlPath = path.join(dest, "wasmer.toml");
-  const tomlContents = await fs.promises.readFile(wasmerTomlPath, "utf-8");
+  let tomlContents;
+  try {
+    tomlContents = await fs.promises.readFile(wasmerTomlPath, "utf-8");
+  } catch (err) {
+    console.error(
+      "Failed to read wasmer.toml, continuing in case of shipit",
+      err,
+    );
+    return dest;
+  }
   const manifest = toml.parse(tomlContents);
   delete manifest["package"];
   const newTomlContents = toml.stringify(manifest);
