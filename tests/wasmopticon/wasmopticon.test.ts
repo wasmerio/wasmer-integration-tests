@@ -117,64 +117,31 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
   procEnv.WASMER_NAMESPACE = env.namespace;
 
-  const { stdout } = await runShellCommand(cmd, {
+  // We get output here but we can't parse it to some app info 
+  // since the output isn't even close to being anything json
+  // and I don't want to need to rely on it being so
+  const { stdout, stderr } = await runShellCommand(cmd, {
     cwd: workDir,
     env: procEnv,
   },
     env.verbose
   );
 
-  try {
-    const deploy = parsePossibleDeployJson(stdout, workDir);
-    return await env.resolveAppInfoFromVersion(deploy, workDir);
+  console.info("Shipit deploy stdout on newline:\n", stdout)
+  console.info("Shipit deploy stderr on newline:\n", stderr)
 
-  } catch (err) {
-    console.error("failed to parse appInfo from shipit deploy", err);
-    if (!fs.existsSync(path.join(workDir, ".shipit", "wasmer"))) {
-      throw err;
-    }
-    // The app may be successfully deployed here, but shipit output differes from wasmer outpu
-    // Try to resolve this by getting the app data from the deployed shipit directory
-    // and convert to AppInfo
-    return appGetToAppInfo(await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")));
+  if (!fs.existsSync(path.join(workDir, ".shipit", "wasmer"))) {
+    throw new Error("cant find app version since .shipit/wasmer doesnt exist");
   }
+  // The app may be successfully deployed here, but shipit output differes from wasmer outpu
+  // Try to resolve this by getting the app data from the deployed shipit directory
+  // and convert to AppInfo
+  return appGetToAppInfo(await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")));
 }
 
 function parsePossibleDeployJson(stdout: string, cwd: string) {
   // Try strict parse first
-  try {
-    return parseDeployOutput(stdout, cwd);
-  } catch {
-    // Fallback: scan lines for a JSON object matching expected shape
-    const lines = stdout
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i];
-      if (!line.startsWith("{")) continue;
-      try {
-        const obj = JSON.parse(line);
-        if (
-          obj &&
-          typeof obj === "object" &&
-          typeof obj.json_config === "string" &&
-          typeof obj.id === "string" &&
-          obj.app &&
-          typeof obj.app.id === "string" &&
-          typeof obj.url === "string"
-        ) {
-          // Reuse the same parser to normalize fields
-          return parseDeployOutput(line, cwd);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    throw new Error(
-      `Could not locate wasmer deploy JSON in command output. Cwd: ${cwd}, Output on newline:\n${stdout}`,
-    );
-  }
+  return parseDeployOutput(stdout, cwd);
 }
 
 describe("wasmopticon: Crawl and deploy", () => {
