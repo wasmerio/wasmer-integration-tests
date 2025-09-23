@@ -216,6 +216,9 @@ jobs:
       - uses: ./.github/actions/setup-test-env
         with:
           fetch_artifact: ${{ inputs.fetch_artifact }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       # Needed for uvx run shipit
       - name: Install uv
         run: pip install uv
