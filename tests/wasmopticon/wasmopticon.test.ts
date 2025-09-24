@@ -6,7 +6,6 @@ import { spawn, SpawnOptions } from "node:child_process";
 import { ENV_VAR_MAX_PRINT_LENGTH, TestEnv } from "../../src/env";
 import { copyPackageAnonymous } from "../../src/package";
 import { AppYaml, DEFAULT_APP_YAML, randomAppName } from "../../src/app/construct";
-import { parseDeployOutput } from "../../src/wasmer_cli";
 import { AppInfo } from "../../src";
 import { appGetToAppInfo } from "../../src/convert";
 import { truncateOutput } from "../../src/util";
