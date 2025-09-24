@@ -226,12 +226,15 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: 3.13
+      - name: Setup and activate virtual environment
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
-          uv pip sync
           VERBOSE=true npx jest tests/wasmopticon -t "deploy wasmopticon/python/fastapi_pandoc"
       - name: Notify failure in Slack
         env:
