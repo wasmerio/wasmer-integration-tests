@@ -110,7 +110,7 @@ async function runShellCommand(
 }
 
 async function tryShipitDeploy(workDir: string, env: TestEnv) {
-  const cmd = `uvx --refresh shipit-cli==0.5.1 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
+  const cmd = `uvx --refresh shipit-cli==0.5.2 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
   const procEnv = { ...process.env };
   procEnv.WASMER_REGISTRY = env.registry;
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
