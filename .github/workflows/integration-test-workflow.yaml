@@ -235,7 +235,7 @@ jobs:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
         run: |
-          VERBOSE=true npx jest tests/wasmopticon -t "deploy wasmopticon/python/fastapi_pandoc"
+          VERBOSE=true npx jest tests/wasmopticon
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
