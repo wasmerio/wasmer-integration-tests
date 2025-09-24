@@ -4,6 +4,9 @@ concurrency:
   group: ${{ github.ref }}-${{ inputs.registry }}
   cancel-in-progress: true
 
+permissions:
+  contents: read # access to check out code and install dependencies for python (wasmopticon tests)
+
 on:
   workflow_call:
     inputs:
@@ -216,12 +219,13 @@ jobs:
       - uses: ./.github/actions/setup-test-env
         with:
           fetch_artifact: ${{ inputs.fetch_artifact }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           python-version: 3.13
-      - name: Set up Python
-        run: uv python install
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
