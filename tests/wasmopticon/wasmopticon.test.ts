@@ -111,7 +111,7 @@ async function runShellCommand(
 }
 
 async function tryShipitDeploy(workDir: string, env: TestEnv) {
-  const cmd = `uvx --refresh shipit-cli==0.5.1 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace}`;
+  const cmd = `uvx --refresh shipit-cli==0.5.1 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
   const procEnv = { ...process.env };
   procEnv.WASMER_REGISTRY = env.registry;
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
@@ -137,11 +137,6 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
   // Try to resolve this by getting the app data from the deployed shipit directory
   // and convert to AppInfo
   return appGetToAppInfo(await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")));
-}
-
-function parsePossibleDeployJson(stdout: string, cwd: string) {
-  // Try strict parse first
-  return parseDeployOutput(stdout, cwd);
 }
 
 describe("wasmopticon: Crawl and deploy", () => {
