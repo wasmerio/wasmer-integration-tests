@@ -1,5 +1,5 @@
 import path from "node:path";
-import { sleep, TestEnv, wasmopticonDir } from "../../src";
+import { sleep, TestEnv } from "../../src";
 import {
   AppCapabilities,
   AppDefinition,
@@ -14,10 +14,7 @@ import SftpClient from "ssh2-sftp-client";
 import { readFileSync } from "node:fs";
 
 const setupApp = async (env: TestEnv) => {
-  const rootPackageDir = path.join(
-    await wasmopticonDir(),
-    "php/php-testserver",
-  );
+  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
   const dir = await copyPackageAnonymous(rootPackageDir);
 
   const definition: AppDefinition = {

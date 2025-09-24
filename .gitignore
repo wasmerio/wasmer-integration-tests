@@ -3,5 +3,3 @@ target
 .direnv
 node_modules
 wordpress
-wasmopticon
-.crush

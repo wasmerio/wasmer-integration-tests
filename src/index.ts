@@ -27,5 +27,4 @@ export {
   HEADER_PURGE_INSTANCES,
 } from "./edge";
 export { buildTempDir, createTempDir } from "./fs";
-export { wasmopticonDir } from "./deps";
 export { parseDeployOutput } from "./wasmer_cli";

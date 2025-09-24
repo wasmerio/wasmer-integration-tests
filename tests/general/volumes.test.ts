@@ -11,17 +11,13 @@ import {
   HEADER_INSTANCE_ID,
   HEADER_PURGE_INSTANCES,
   TestEnv,
-  wasmopticonDir,
   writeAppDefinition,
 } from "../../src/index";
 
 test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join(
-    await wasmopticonDir(),
-    "php/php-testserver",
-  );
+  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
   const dir = await copyPackageAnonymous(rootPackageDir);
 
   const app: AppDefinition = {
@@ -78,10 +74,7 @@ test("app-volumes", async () => {
 test("volume-mount-inside-package-dir", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join(
-    await wasmopticonDir(),
-    "php/php-testserver",
-  );
+  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
   const dir = await copyPackageAnonymous(rootPackageDir);
 
   // The PHP testserver mounts code at /app, so we'll mount a volume inside that.

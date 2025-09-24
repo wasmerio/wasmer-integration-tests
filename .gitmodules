@@ -1,6 +1,6 @@
-[submodule "wasmopticon"]
-	path = wasmopticon
-	url = https://github.com/wasix-org/wasmopticon.git
 [submodule "wordpress"]
 	path = wordpress
 	url = git@github.com:wasmerio/wordpress.git
+[submodule "wasmopticon"]
+	path = wasmopticon
+	url = git@github.com:wasix-org/wasmopticon.git
