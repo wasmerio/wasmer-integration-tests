@@ -112,6 +112,10 @@ async function sshShellExec(
         const match = tail.match(/(\d+)/);
         if (match) {
           code = parseInt(match[1], 10);
+          console.log(`Here is tail: ${tail}`);
+        } else {
+          // No return code yet, await more data
+          return false;
         }
         return true;
       };
