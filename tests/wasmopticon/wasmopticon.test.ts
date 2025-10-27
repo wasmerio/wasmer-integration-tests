@@ -5,7 +5,11 @@ import { spawn, SpawnOptions } from "node:child_process";
 
 import { ENV_VAR_MAX_PRINT_LENGTH, TestEnv } from "../../src/env";
 import { copyPackageAnonymous } from "../../src/package";
-import { AppYaml, DEFAULT_APP_YAML, randomAppName } from "../../src/app/construct";
+import {
+  AppYaml,
+  DEFAULT_APP_YAML,
+  randomAppName,
+} from "../../src/app/construct";
 import { AppInfo } from "../../src";
 import { appGetToAppInfo } from "../../src/convert";
 import { truncateOutput } from "../../src/util";
@@ -24,9 +28,12 @@ export function findPackageDirs(root: string): string[] {
       // Shipit creates a copy. We don't want to attempt to deploy this copy, as this will create nested deployments
       // This issue only arises while debugging/multiple subsequent runs
       if (currentPath.includes(".shipit")) {
-        continue
+        continue;
       }
-      if (fs.existsSync(path.join(currentPath, 'wasmer.toml')) || fs.existsSync(path.join(currentPath, 'pyproject.toml'))) {
+      if (
+        fs.existsSync(path.join(currentPath, "wasmer.toml")) ||
+        fs.existsSync(path.join(currentPath, "pyproject.toml"))
+      ) {
         foundDirs.push(currentPath);
       }
       foundDirs = foundDirs.concat(findPackageDirs(currentPath));
@@ -43,10 +50,10 @@ async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
     const raw = await fs.promises.readFile(appYamlPath, "utf-8");
     const loaded = yaml.load(raw);
     app = AppYaml.parse(loaded);
-    app.domains = []
+    app.domains = [];
   } catch {
     // App yaml not found, create it
-    app = AppYaml.parse(DEFAULT_APP_YAML)
+    app = AppYaml.parse(DEFAULT_APP_YAML);
   }
 
   app.owner = namespace;
@@ -60,7 +67,7 @@ async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
 async function runShellCommand(
   cmdStr: string,
   opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
-  verbose: boolean = false
+  verbose: boolean = false,
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   const spawnOpts: SpawnOptions = {
     cwd: opts.cwd,
@@ -69,7 +76,7 @@ async function runShellCommand(
     stdio: ["ignore", "pipe", "pipe"],
   };
 
-  console.info(`Running: ${cmdStr}`)
+  console.info(`Running: ${cmdStr}`);
   const proc = spawn(cmdStr, spawnOpts);
 
   const stdoutChunks: Buffer[] = [];
@@ -94,8 +101,8 @@ async function runShellCommand(
         MAX_STDOUT_STDERR_LENGTH,
       );
       if (!verbose) {
-        stdout = truncatedStdout
-        stderr = truncatedStderr
+        stdout = truncatedStdout;
+        stderr = truncatedStderr;
       }
       if (code !== 0) {
         const err = new Error(
@@ -110,24 +117,26 @@ async function runShellCommand(
 }
 
 async function tryShipitDeploy(workDir: string, env: TestEnv) {
-  const cmd = `uvx --refresh shipit-cli==0.5.2 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
+  const cmd = `uvx --refresh shipit-cli==0.10.1 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
   const procEnv = { ...process.env };
   procEnv.WASMER_REGISTRY = env.registry;
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
   procEnv.WASMER_NAMESPACE = env.namespace;
 
-  // We get output here but we can't parse it to some app info 
+  // We get output here but we can't parse it to some app info
   // since the output isn't even close to being anything json
   // and I don't want to need to rely on it being so
-  const { stdout, stderr } = await runShellCommand(cmd, {
-    cwd: workDir,
-    env: procEnv,
-  },
-    env.verbose
+  const { stdout, stderr } = await runShellCommand(
+    cmd,
+    {
+      cwd: workDir,
+      env: procEnv,
+    },
+    env.verbose,
   );
 
-  console.info("Shipit deploy stdout on newline:\n", stdout)
-  console.info("Shipit deploy stderr on newline:\n", stderr)
+  console.info("Shipit deploy stdout on newline:\n", stdout);
+  console.info("Shipit deploy stderr on newline:\n", stderr);
 
   if (!fs.existsSync(path.join(workDir, ".shipit", "wasmer"))) {
     throw new Error("cant find app version since .shipit/wasmer doesnt exist");
@@ -135,7 +144,9 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
   // The app may be successfully deployed here, but shipit output differes from wasmer outpu
   // Try to resolve this by getting the app data from the deployed shipit directory
   // and convert to AppInfo
-  return appGetToAppInfo(await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")));
+  return appGetToAppInfo(
+    await env.getAppGetFromDir(path.join(workDir, ".shipit", "wasmer")),
+  );
 }
 
 describe("wasmopticon: Crawl and deploy", () => {
