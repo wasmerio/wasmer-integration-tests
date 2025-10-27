@@ -20,6 +20,7 @@ import {
   writeAppDefinition,
 } from "./app/construct";
 import { AppGet } from "./app/appGet";
+import { HEADER_APP_VERSION_ID, HEADER_WASMER_REQUEST_ID } from "./edge";
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -639,19 +640,28 @@ subscription PublishAppFromRepoAutobuild(
       // NOTE: this step happens after the success check on purpose, because
       // another error like a 404 indicates problems in the deployment flow.
       if (waitForVersionId) {
-        const currentId = response.headers.get("x-edge-app-version-id");
-        if (!currentId) {
+        const requestId = response.headers.get(HEADER_WASMER_REQUEST_ID);
+        if (!requestId) {
           throw new Error(
-            `Failed to fetch URL '${url}': missing x-edge-app-version-id header`,
+            `Failed to fetch URL '${url}': missing ${HEADER_WASMER_REQUEST_ID} header in response - does not seem to be served by Edge`,
           );
         }
 
+        const currentId = response.headers.get(HEADER_APP_VERSION_ID);
+
         if (currentId !== waitForVersionId) {
+          let msg = "";
+          if (!currentId) {
+            msg = `missing ${HEADER_APP_VERSION_ID} header in response - app does not seem to be published yet`;
+          } else {
+            msg = `expected version ${waitForVersionId}, got ${currentId}`;
+          }
+
           const elapsed = Date.now() - start;
           // only retry for one minute
           if (elapsed > RETRY_TIMEOUT_SECS * 1000) {
             throw new Error(
-              `Failed to fetch URL '${url}': app is not at expected version ${waitForVersionId} after retrying for ${RETRY_TIMEOUT_SECS} seconds (got ${currentId})`,
+              `Failed to fetch URL '${url}': ${msg} (retried for ${RETRY_TIMEOUT_SECS} seconds)`,
             );
           }
 
