@@ -18,6 +18,8 @@ jobs:
       test_branch: ${{ github.head_ref }}
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
+      apply_blame: true
 
   fmt:
     name: File format check
