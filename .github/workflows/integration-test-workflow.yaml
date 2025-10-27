@@ -253,23 +253,34 @@ jobs:
             --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
-  blame_failed_tests:
-    name: Blame failing tests
-    if: ${{ github.event.inputs.apply_blame == 'true' }}
+  maybe-blame-someone:
+    name: Maybe blame someone
+    if: ${{ inputs.apply_blame == true }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       pull-requests: write
     steps:
-      - name: Wait and find fails
+      - name: Wait for failures
         id: fail
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const o = context.repo.owner;
             const r = context.repo.repo;
             const id = context.runId;
+            function isSelf(job) {
+              if (job.name === 'Maybe blame someone') return true;
+              if (job.name === 'maybe-blame-someone') return true;
+              if (job.name === context.job) return true;
+              if (job.name === process.env.GITHUB_JOB) return true;
+              return (job.steps || []).some(
+                step => step.name === 'Wait for failures'
+              );
+            }
+            const filterJobs = js =>
+              js.filter(job => !isSelf(job));
             async function jobs() {
               const res = await github.rest.actions
                 .listJobsForWorkflowRun({
@@ -278,15 +289,17 @@ jobs:
               return res.data.jobs || [];
             }
             async function waitDone() {
-              for (let i = 0; i < 60; i++) {
+              // This equates to 180*5000ms = 15 minutes
+              for (let i = 0; i < 180; i++) {
                 const js = await jobs();
-                const done = js.every(
+                const others = filterJobs(js);
+                const done = others.every(
                   j => j.status === 'completed'
                 );
-                if (done) return js;
+                if (done) return others;
                 await new Promise(x => setTimeout(x, 5000));
               }
-              return await jobs();
+              return filterJobs(await jobs());
             }
             const all = await waitDone();
             const failed = all.filter(
@@ -305,13 +318,13 @@ jobs:
           exit 0
       - name: Get commit info
         id: ci
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const o = context.repo.owner;
             const r = context.repo.repo;
-            const sha = context.sha;
             const pr = context.payload.pull_request;
+            const sha = pr ? pr.head.sha : context.sha;
             const ref = pr ? pr.head.ref : context.ref;
             const cm = await github.rest.repos.getCommit({
               owner: o, repo: r, ref: sha
@@ -323,38 +336,42 @@ jobs:
             core.setOutput('ref', ref);
             core.setOutput('author', c.author.name);
             core.setOutput('email', c.author.email);
-            core.setOutput('title', c.message.split('\n')[0]);
+            core.setOutput('message', c.message);
             core.setOutput('url', url);
             core.setOutput('is_pr', pr ? 'true' : 'false');
             core.setOutput('pr_num', pr ? String(pr.number) : '');
+            core.setOutput('repository', o + '/' + r);
       - name: Build message
         id: msg
         env:
           SHA: ${{ steps.ci.outputs.sha }}
-          TITLE: ${{ steps.ci.outputs.title }}
           AUTHOR: ${{ steps.ci.outputs.author }}
           EMAIL: ${{ steps.ci.outputs.email }}
           REF: ${{ steps.ci.outputs.ref }}
           URL: ${{ steps.ci.outputs.url }}
+          MESSAGE: ${{ steps.ci.outputs.message }}
+          REPO: ${{ steps.ci.outputs.repository }}
           JOBS: ${{ steps.fail.outputs.jobs }}
         run: |
           echo "msg<<EOF" >> "$GITHUB_OUTPUT"
-          echo "Test failures detected." >> "$GITHUB_OUTPUT"
+          echo "──────────────────────────────────────────────" \
+            >> "$GITHUB_OUTPUT"
+          echo "*❌ Someone broke it! ❌*" >> "$GITHUB_OUTPUT"
+          echo "Primary suspect: *${AUTHOR}*" >> "$GITHUB_OUTPUT"
           echo "" >> "$GITHUB_OUTPUT"
-          echo "Commit: ${SHA}" >> "$GITHUB_OUTPUT"
-          echo "Title: ${TITLE}" >> "$GITHUB_OUTPUT"
-          echo "Author: ${AUTHOR} <${EMAIL}>" >> "$GITHUB_OUTPUT"
-          echo "Ref: ${REF}" >> "$GITHUB_OUTPUT"
-          echo "Link: ${URL}" >> "$GITHUB_OUTPUT"
+          echo "*Commit:* ${SHA}, <${URL}|View commit>" >> "$GITHUB_OUTPUT"
+          echo "*Author:* ${AUTHOR} <${EMAIL}>" >> "$GITHUB_OUTPUT"
+          echo "*Ref:* ${REF}" >> "$GITHUB_OUTPUT"
           echo "" >> "$GITHUB_OUTPUT"
-          echo "Failed jobs:" >> "$GITHUB_OUTPUT"
-          echo "${JOBS}" \
-          | jq -r '.[]|"- \(.name): \(.url)"' \
-          >> "$GITHUB_OUTPUT"
+          echo "*Repository:* ${REPO}" >> "$GITHUB_OUTPUT"
+          echo "*Commit message:*" >> "$GITHUB_OUTPUT"
+          echo "\`\`\`" >> "$GITHUB_OUTPUT"
+          echo "${MESSAGE}" >> "$GITHUB_OUTPUT"
+          echo "\`\`\`" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
       - name: Post Slack message
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
           MSG: ${{ steps.msg.outputs.msg }}
         run: |
           set -euo pipefail
