@@ -324,8 +324,9 @@ jobs:
           short_sha=$(printf '%.7s' "${GITHUB_SHA}")
           ref_name="${GITHUB_REF#refs/}"
           repo="${GITHUB_REPOSITORY}"
+          ref_label="${repo}@${ref_name}"
           commit_url="https://github.com/${repo}/commit/${GITHUB_SHA}"
-          text="🎉 All green in ${repo}! *${GITHUB_ACTOR}* kept *${ref_name}* clean with <${commit_url}|${short_sha}>. 🙌"
+          text="🎉 All green in ${repo}! *${GITHUB_ACTOR}* kept *${ref_label}* clean with <${commit_url}|${short_sha}>. 🙌"
           payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -sS -X POST -H 'Content-type: application/json' \
             --data "$payload" "$SLACK_WEBHOOK_URL"
