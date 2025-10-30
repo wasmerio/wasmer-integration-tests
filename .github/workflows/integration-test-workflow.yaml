@@ -350,20 +350,18 @@ jobs:
             echo "No webhook configured; skipping success message."
             exit 0
           fi
-          short_sha=$(printf '%.7s' "${SHA}")
+          short_sha="${SHA:0:7}"
           ref_label="${REPO}@${REF}"
           commit_url="https://github.com/${REPO}/commit/${SHA}"
-          text=$(cat <<EOF
-🎉 All green in ${REPO}! *${GITHUB_ACTOR}* kept *${ref_label}* clean. 🙌
-
-*Commit:* <${commit_url}|${short_sha}>
-*Commit message:*
-\`\`\`
-${MESSAGE}
-\`\`\`
-EOF
-)
-          payload=$(jq -n --arg text "$text" '{text: $text}')
+          payload=$(jq -n \
+            --arg repo "$REPO" \
+            --arg actor "$GITHUB_ACTOR" \
+            --arg refLabel "$ref_label" \
+            --arg commitUrl "$commit_url" \
+            --arg shortSha "$short_sha" \
+            --arg message "$MESSAGE" \
+            '{text: "🎉 All green in \($repo)! *\($actor)* kept *\($refLabel)* clean. 🙌\n\n*Commit:* <\($commitUrl)|\($shortSha)>\n*Commit message:*\n```\n\($message)\n```"}'
+          )
           curl -sS -X POST -H 'Content-type: application/json' \
             --data "$payload" "$SLACK_WEBHOOK_URL"
       - name: Stop if no failures
