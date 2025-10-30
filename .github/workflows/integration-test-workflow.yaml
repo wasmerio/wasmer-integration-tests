@@ -253,8 +253,8 @@ jobs:
             --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
-  notify-quality-assessment:
-    name: Notify quality assessment
+  provide-quality-assessment:
+    name: Provide quality assessment
     if: ${{ inputs.provide_quality_assessment == true }}
     runs-on: ubuntu-latest
     permissions:
