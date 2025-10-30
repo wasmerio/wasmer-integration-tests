@@ -356,11 +356,11 @@ jobs:
           echo "msg<<EOF" >> "$GITHUB_OUTPUT"
           echo "──────────────────────────────────────────────" \
             >> "$GITHUB_OUTPUT"
-          echo "*❌ Someone broke it! ❌*" >> "$GITHUB_OUTPUT"
+          echo "*Uh-oh, what happened here?☝️ *" >> "$GITHUB_OUTPUT"
+          echo "Seems like something broke. Who dunit'?" >> "$GITHUB_OUTPUT"
           echo "Primary suspect: *${AUTHOR}*" >> "$GITHUB_OUTPUT"
           echo "" >> "$GITHUB_OUTPUT"
           echo "*Commit:* ${SHA}, <${URL}|View commit>" >> "$GITHUB_OUTPUT"
-          echo "*Author:* ${AUTHOR} <${EMAIL}>" >> "$GITHUB_OUTPUT"
           echo "*Ref:* ${REF}" >> "$GITHUB_OUTPUT"
           echo "" >> "$GITHUB_OUTPUT"
           echo "*Repository:* ${REPO}" >> "$GITHUB_OUTPUT"
