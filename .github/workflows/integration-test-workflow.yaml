@@ -311,32 +311,7 @@ jobs:
                 id: j.id, name: j.name, url: j.html_url
               }))
             ));
-      - name: Celebrate clean run
-        if: ${{ steps.fail.outputs.count == '0' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            echo "No webhook configured; skipping success message."
-            exit 0
-          fi
-          short_sha=$(printf '%.7s' "${GITHUB_SHA}")
-          ref_name="${GITHUB_REF#refs/}"
-          repo="${GITHUB_REPOSITORY}"
-          ref_label="${repo}@${ref_name}"
-          commit_url="https://github.com/${repo}/commit/${GITHUB_SHA}"
-          text="🎉 All green in ${repo}! *${GITHUB_ACTOR}* kept *${ref_label}* clean with <${commit_url}|${short_sha}>. 🙌"
-          payload=$(jq -n --arg text "$text" '{text: $text}')
-          curl -sS -X POST -H 'Content-type: application/json' \
-            --data "$payload" "$SLACK_WEBHOOK_URL"
-      - name: Stop if no failures
-        if: ${{ steps.fail.outputs.count == '0' }}
-        run: |
-          echo "no failures"
-          exit 0
       - name: Get commit info
-        if: ${{ steps.fail.outputs.count != '0' }}
         id: ci
         uses: actions/github-script@v8
         with:
@@ -361,6 +336,41 @@ jobs:
             core.setOutput('is_pr', pr ? 'true' : 'false');
             core.setOutput('pr_num', pr ? String(pr.number) : '');
             core.setOutput('repository', o + '/' + r);
+      - name: Celebrate clean run
+        if: ${{ steps.fail.outputs.count == '0' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
+          SHA: ${{ steps.ci.outputs.sha }}
+          REF: ${{ steps.ci.outputs.ref }}
+          MESSAGE: ${{ steps.ci.outputs.message }}
+          REPO: ${{ steps.ci.outputs.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "No webhook configured; skipping success message."
+            exit 0
+          fi
+          short_sha=$(printf '%.7s' "${SHA}")
+          ref_label="${REPO}@${REF}"
+          commit_url="https://github.com/${REPO}/commit/${SHA}"
+          text=$(cat <<EOF
+🎉 All green in ${REPO}! *${GITHUB_ACTOR}* kept *${ref_label}* clean. 🙌
+
+*Commit:* <${commit_url}|${short_sha}>
+*Commit message:*
+\`\`\`
+${MESSAGE}
+\`\`\`
+EOF
+)
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL"
+      - name: Stop if no failures
+        if: ${{ steps.fail.outputs.count == '0' }}
+        run: |
+          echo "no failures"
+          exit 0
       - name: Build message
         if: ${{ steps.fail.outputs.count != '0' }}
         id: msg
