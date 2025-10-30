@@ -253,8 +253,8 @@ jobs:
             --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
-  maybe-blame-someone:
-    name: Maybe blame someone
+  notify-quality-assesment:
+    name: Notify quality assesment
     if: ${{ inputs.apply_blame == true }}
     runs-on: ubuntu-latest
     permissions:
@@ -359,12 +359,11 @@ jobs:
           if [ "${FAILURE_COUNT}" = "0" ]; then
             printf -v text '%s\n' \
               '──────────────────────────────────────────────' \
-              "🎉 All green in ${ref_label}! Good job *${AUTHOR}*! 🙌" \
+              "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌" \
               '' \
               "*Commit:* <${URL}|${short_sha}>" \
               "*Ref:* ${REF}" \
               '' \
-              "*Repository:* ${REPO}" \
               '*Commit message:*' \
               '```' \
               "${MESSAGE}" \
