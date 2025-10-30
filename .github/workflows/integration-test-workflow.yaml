@@ -311,12 +311,30 @@ jobs:
                 id: j.id, name: j.name, url: j.html_url
               }))
             ));
+      - name: Celebrate clean run
+        if: ${{ steps.fail.outputs.count == '0' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "No webhook configured; skipping success message."
+            exit 0
+          fi
+          short_sha=$(printf '%.7s' "${GITHUB_SHA}")
+          ref_name="${GITHUB_REF#refs/}"
+          repo="${GITHUB_REPOSITORY}"
+          text="All green in ${repo}! ${GITHUB_ACTOR} kept ${ref_name} clean with ${short_sha}."
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "$payload" "$SLACK_WEBHOOK_URL"
       - name: Stop if no failures
         if: ${{ steps.fail.outputs.count == '0' }}
         run: |
           echo "no failures"
           exit 0
       - name: Get commit info
+        if: ${{ steps.fail.outputs.count != '0' }}
         id: ci
         uses: actions/github-script@v8
         with:
@@ -342,6 +360,7 @@ jobs:
             core.setOutput('pr_num', pr ? String(pr.number) : '');
             core.setOutput('repository', o + '/' + r);
       - name: Build message
+        if: ${{ steps.fail.outputs.count != '0' }}
         id: msg
         env:
           SHA: ${{ steps.ci.outputs.sha }}
@@ -370,6 +389,7 @@ jobs:
           echo "\`\`\`" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
       - name: Post Slack message
+        if: ${{ steps.fail.outputs.count != '0' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
           MSG: ${{ steps.msg.outputs.msg }}
@@ -380,6 +400,7 @@ jobs:
           curl -sS -X POST -H 'Content-type: application/json' \
             --data "$payload" "$SLACK_WEBHOOK_URL"
       - name: Write job summary
+        if: ${{ steps.fail.outputs.count != '0' }}
         run: |
           echo "${{ steps.msg.outputs.msg }}" \
           >> "$GITHUB_STEP_SUMMARY"
