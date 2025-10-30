@@ -24,10 +24,10 @@ on:
         type: string
         description: Which registry to target, which also choses which environment to test
         default: wasmer.wtf
-      provide_quality_feedback:
+      provide_quality_assessment:
         required: false
         type: boolean
-        description: Set to true if you'd like to print the git ref + author who triggered the deployment
+        description: Set to true if you'd like to print integration test results in test_failure_webhook
     secrets:
       token:
         required: true
@@ -253,9 +253,9 @@ jobs:
             --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
-  notify-quality-assesment:
-    name: Notify quality assesment
-    if: ${{ inputs.provide_quality_feedback == true }}
+  notify-quality-assessment:
+    name: Notify quality assessment
+    if: ${{ inputs.provide_quality_assessment == true }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -271,8 +271,8 @@ jobs:
             const r = context.repo.repo;
             const id = context.runId;
             function isSelf(job) {
-              if (job.name === 'Maybe blame someone') return true;
-              if (job.name === 'maybe-blame-someone') return true;
+              if (job.name === 'Notify quality assessment') return true;
+              if (job.name === 'notify-quality-assessment') return true;
               if (job.name === context.job) return true;
               if (job.name === process.env.GITHUB_JOB) return true;
               return (job.steps || []).some(
