@@ -16,8 +16,10 @@ jobs:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
+      provide_quality_assessment: true
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
 
   fmt:
     name: File format check
