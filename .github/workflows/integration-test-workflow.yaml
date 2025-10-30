@@ -359,7 +359,7 @@ jobs:
           if [ "${FAILURE_COUNT}" = "0" ]; then
             printf -v text '%s\n' \
               '──────────────────────────────────────────────' \
-              "🎉 All green in ${REPO}! *${GITHUB_ACTOR}* kept *${ref_label}* clean. 🙌" \
+              "🎉 All green in ${ref_label}! Good job *${AUTHOR}*! 🙌" \
               '' \
               "*Commit:* <${URL}|${short_sha}>" \
               "*Ref:* ${REF}" \
@@ -374,7 +374,7 @@ jobs:
             printf -v text '%s\n' \
               '──────────────────────────────────────────────' \
               "*Uh-oh, what happened here?☝️ *" \
-              "Seems like something broke. Who dunit'?" \
+              "Seems like something broke... Who dunit'?" \
               "Primary suspect: *${AUTHOR}*" \
               '' \
               "*Commit:* ${SHA}, <${URL}|View commit>" \
