@@ -336,43 +336,11 @@ jobs:
             core.setOutput('is_pr', pr ? 'true' : 'false');
             core.setOutput('pr_num', pr ? String(pr.number) : '');
             core.setOutput('repository', o + '/' + r);
-      - name: Celebrate clean run
-        if: ${{ steps.fail.outputs.count == '0' }}
+      - name: Compose notification
+        id: notify
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
-          SHA: ${{ steps.ci.outputs.sha }}
-          REF: ${{ steps.ci.outputs.ref }}
-          MESSAGE: ${{ steps.ci.outputs.message }}
-          REPO: ${{ steps.ci.outputs.repository }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            echo "No webhook configured; skipping success message."
-            exit 0
-          fi
-          short_sha="${SHA:0:7}"
-          ref_label="${REPO}@${REF}"
-          commit_url="https://github.com/${REPO}/commit/${SHA}"
-          payload=$(jq -n \
-            --arg repo "$REPO" \
-            --arg actor "$GITHUB_ACTOR" \
-            --arg refLabel "$ref_label" \
-            --arg commitUrl "$commit_url" \
-            --arg shortSha "$short_sha" \
-            --arg message "$MESSAGE" \
-            '{text: "🎉 All green in \($repo)! *\($actor)* kept *\($refLabel)* clean. 🙌\n\n*Commit:* <\($commitUrl)|\($shortSha)>\n*Commit message:*\n```\n\($message)\n```"}'
-          )
-          curl -sS -X POST -H 'Content-type: application/json' \
-            --data "$payload" "$SLACK_WEBHOOK_URL"
-      - name: Stop if no failures
-        if: ${{ steps.fail.outputs.count == '0' }}
-        run: |
-          echo "no failures"
-          exit 0
-      - name: Build message
-        if: ${{ steps.fail.outputs.count != '0' }}
-        id: msg
-        env:
+          FAILURE_COUNT: ${{ steps.fail.outputs.count }}
           SHA: ${{ steps.ci.outputs.sha }}
           AUTHOR: ${{ steps.ci.outputs.author }}
           EMAIL: ${{ steps.ci.outputs.email }}
@@ -380,37 +348,68 @@ jobs:
           URL: ${{ steps.ci.outputs.url }}
           MESSAGE: ${{ steps.ci.outputs.message }}
           REPO: ${{ steps.ci.outputs.repository }}
-          JOBS: ${{ steps.fail.outputs.jobs }}
-        run: |
-          echo "msg<<EOF" >> "$GITHUB_OUTPUT"
-          echo "──────────────────────────────────────────────" \
-            >> "$GITHUB_OUTPUT"
-          echo "*Uh-oh, what happened here?☝️ *" >> "$GITHUB_OUTPUT"
-          echo "Seems like something broke. Who dunit'?" >> "$GITHUB_OUTPUT"
-          echo "Primary suspect: *${AUTHOR}*" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "*Commit:* ${SHA}, <${URL}|View commit>" >> "$GITHUB_OUTPUT"
-          echo "*Ref:* ${REF}" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "*Repository:* ${REPO}" >> "$GITHUB_OUTPUT"
-          echo "*Commit message:*" >> "$GITHUB_OUTPUT"
-          echo "\`\`\`" >> "$GITHUB_OUTPUT"
-          echo "${MESSAGE}" >> "$GITHUB_OUTPUT"
-          echo "\`\`\`" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-      - name: Post Slack message
-        if: ${{ steps.fail.outputs.count != '0' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
-          MSG: ${{ steps.msg.outputs.msg }}
         run: |
           set -euo pipefail
-          printf '%s\n' "$MSG" | sed 's/"/\\"/g' > msg.txt
-          payload=$(printf '{"text":"%s"}' "$(cat msg.txt)")
-          curl -sS -X POST -H 'Content-type: application/json' \
-            --data "$payload" "$SLACK_WEBHOOK_URL"
-      - name: Write job summary
-        if: ${{ steps.fail.outputs.count != '0' }}
+          short_sha="${SHA:0:7}"
+          ref_label="${REPO}@${REF}"
+          send="true"
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            send="false"
+          fi
+          if [ "${FAILURE_COUNT}" = "0" ]; then
+            printf -v text '%s\n' \
+              '──────────────────────────────────────────────' \
+              "🎉 All green in ${REPO}! *${GITHUB_ACTOR}* kept *${ref_label}* clean. 🙌" \
+              '' \
+              "*Commit:* <${URL}|${short_sha}>" \
+              "*Ref:* ${REF}" \
+              '' \
+              "*Repository:* ${REPO}" \
+              '*Commit message:*' \
+              '```' \
+              "${MESSAGE}" \
+              '```'
+            conclusion="success"
+          else
+            printf -v text '%s\n' \
+              '──────────────────────────────────────────────' \
+              "*Uh-oh, what happened here?☝️ *" \
+              "Seems like something broke. Who dunit'?" \
+              "Primary suspect: *${AUTHOR}*" \
+              '' \
+              "*Commit:* ${SHA}, <${URL}|View commit>" \
+              "*Ref:* ${REF}" \
+              '' \
+              "*Repository:* ${REPO}" \
+              '*Commit message:*' \
+              '```' \
+              "${MESSAGE}" \
+              '```'
+            conclusion="failure"
+          fi
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          {
+            echo "text<<EOF"
+            printf '%s\n' "$text"
+            echo "EOF"
+            echo "payload<<EOF"
+            printf '%s\n' "$payload"
+            echo "EOF"
+            echo "conclusion=$conclusion"
+            echo "send=$send"
+          } >> "$GITHUB_OUTPUT"
+      - name: Post Slack message
+        if: ${{ steps.notify.outputs.send == 'true' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
+          PAYLOAD: ${{ steps.notify.outputs.payload }}
         run: |
-          echo "${{ steps.msg.outputs.msg }}" \
-          >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
+      - name: Write job summary
+        if: ${{ steps.notify.outputs.conclusion == 'failure' }}
+        env:
+          SUMMARY_TEXT: ${{ steps.notify.outputs.text }}
+        run: |
+          printf '%s\n' "$SUMMARY_TEXT" >> "$GITHUB_STEP_SUMMARY"
