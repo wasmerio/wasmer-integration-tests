@@ -24,7 +24,7 @@ on:
         type: string
         description: Which registry to target, which also choses which environment to test
         default: wasmer.wtf
-      apply_blame:
+      provide_quality_feedback:
         required: false
         type: boolean
         description: Set to true if you'd like to print the git ref + author who triggered the deployment
@@ -255,7 +255,7 @@ jobs:
 
   notify-quality-assesment:
     name: Notify quality assesment
-    if: ${{ inputs.apply_blame == true }}
+    if: ${{ inputs.provide_quality_feedback == true }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -362,7 +362,6 @@ jobs:
               "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌" \
               '' \
               "*Commit:* <${URL}|${short_sha}>" \
-              "*Ref:* ${REF}" \
               '' \
               '*Commit message:*' \
               '```' \
@@ -377,7 +376,6 @@ jobs:
               "Primary suspect: *${AUTHOR}*" \
               '' \
               "*Commit:* ${SHA}, <${URL}|View commit>" \
-              "*Ref:* ${REF}" \
               '' \
               "*Repository:* ${REPO}" \
               '*Commit message:*' \

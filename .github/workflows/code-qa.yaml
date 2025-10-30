@@ -16,7 +16,7 @@ jobs:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
-      apply_blame: true
+      provide_quality_feedback: true
     secrets:
       token: ${{ secrets.WAPM_DEV_TOKEN }}
       test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
