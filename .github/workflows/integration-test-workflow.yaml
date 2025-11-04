@@ -24,6 +24,10 @@ on:
         type: string
         description: Which registry to target, which also choses which environment to test
         default: wasmer.wtf
+      provide_quality_assessment:
+        required: false
+        type: boolean
+        description: Set to true if you'd like to print integration test results in test_failure_webhook
     secrets:
       token:
         required: true
@@ -248,3 +252,161 @@ jobs:
             -H 'Content-type: application/json' \
             --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
+
+  provide-quality-assessment:
+    name: Provide quality assessment
+    if: ${{ inputs.provide_quality_assessment == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Wait for failures
+        id: fail
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const o = context.repo.owner;
+            const r = context.repo.repo;
+            const id = context.runId;
+            function isSelf(job) {
+              if (job.name === 'Notify quality assessment') return true;
+              if (job.name === 'notify-quality-assessment') return true;
+              if (job.name === context.job) return true;
+              if (job.name === process.env.GITHUB_JOB) return true;
+              return (job.steps || []).some(
+                step => step.name === 'Wait for failures'
+              );
+            }
+            const filterJobs = js =>
+              js.filter(job => !isSelf(job));
+            async function jobs() {
+              const res = await github.rest.actions
+                .listJobsForWorkflowRun({
+                  owner: o, repo: r, run_id: id
+                });
+              return res.data.jobs || [];
+            }
+            async function waitDone() {
+              // This equates to 180*5000ms = 15 minutes
+              for (let i = 0; i < 180; i++) {
+                const js = await jobs();
+                const others = filterJobs(js);
+                const done = others.every(
+                  j => j.status === 'completed'
+                );
+                if (done) return others;
+                await new Promise(x => setTimeout(x, 5000));
+              }
+              return filterJobs(await jobs());
+            }
+            const all = await waitDone();
+            const failed = all.filter(
+              j => j.conclusion === 'failure'
+            );
+            core.setOutput('count', String(failed.length));
+            core.setOutput('jobs', JSON.stringify(
+              failed.map(j => ({
+                id: j.id, name: j.name, url: j.html_url
+              }))
+            ));
+      - name: Get commit info
+        id: ci
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const o = context.repo.owner;
+            const r = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const sha = pr ? pr.head.sha : context.sha;
+            const ref = pr ? pr.head.ref : context.ref;
+            const cm = await github.rest.repos.getCommit({
+              owner: o, repo: r, ref: sha
+            });
+            const c = cm.data.commit;
+            const url = 'https://github.com/' + o + '/'
+              + r + '/commit/' + sha;
+            core.setOutput('sha', sha);
+            core.setOutput('ref', ref);
+            core.setOutput('author', c.author.name);
+            core.setOutput('email', c.author.email);
+            core.setOutput('message', c.message);
+            core.setOutput('url', url);
+            core.setOutput('is_pr', pr ? 'true' : 'false');
+            core.setOutput('pr_num', pr ? String(pr.number) : '');
+            core.setOutput('repository', o + '/' + r);
+      - name: Compose notification
+        id: notify
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
+          FAILURE_COUNT: ${{ steps.fail.outputs.count }}
+          SHA: ${{ steps.ci.outputs.sha }}
+          AUTHOR: ${{ steps.ci.outputs.author }}
+          EMAIL: ${{ steps.ci.outputs.email }}
+          REF: ${{ steps.ci.outputs.ref }}
+          URL: ${{ steps.ci.outputs.url }}
+          MESSAGE: ${{ steps.ci.outputs.message }}
+          REPO: ${{ steps.ci.outputs.repository }}
+        run: |
+          set -euo pipefail
+          short_sha="${SHA:0:7}"
+          ref_label="${REPO}@${REF}"
+          send="true"
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            send="false"
+          fi
+          if [ "${FAILURE_COUNT}" = "0" ]; then
+            printf -v text '%s\n' \
+              '──────────────────────────────────────────────' \
+              "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌" \
+              '' \
+              "*Commit:* <${URL}|${short_sha}>" \
+              '' \
+              '*Commit message:*' \
+              '```' \
+              "${MESSAGE}" \
+              '```'
+            conclusion="success"
+          else
+            printf -v text '%s\n' \
+              '──────────────────────────────────────────────' \
+              "*Uh-oh, what happened here?☝️ *" \
+              "Seems like something broke... Who dunit'?" \
+              "Primary suspect: *${AUTHOR}*" \
+              '' \
+              "*Commit:* ${SHA}, <${URL}|View commit>" \
+              '' \
+              "*Repository:* ${REPO}" \
+              '*Commit message:*' \
+              '```' \
+              "${MESSAGE}" \
+              '```'
+            conclusion="failure"
+          fi
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          {
+            echo "text<<EOF"
+            printf '%s\n' "$text"
+            echo "EOF"
+            echo "payload<<EOF"
+            printf '%s\n' "$payload"
+            echo "EOF"
+            echo "conclusion=$conclusion"
+            echo "send=$send"
+          } >> "$GITHUB_OUTPUT"
+      - name: Post Slack message
+        if: ${{ steps.notify.outputs.send == 'true' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
+          PAYLOAD: ${{ steps.notify.outputs.payload }}
+        run: |
+          set -euo pipefail
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
+      - name: Write job summary
+        if: ${{ steps.notify.outputs.conclusion == 'failure' }}
+        env:
+          SUMMARY_TEXT: ${{ steps.notify.outputs.text }}
+        run: |
+          printf '%s\n' "$SUMMARY_TEXT" >> "$GITHUB_STEP_SUMMARY"
