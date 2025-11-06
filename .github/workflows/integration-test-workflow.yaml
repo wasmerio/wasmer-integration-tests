@@ -6,6 +6,7 @@ concurrency:
 
 permissions:
   contents: read # access to check out code and install dependencies for python (wasmopticon tests)
+  actions: read
 
 on:
   workflow_call:
