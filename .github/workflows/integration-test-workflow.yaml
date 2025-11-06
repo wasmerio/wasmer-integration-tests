@@ -260,7 +260,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      pull-requests: write
     steps:
       - name: Wait for failures
         id: fail
