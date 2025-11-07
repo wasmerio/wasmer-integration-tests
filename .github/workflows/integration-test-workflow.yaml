@@ -361,6 +361,7 @@ jobs:
               '──────────────────────────────────────────────' \
               "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌" \
               '' \
+              "*Repository:* ${REPO}" \
               "*Commit:* <${URL}|${short_sha}>" \
               '' \
               '*Commit message:*' \
@@ -369,11 +370,13 @@ jobs:
               '```'
             conclusion="success"
           else
+
+            usernameFromEmail="${EMAIL%@*}"
             printf -v text '%s\n' \
               '──────────────────────────────────────────────' \
               "*Uh-oh, what happened here?☝️ *" \
               "Seems like something broke... Who dunit'?" \
-              "Primary suspect: *${AUTHOR}*" \
+              "Primary suspect: *<@${usernameFromEmail}>*" \
               '' \
               "*Commit:* ${SHA}, <${URL}|View commit>" \
               '' \
