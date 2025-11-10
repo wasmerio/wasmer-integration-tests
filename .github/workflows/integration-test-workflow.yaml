@@ -373,7 +373,6 @@ jobs:
 
             usernameFromEmail="${EMAIL%@*}"
             printf -v text '%s\n' \
-              '──────────────────────────────────────────────' \
               "*Uh-oh, what happened here?☝️ *" \
               "Seems like something broke... Who dunit'?" \
               "Primary suspect: *<@${usernameFromEmail}>*" \
