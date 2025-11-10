@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - fix/cicd-tag-suspect-on-fail
   pull_request:
     branches:
       - main
