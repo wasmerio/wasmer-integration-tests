@@ -38,8 +38,8 @@ on:
         description: "Add optional webhook which will be called if any tests have failed"
 
 jobs:
-  run-unspecified-tests:
-    name: Run general tests
+  always-fail:
+    name: Always fail
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -58,7 +58,7 @@ jobs:
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
-        run: npx jest ./tests/general/
+        run: exit 1
       - name: Notify failure in Slack
         env:
           TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
@@ -70,188 +70,6 @@ jobs:
           curl -X POST \
             -H 'Content-type: application/json' \
             --data "{\"text\":\"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${TEST_FAILURE_WEBHOOK}
-
-  job-tests:
-    name: Run job tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          npx jest ./tests/validation/log.test.ts
-          npx jest ./tests/job
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for Jobs failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${TEST_FAILURE_WEBHOOK}
-
-  wp-tests:
-    name: Run WordPress tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          npx jest ./tests/validation/log.test.ts
-          npx jest ./tests/wordpress
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for WordPress failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${TEST_FAILURE_WEBHOOK}
-  ssh-tests:
-    name: Run SSH/SFTP tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          npx jest ./tests/ssh
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for SSH/SFTP failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${TEST_FAILURE_WEBHOOK}
-
-  app-deployment-tests:
-    name: Run app deployment tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          npx jest ./tests/deploy
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for App Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${TEST_FAILURE_WEBHOOK}
-
-  wasmopticon-tests:
-    name: Run wasmopticon deployment tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
-        with:
-          repository: wasmerio/wasmer-integration-tests
-          ref: ${{ inputs.test_branch }}
-          submodules: true
-      - uses: ./.github/actions/setup-test-env
-        with:
-          fetch_artifact: ${{ inputs.fetch_artifact }}
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: 3.13
-      - name: Setup and activate virtual environment
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-      - name: Test
-        env:
-          WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
-        run: |
-          npx jest tests/wasmopticon
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
             ${TEST_FAILURE_WEBHOOK}
 
   provide-quality-assessment:
@@ -372,6 +190,7 @@ jobs:
           else
 
             usernameFromEmail="${EMAIL%@*}"
+            echo "$EMAIL"
             printf -v text '%s\n' \
               '──────────────────────────────────────────────' \
               "*Uh-oh, what happened here?☝️ *" \
