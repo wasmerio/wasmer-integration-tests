@@ -372,6 +372,13 @@ jobs:
           else
 
             usernameFromEmail="${EMAIL%@*}"
+            
+            # Some manually mapped common cases
+            if [ "${EMAIL}" = "me@syrusakbary.com" ]; then
+               usernameFromEmail="syrus"
+             fi
+
+
             printf -v text '%s\n' \
               "*Uh-oh, what happened here?☝️ *" \
               "Seems like something broke... Who dunit'?" \
