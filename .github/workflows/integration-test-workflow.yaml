@@ -374,10 +374,14 @@ jobs:
             usernameFromEmail="${EMAIL%@*}"
             
             # Some manually mapped common cases
-            if [ "${EMAIL}" = "me@syrusakbary.com" ]; then
-               usernameFromEmail="syrus"
-             fi
-
+            case "${EMAIL}" in
+              "me@syrusakbary.com")
+                usernameFromEmail="syrus"
+                ;;
+              "artem.yarulin@kapteko.com")
+                usernameFromEmail="artem"
+                ;;
+            esac
 
             printf -v text '%s\n' \
               "*Uh-oh, what happened here?☝️ *" \
