@@ -384,6 +384,10 @@ jobs:
               "33205668+riverzaw@users.noreply.github.com")
                 usernameFromEmail="irina"
                 ;;
+              "chris@theduke.at")
+                usernameFromEmail="christoph"
+              ;;
+
             esac
 
             printf -v text '%s\n' \
