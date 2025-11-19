@@ -401,7 +401,8 @@ jobs:
               '*Commit message:*' \
               '```' \
               "${MESSAGE}" \
-              '```'
+              '```' \
+              'Recommendation: Re-run the failing pipeline in case of flaky test/flaky functionality.'
             conclusion="failure"
           fi
           payload=$(jq -n --arg text "$text" '{text: $text}')
