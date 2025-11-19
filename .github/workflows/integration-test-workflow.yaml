@@ -381,6 +381,9 @@ jobs:
               "artem.yarulin@kapteko.com")
                 usernameFromEmail="artem"
                 ;;
+              "*riverzaw*")
+                usernameFromEmail="irina"
+                ;;
             esac
 
             printf -v text '%s\n' \
