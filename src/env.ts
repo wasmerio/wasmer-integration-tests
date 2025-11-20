@@ -405,7 +405,7 @@ export class TestEnv {
       throw new Error(`Missing permalink for app ${appID}`);
     }
     const match = permalink.match(
-      /^https?:\/\/([a-z0-9-]+)\.id\.wasmer\.(?:app|dev|fun)(?:\/|$)/i,
+      /^https?:\/\/([a-z0-9-]+)\.id\.wasmer(fun){0,1}\.(?:app|dev)(?:\/|$)/i,
     );
     if (!match) {
       throw new Error(`Invalid permalink format: ${permalink}`);
