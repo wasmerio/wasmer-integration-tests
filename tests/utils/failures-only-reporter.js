@@ -9,7 +9,7 @@ class FailuresOnlyReporter {
 
     if (hasFailures) {
       for (const entry of buffer) {
-        const log = console[entry.type] ?? console.log;
+        const log = globalThis.console?.[entry.type] ?? globalThis.console?.log;
         log(entry.message);
       }
     }
