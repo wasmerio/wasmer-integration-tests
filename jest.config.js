@@ -9,4 +9,5 @@ export default {
     "^.+.tsx?$": ["ts-jest", {}],
   },
   setupFilesAfterEnv: ["./jest-logging-config.ts"],
+  reporters: ["default", "<rootDir>/tests/utils/failures-only-reporter.js"],
 };
