@@ -53,10 +53,6 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Superpanic Deployments tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
-            ${{ secrets.SLACK_DEV_SRE_WEBHOOK }}
 
           curl -X POST \
             -H 'Content-type: application/json' \
