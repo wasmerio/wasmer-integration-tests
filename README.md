@@ -34,6 +34,13 @@ You need `npm`, `node` and `pnpm`.
     pnpm -v
     ```
 
+5.  **Initialize git submodules**:
+    Clone and initialize the repository's submodules before running setup commands:
+
+    ```
+    git submodule update --init --recursive
+    ```
+
 Validate it's OK by running `make setup`
 
 ### Test target environment
