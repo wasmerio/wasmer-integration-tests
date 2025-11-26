@@ -29,6 +29,10 @@ on:
         required: false
         type: boolean
         description: Set to true if you'd like to print integration test results in test_failure_webhook
+      release_url:
+        required: false
+        type: string
+        description: "Optional URL of the release that triggered these tests"
     secrets:
       token:
         required: true
@@ -67,9 +71,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"General integration tests failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
 
   job-tests:
@@ -102,9 +108,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="Integration tests for Jobs failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for Jobs failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
 
   wp-tests:
@@ -137,9 +145,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="Integration tests for WordPress failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for WordPress failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
   ssh-tests:
     name: Run SSH/SFTP tests
@@ -170,9 +180,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="Integration tests for SSH/SFTP failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for SSH/SFTP failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
 
   app-deployment-tests:
@@ -204,9 +216,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="Integration tests for App Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for App Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
 
   wasmopticon-tests:
@@ -249,9 +263,11 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          text="Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n --arg text "$text" '{text: $text}')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"text\":\"Integration tests for Wasmopticon Deployments failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\"}" \
+            --data "$payload" \
             ${TEST_FAILURE_WEBHOOK}
 
   provide-quality-assessment:
@@ -348,6 +364,7 @@ jobs:
           URL: ${{ steps.ci.outputs.url }}
           MESSAGE: ${{ steps.ci.outputs.message }}
           REPO: ${{ steps.ci.outputs.repository }}
+          RELEASE_URL: ${{ inputs.release_url || github.event.release.html_url || '' }}
         run: |
           set -euo pipefail
           short_sha="${SHA:0:7}"
@@ -356,18 +373,23 @@ jobs:
           if [ -z "${SLACK_WEBHOOK_URL}" ]; then
             send="false"
           fi
+          release_line="${RELEASE_URL:+*Release:* ${RELEASE_URL}}"
           if [ "${FAILURE_COUNT}" = "0" ]; then
-            printf -v text '%s\n' \
-              '──────────────────────────────────────────────' \
-              "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌" \
-              '' \
-              "*Repository:* ${REPO}" \
-              "*Commit:* <${URL}|${short_sha}>" \
-              '' \
-              '*Commit message:*' \
-              '```' \
-              "${MESSAGE}" \
+            msg_lines=(
+              '──────────────────────────────────────────────'
+              "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌"
+              ''
+              "*Repository:* ${REPO}"
+            )
+            msg_lines+=(
+              "*Commit:* <${URL}|${short_sha}>"
+              ''
+              '*Commit message:*'
               '```'
+              "${MESSAGE}"
+              '```'
+            )
+            printf -v text '%s\n' "${msg_lines[@]}"
             conclusion="success"
           else
 
@@ -390,19 +412,26 @@ jobs:
 
             esac
 
-            printf -v text '%s\n' \
-              "*Uh-oh, what happened here?☝️ *" \
-              "Seems like something broke... Who dunit'?" \
-              "Primary suspect: *<@${usernameFromEmail}>*" \
-              '' \
-              "*Commit:* ${SHA}, <${URL}|View commit>" \
-              '' \
-              "*Repository:* ${REPO}" \
-              '*Commit message:*' \
-              '```' \
-              "${MESSAGE}" \
-              '```' \
+            msg_lines=(
+              "*Uh-oh, what happened here?☝️ *"
+              "Seems like something broke... Who dunit'?"
+              "Primary suspect: *<@${usernameFromEmail}>*"
+              ''
+              "*Commit:* ${SHA}, <${URL}|View commit>"
+              ''
+              "*Repository:* ${REPO}"
+            )
+            if [ -n "${release_line}" ]; then
+              msg_lines+=("${release_line}")
+            fi
+            msg_lines+=(
+              '*Commit message:*'
+              '```'
+              "${MESSAGE}"
+              '```'
               'Recommendation: Re-run the failing pipeline in case of flaky test/flaky functionality.'
+            )
+            printf -v text '%s\n' "${msg_lines[@]}"
             conclusion="failure"
           fi
           payload=$(jq -n --arg text "$text" '{text: $text}')
