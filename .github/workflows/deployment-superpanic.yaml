@@ -46,7 +46,7 @@ jobs:
             -H 'Content-type: application/json' \
             --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"ok\", \"title\":\"Deployment Superpanic\"}" \
               ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
-      - name: Notify failure in Slack
+      - name: Send superpanic alert
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: failure()
