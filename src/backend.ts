@@ -31,6 +31,34 @@ export interface ApiAppsInNamespace {
   lastCursor: string | null;
 }
 
+const appTemplateSchema = z.object({
+  name: z.string(),
+  slug: z.string(),
+});
+
+export type AppTemplate = z.infer<typeof appTemplateSchema>;
+
+const pageInfoSchema = z.object({
+  hasNextPage: z.boolean(),
+  endCursor: z.string().nullable(),
+});
+
+const apiAppTemplatesResponseSchema = z.object({
+  getAppTemplates: z.object({
+    pageInfo: pageInfoSchema,
+    edges: z.array(
+      z.object({
+        node: appTemplateSchema,
+      }),
+    ),
+  }),
+});
+
+export type ApiAppTemplates = {
+  pageInfo: z.infer<typeof pageInfoSchema>;
+  templates: AppTemplate[];
+};
+
 export class BackendClient {
   url: string;
   token: string | null;
@@ -274,5 +302,49 @@ mutation($id:ID!) {
       throw new Error("banApp mutation did not return an app id");
     }
     return id;
+  }
+
+  async getAppTemplates(after: string | null): Promise<ApiAppTemplates> {
+    const query = `
+query($after:String) {
+  getAppTemplates(after:$after, first:50) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+
+    edges {
+
+      node {
+        name
+        slug
+      }
+    }
+  }
+}
+    `;
+
+    const res = await this.gqlQuery(query, {
+      after,
+    });
+    const parsed = apiAppTemplatesResponseSchema.parse(res.data!);
+    const data = parsed.getAppTemplates;
+    const templates = data.edges.map((edge) => edge.node);
+    return {
+      pageInfo: data.pageInfo,
+      templates,
+    };
+  }
+
+  async getAllAppTemplates(): Promise<AppTemplate[]> {
+    const allTemplates: AppTemplate[] = [];
+    let after: string | null = null;
+    while (true) {
+      const page = await this.getAppTemplates(after);
+      allTemplates.push(...page.templates);
+      if (!page.pageInfo.hasNextPage) break;
+      after = page.pageInfo.endCursor;
+    }
+    return allTemplates;
   }
 }
