@@ -3,3 +3,4 @@ target
 .direnv
 node_modules
 wordpress
+tests/generated-templates.json
