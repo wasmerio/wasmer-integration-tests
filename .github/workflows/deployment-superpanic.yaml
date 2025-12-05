@@ -32,7 +32,8 @@ jobs:
             ${{ secrets.SRE_FAILURE_WEBHOOK }}
           exit 1
 
-      - name: Test
+      - id: test
+        name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.io/graphql
           WASMER_TOKEN: ${{ secrets.WASMER_PROD_TOKEN }}
@@ -49,7 +50,7 @@ jobs:
       - name: Send superpanic alert
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure()
+        if: ${{ failure() && steps.test.outcome == 'failure' }}
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
