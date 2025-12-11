@@ -631,12 +631,9 @@ subscription PublishAppFromRepoAutobuild(
       }
 
       if (!options.noAssertSuccess && !response.ok) {
-        // Try to get the body:
-        try {
-          console.error(await response.text());
-        } catch (err) {
-          console.error(err);
-        }
+        console.error(
+          "Response is not OK! We can't check why as that breaks some tests. Continuing",
+        );
       }
 
       // NOTE: this step happens after the success check on purpose, because
