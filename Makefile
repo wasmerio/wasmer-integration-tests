@@ -4,17 +4,16 @@ JSPATHS = ./src ./tests ./bin
 setup:
 	@node -v | awk -F. '{ if ($$1 < 22) { print "Node version 22+ is required. Please install it."; exit 1; } }'
 	@pnpm install
-	@pnpm add -D jest
 
 fmt: setup
-	@npx prettier "**/*" --ignore-path .prettierignore --write
+	pnpm exec prettier "**/*" --ignore-path .prettierignore --ignore-path .gitignore --write
 
 fmt-check: setup
-	@npx prettier "**/*" --ignore-path .prettierignore --check
+	pnpm exec prettier "**/*" --ignore-path .prettierignore  --ignore-path .gitignore --check
 
 check: setup
-	@npx tsc --noEmit 
-	@npx eslint $(JSPATHS)
+	pnpm exec tsc --noEmit
+	pnpm exec eslint $(JSPATHS)
 
 lint: setup fmt-check check
 
