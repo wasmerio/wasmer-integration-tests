@@ -163,7 +163,9 @@ describe("wasmopticon: Crawl and deploy", () => {
     } catch (err) {
       console.error("failed to deploy via shipit", err);
       console.info("failling back to normal deploy");
-      app = await env.deployAppDir(workDir);
+      app = await env.deployAppDir(workDir, {
+        extraCliArgs: ["--build-remote"],
+      });
     }
     await env.deleteApp(app);
   });
