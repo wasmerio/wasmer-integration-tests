@@ -99,10 +99,13 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-      - name: Debug (tmate)
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
+      - name:
+          Debug: check WASMER_TOKEN
+        env:
+          WASMER_TOKEN: ${{ secrets.token }}
+        run: |
+          [ -n "$WASMER_TOKEN" ] && echo "set" || echo "not set"
+          wasmer whoami
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
