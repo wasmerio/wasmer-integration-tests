@@ -57,6 +57,12 @@ jobs:
             test_command: |
               npx jest ./tests/validation/log.test.ts
               npx jest ./tests/job
+          - id: apps
+            test_command: |
+              npx jest ./tests/app/app_banning.test.ts
+          - id: templates
+            test_command: |
+              npx jest ./tests/app/templates.test.ts
           - id: wordpress
             test_command: |
               npx jest ./tests/validation/log.test.ts
