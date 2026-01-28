@@ -4,10 +4,20 @@ on:
     - cron: "*/5 * * * *"
 
 jobs:
-  app-deployment-tests:
-    name: Run app deployment tests
+  test-suites:
+    name: Run ${{ matrix.id }} tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: autobuild
+            test_command: |
+              npx jest ./tests/superpanics/autobuild.test.ts
+          - id: python-deploy
+            test_command: |
+              npx jest ./tests/superpanics/python.test.ts
 
     steps:
       - name: Clone repository
@@ -39,13 +49,13 @@ jobs:
           WASMER_TOKEN: ${{ secrets.WASMER_PROD_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERBOSE=true npx jest ./tests/superpanics/ 
+          ${{ matrix.test_command }}
           # If we reach here, we can assume tests pass
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"ok\", \"title\":\"Deployment Superpanic\"}" \
+            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"ok\", \"title\":\"Integ. Test. Superpanic\"}" \
               ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
       - name: Send superpanic alert
         env:
@@ -57,5 +67,5 @@ jobs:
 
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"alerting\", \"title\":\"Deployment Superpanic\"}" \
+            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"alerting\", \"title\":\"Integ. Test. Superpanic\"}" \
             ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
