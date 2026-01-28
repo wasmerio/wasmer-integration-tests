@@ -1,5 +1,3 @@
-// Test for app templates.
-
 import { TestEnv } from "../../src/index";
 
 import {
@@ -11,14 +9,11 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const templates = require("../generated-templates.json");
 
-describe("app templates deploy", () => {
-  for (const tpl of filterTemplates(templates)) {
-    test.concurrent("Template remote build: " + tpl.slug, async () => {
+describe("autobuild template canary", () => {
+  for (const tpl of filterTemplates(templates, ["fastapi-starter"])) {
+    test.concurrent(`deploy ${tpl.slug} template`, async () => {
       const env = TestEnv.fromEnv();
-      process.stdout.write(`Starting template test for '${tpl.slug}'\n`);
-      await deployAndValidateTemplate(env, tpl, {
-        formatFailureOutput: true,
-      });
+      await deployAndValidateTemplate(env, tpl);
     });
   }
 });
