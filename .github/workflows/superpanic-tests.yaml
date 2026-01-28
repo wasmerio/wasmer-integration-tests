@@ -2,6 +2,9 @@ name: Deployment Superpanic Tests
 on:
   schedule:
     - cron: "*/5 * * * *"
+  push:
+    branches:
+      - feat/fix-superpanics
 
 jobs:
   test-suites:
@@ -15,7 +18,7 @@ jobs:
           - id: autobuild
             test_command: |
               npx jest ./tests/superpanics/autobuild.test.ts
-          - id: python-deploy
+          - id: python-deployment
             test_command: |
               npx jest ./tests/superpanics/python.test.ts
 
@@ -36,9 +39,23 @@ jobs:
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          title="Deployment Setup Failed [${{ matrix.id }}] (run ${{ github.run_id }})"
+          grouping="${{ matrix.id }}"
+          link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n \
+            --arg link_to_upstream_details "$link" \
+            --arg state "error" \
+            --arg title "$title" \
+            --arg grouping "$grouping" \
+            '{
+              link_to_upstream_details: $link_to_upstream_details,
+              state: $state,
+              title: $title,
+              grouping: $grouping
+            }')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"error\", \"title\":\"Deployment Setup Failed\"}" \
+            --data "$payload" \
             ${{ secrets.SRE_FAILURE_WEBHOOK }}
           exit 1
 
@@ -50,22 +67,33 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ${{ matrix.test_command }}
-          # If we reach here, we can assume tests pass
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"ok\", \"title\":\"Integ. Test. Superpanic\"}" \
-              ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
-      - name: Send superpanic alert
+      - name: Notify superpanic status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: ${{ failure() && steps.test.outcome == 'failure' }}
+        if: ${{ always() }}
         run: |
           jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
           job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-
+          if [ "${{ steps.test.outcome }}" = "failure" ]; then
+            state="alerting"
+          else
+            state="ok"
+          fi
+          title="Integ. Test. Superpanic [${{ matrix.id }}] (run ${{ github.run_id }})"
+          grouping="${{ matrix.id }}"
+          link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n \
+            --arg link_to_upstream_details "$link" \
+            --arg state "$state" \
+            --arg title "$title" \
+            --arg grouping "$grouping" \
+            '{
+              link_to_upstream_details: $link_to_upstream_details,
+              state: $state,
+              title: $title,
+              grouping: $grouping
+            }')
           curl -X POST \
             -H 'Content-type: application/json' \
-            --data "{\"link_to_upstream_details\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id\", \"state\":\"alerting\", \"title\":\"Integ. Test. Superpanic\"}" \
+            --data "$payload" \
             ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
