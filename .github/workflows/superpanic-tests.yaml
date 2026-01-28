@@ -1,4 +1,4 @@
-name: Deployment Superpanic Tests
+name: Superpanic Tests
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-suites:
-    name: Run ${{ matrix.id }} tests
+    name: ${{ matrix.id }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
