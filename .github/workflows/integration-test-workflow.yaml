@@ -70,9 +70,9 @@ jobs:
           - id: ssh
             test_command: |
               npx jest ./tests/ssh
-          - id: deploy
+          - id: superpanic (without superpanic)
             test_command: |
-              npx jest ./tests/deploy
+              npx jest ./tests/superpanics
           - id: wasmopticon
             test_command: |
               npx jest tests/wasmopticon
