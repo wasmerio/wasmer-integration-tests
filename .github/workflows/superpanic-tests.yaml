@@ -1,0 +1,99 @@
+name: Superpanic Tests
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  push:
+    branches:
+      - feat/fix-superpanics
+
+jobs:
+  test-suites:
+    name: ${{ matrix.id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: autobuild
+            test_command: |
+              npx jest ./tests/superpanics/autobuild.test.ts
+          - id: python-deployment
+            test_command: |
+              npx jest ./tests/superpanics/python.test.ts
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: main
+          submodules: true
+      - uses: ./.github/actions/setup-test-env
+        with:
+          fetch_artifact: ${{ inputs.fetch_artifact }}
+      - name: Catch setup failure and notify SRE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: failure()
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          title="Deployment Setup Failed [${{ matrix.id }}] (run ${{ github.run_id }})"
+          grouping="${{ matrix.id }}"
+          link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n \
+            --arg link_to_upstream_details "$link" \
+            --arg state "error" \
+            --arg title "$title" \
+            --arg grouping "$grouping" \
+            '{
+              link_to_upstream_details: $link_to_upstream_details,
+              state: $state,
+              title: $title,
+              grouping: $grouping
+            }')
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "$payload" \
+            ${{ secrets.SRE_FAILURE_WEBHOOK }}
+          exit 1
+
+      - id: test
+        name: Test
+        env:
+          WASMER_REGISTRY: https://registry.wasmer.io/graphql
+          WASMER_TOKEN: ${{ secrets.WASMER_PROD_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ${{ matrix.test_command }}
+      - name: Notify superpanic status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ always() }}
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          if [ "${{ steps.test.outcome }}" = "failure" ]; then
+            state="alerting"
+          else
+            state="ok"
+          fi
+          title="Integ. Test. Superpanic [${{ matrix.id }}] (run ${{ github.run_id }})"
+          grouping="${{ matrix.id }}"
+          link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+          payload=$(jq -n \
+            --arg link_to_upstream_details "$link" \
+            --arg state "$state" \
+            --arg title "$title" \
+            --arg grouping "$grouping" \
+            '{
+              link_to_upstream_details: $link_to_upstream_details,
+              state: $state,
+              title: $title,
+              grouping: $grouping
+            }')
+          curl -X POST \
+            -H 'Content-type: application/json' \
+            --data "$payload" \
+            ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
