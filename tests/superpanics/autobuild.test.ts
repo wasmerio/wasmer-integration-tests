@@ -10,7 +10,7 @@ import {
 const templates = require("../generated-templates.json");
 
 describe("autobuild template canary", () => {
-  for (const tpl of filterTemplates(templates, ["fastapi-starter"])) {
+  for (const tpl of filterTemplates(templates, ["fastapi-wasmer-starter"])) {
     test.concurrent(`deploy ${tpl.slug} template`, async () => {
       const env = TestEnv.fromEnv();
       await deployAndValidateTemplate(env, tpl);
