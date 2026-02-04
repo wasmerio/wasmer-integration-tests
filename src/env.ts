@@ -35,11 +35,13 @@ export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_BUGT: string = "https://registry.wasmer.fun/graphql";
 export const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
+export const REGISTRY_LOCAL: string = "http://localhost:8003/graphql";
 
 export const appDomainMap = {
   [REGISTRY_PROD]: "wasmer.app",
   [REGISTRY_BUGT]: "wasmerfun.app",
   [REGISTRY_DEV]: "wasmer.dev",
+  [REGISTRY_LOCAL]: "localhost",
 };
 
 export const DEFAULT_NAMESPACE: string = "wasmer-integration-tests";
