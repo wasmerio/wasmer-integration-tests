@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import path from "node:path";
 
 import {
   AppJob,
@@ -8,6 +9,7 @@ import {
   TestEnv,
 } from "../../src/index";
 import { LogSniff } from "../../src/log";
+import { projectRoot } from "../utils/path";
 
 const SECOND = 1000;
 
@@ -21,7 +23,7 @@ async function performTest(
   const env = TestEnv.fromEnv();
   const appName = randomAppName();
 
-  const filePath = "./fixtures/php/path-logger.php";
+  const filePath = path.join(projectRoot, "fixtures", "php", "path-logger.php");
   const phpPathLogger = await fs.promises.readFile(filePath, "utf-8");
 
   const spec = buildPhpApp(phpPathLogger, { name: appName });

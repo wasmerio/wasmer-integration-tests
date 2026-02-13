@@ -5,6 +5,7 @@ import { assertEquals } from "../../src/testing_tools";
 
 import { copyPackageAnonymous } from "../../src/package";
 import { randomAppName } from "../../src/app/construct";
+import { projectRoot } from "../utils/path";
 
 import {
   AppDefinition,
@@ -17,7 +18,12 @@ import {
 test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
+  const rootPackageDir = path.join(
+    projectRoot,
+    "wasmopticon",
+    "php",
+    "php-testserver",
+  );
   const dir = await copyPackageAnonymous(rootPackageDir);
 
   const app: AppDefinition = {
@@ -74,7 +80,12 @@ test("app-volumes", async () => {
 test("volume-mount-inside-package-dir", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
+  const rootPackageDir = path.join(
+    projectRoot,
+    "wasmopticon",
+    "php",
+    "php-testserver",
+  );
   const dir = await copyPackageAnonymous(rootPackageDir);
 
   // The PHP testserver mounts code at /app, so we'll mount a volume inside that.

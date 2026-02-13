@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import path from "node:path";
 import {
   randomAppName,
   buildPhpApp,
@@ -7,10 +8,11 @@ import {
   TestEnv,
 } from "../../src";
 import { countSubstrings } from "../../src/log";
+import { projectRoot } from "../utils/path";
 
 describe("Log tests", () => {
   it("Check fetch is logged on simple logging app", async () => {
-    const filePath = "./fixtures/php/path-logger.php";
+    const filePath = path.join(projectRoot, "fixtures", "php", "path-logger.php");
     const phpPathLogger = await fs.readFile(filePath, "utf-8");
     const env = TestEnv.fromEnv();
     const appName = randomAppName();

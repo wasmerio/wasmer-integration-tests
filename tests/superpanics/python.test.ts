@@ -1,5 +1,7 @@
 import { buildPythonApp, TestEnv } from "../../src/index";
 import * as fs from "node:fs";
+import path from "node:path";
+import { projectRoot } from "../utils/path";
 
 const AM_TRIES = 2;
 // Test that we can deploy a simple python app
@@ -9,7 +11,7 @@ test.concurrent("deploy python app", async () => {
     i++;
     try {
       const env = TestEnv.fromEnv();
-      const filePath = "./fixtures/python/echo-server.py";
+      const filePath = path.join(projectRoot, "fixtures", "python", "echo-server.py");
       let testCode = await fs.promises.readFile(filePath, "utf-8");
       testCode = testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
       console.log(testCode);

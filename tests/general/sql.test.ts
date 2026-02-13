@@ -1,10 +1,12 @@
 import { TestEnv } from "../../src/env";
 import { buildPhpApp } from "../../src/index";
 import * as fs from "node:fs";
+import path from "node:path";
+import { projectRoot } from "../utils/path";
 
 test.concurrent("sql-connectivity", async () => {
   const env = TestEnv.fromEnv();
-  const filePath = "./fixtures/php/mysql-check.php";
+  const filePath = path.join(projectRoot, "fixtures", "php", "mysql-check.php");
   const testCode = await fs.promises.readFile(filePath, "utf-8");
 
   // Validate that DB credentials aren't setup without specifying to have it

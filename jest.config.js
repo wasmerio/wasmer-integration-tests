@@ -3,7 +3,7 @@ export default {
   globalSetup: "./jest-global-setup.ts",
   testEnvironment: "node",
   // Max it! Most of the wait is in network block, nothing computationally heavy
-  maxWorkers: "80%",
+  maxWorkers: "30%",
   silent: true,
   testTimeout: 180000,
   transform: {
