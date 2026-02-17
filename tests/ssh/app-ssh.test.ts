@@ -104,9 +104,13 @@ async function sshShellExec(
       if (err) return reject(err);
       let stdout = "";
       let stderr = "";
-      let code = -1;
+      let code = undefined;
       let done = false;
+
       const parseCode = (buf: string): boolean => {
+        if (code !== undefined) {
+          return true; // exit code was set already
+        }
         const idx = buf.indexOf(`${END}:`);
         if (idx === -1) return false;
         const tail = buf.substring(idx + END.length + 1).trim();
@@ -144,6 +148,13 @@ async function sshShellExec(
         } else if (startIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length);
         }
+        if (code === undefined) {
+          return reject(
+            new Error(
+              `ssh error: command=${command}, stream closed before exit code marker was observed, stdout=${cmdOut}, stderr=${stderr}`,
+            ),
+          );
+        }
         if (!allowNonZeroExitCode && code !== 0) {
           return reject(
             new Error(
@@ -157,20 +168,21 @@ async function sshShellExec(
       const onStdout = (d: Buffer) => {
         stdout += d.toString();
         if (parseCode(stdout)) {
-          finish();
+          stream.end();
         }
       };
       const onStderr = (d: Buffer) => {
         const t = d.toString();
         stderr += t;
         if (parseCode(stderr)) {
-          finish();
+          stream.end();
         }
       };
       stream.on("data", onStdout);
       stream.stderr.on("data", onStderr);
       stream.on("close", () => {
         console.log("stream close");
+        finish();
       });
       stream.write(`echo ${START}\n`);
       stream.write(`${command}\n`);
