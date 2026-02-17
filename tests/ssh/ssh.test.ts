@@ -7,7 +7,6 @@ test("ssh", async () => {
     const output = await env.runWasmerCommand({
       args: ["ssh", ...args],
       stdin,
-      noAssertSuccess: true,
     });
     const stdout = output.stdout.replace("\r\n", "\n").trim();
     return stdout;
