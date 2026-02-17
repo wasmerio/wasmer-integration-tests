@@ -94,6 +94,7 @@ const setupApp = async (env: TestEnv) => {
 async function sshShellExec(
   conn: Client,
   command: string,
+  allowNonZeroExitCode = false,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const START = `__START_${Math.random().toString(36).slice(2)}__`;
   const END = `__END_${Math.random().toString(36).slice(2)}__`;
@@ -142,6 +143,13 @@ async function sshShellExec(
           cmdOut = stdout.substring(startIdx + START.length, endIdx);
         } else if (startIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length);
+        }
+        if (!allowNonZeroExitCode && code !== 0) {
+          return reject(
+            new Error(
+              `ssh error: command=${command}, code=${code}, stdout=${cmdOut}, stderr=${stderr}`,
+            ),
+          );
         }
         stream.end();
         resolve({ code, stdout: cmdOut, stderr });
@@ -256,7 +264,7 @@ test("app-ssh", async () => {
     expect(checkData.code).toBe(0);
     expect(checkData.stdout).toContain("ok");
 
-    const errCase = await sshShellExec(conn, "echo oops 1>&2; false");
+    const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
     expect(errCase.code).not.toBe(0);
     expect(errCase.stderr).toContain("oops");
   } finally {
