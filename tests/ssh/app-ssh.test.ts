@@ -94,6 +94,7 @@ const setupApp = async (env: TestEnv) => {
 async function sshShellExec(
   conn: Client,
   command: string,
+  allowNonZeroExitCode = false,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const START = `__START_${Math.random().toString(36).slice(2)}__`;
   const END = `__END_${Math.random().toString(36).slice(2)}__`;
@@ -103,9 +104,13 @@ async function sshShellExec(
       if (err) return reject(err);
       let stdout = "";
       let stderr = "";
-      let code = -1;
+      let code = undefined;
       let done = false;
+
       const parseCode = (buf: string): boolean => {
+        if (code !== undefined) {
+          return true; // exit code was set already
+        }
         const idx = buf.indexOf(`${END}:`);
         if (idx === -1) return false;
         const tail = buf.substring(idx + END.length + 1).trim();
@@ -143,26 +148,41 @@ async function sshShellExec(
         } else if (startIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length);
         }
+        if (code === undefined) {
+          return reject(
+            new Error(
+              `ssh error: command=${command}, stream closed before exit code marker was observed, stdout=${cmdOut}, stderr=${stderr}`,
+            ),
+          );
+        }
+        if (!allowNonZeroExitCode && code !== 0) {
+          return reject(
+            new Error(
+              `ssh error: command=${command}, code=${code}, stdout=${cmdOut}, stderr=${stderr}`,
+            ),
+          );
+        }
         stream.end();
         resolve({ code, stdout: cmdOut, stderr });
       };
       const onStdout = (d: Buffer) => {
         stdout += d.toString();
         if (parseCode(stdout)) {
-          finish();
+          stream.end();
         }
       };
       const onStderr = (d: Buffer) => {
         const t = d.toString();
         stderr += t;
         if (parseCode(stderr)) {
-          finish();
+          stream.end();
         }
       };
       stream.on("data", onStdout);
       stream.stderr.on("data", onStderr);
       stream.on("close", () => {
         console.log("stream close");
+        finish();
       });
       stream.write(`echo ${START}\n`);
       stream.write(`${command}\n`);
@@ -256,7 +276,7 @@ test("app-ssh", async () => {
     expect(checkData.code).toBe(0);
     expect(checkData.stdout).toContain("ok");
 
-    const errCase = await sshShellExec(conn, "echo oops 1>&2; false");
+    const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
     expect(errCase.code).not.toBe(0);
     expect(errCase.stderr).toContain("oops");
   } finally {
