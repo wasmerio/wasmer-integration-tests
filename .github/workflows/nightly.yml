@@ -13,7 +13,6 @@ jobs:
       test_branch: ${{ github.head_ref }}
     secrets:
       token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
-      # TODO(SRE-1345): Reactivate the print to channel
       # test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
   bugt-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
