@@ -12,15 +12,22 @@ jobs:
     with:
       test_branch: ${{ github.head_ref }}
     secrets:
-      token: ${{ secrets.WASMER_DEV_TOKEN }}
+      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
       # TODO(SRE-1345): Reactivate the print to channel
       # test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
+  bugt-environment:
+    uses: ./.github/workflows/integration-test-workflow.yaml
+    with:
+      test_branch: ${{ github.head_ref }}
+    secrets:
+      token: ${{ secrets.BUGT_BACKEND_CIUSER_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
+
   prod-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
       registry: wasmer.io
     secrets:
-      token: ${{ secrets.WASMER_PROD_TOKEN }}
-      # TODO(SRE-1345): Reactivate the print to channel
-      # test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
+      token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
