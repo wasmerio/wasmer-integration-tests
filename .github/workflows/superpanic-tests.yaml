@@ -63,7 +63,7 @@ jobs:
         name: Test
         env:
           WASMER_REGISTRY: https://registry.wasmer.io/graphql
-          WASMER_TOKEN: ${{ secrets.WASMER_PROD_TOKEN }}
+          WASMER_TOKEN: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ${{ matrix.test_command }}
