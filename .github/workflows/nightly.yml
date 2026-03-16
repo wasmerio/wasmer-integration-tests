@@ -19,6 +19,7 @@ jobs:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
+      registry: wasmer.fun
     secrets:
       token: ${{ secrets.BUGT_BACKEND_CIUSER_TOKEN }}
       # test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
