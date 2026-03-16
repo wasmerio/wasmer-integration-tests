@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - fix/bugt-nightly-tests
 
 jobs:
   dev-environment:
@@ -19,8 +18,10 @@ jobs:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
+      registry: wasmer.fun
     secrets:
       token: ${{ secrets.BUGT_BACKEND_CIUSER_TOKEN }}
+      # Bugt tests are broken due to a few reasons. Future fix!
       # test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
 
   prod-environment:
@@ -30,4 +31,4 @@ jobs:
       registry: wasmer.io
     secrets:
       token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
-      # test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
+      test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
