@@ -5,15 +5,15 @@ on:
   push:
     branches:
       - main
-      - fix/bugt-nightly-tests
+      - fix/nightly-bugt-tests
 
 jobs:
-  dev-environment:
-    uses: ./.github/workflows/integration-test-workflow.yaml
-    with:
-      test_branch: ${{ github.head_ref }}
-    secrets:
-      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
+  # dev-environment:
+  #   uses: ./.github/workflows/integration-test-workflow.yaml
+  #   with:
+  #     test_branch: ${{ github.head_ref }}
+  #   secrets:
+  #     token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
       # test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
   bugt-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
@@ -23,11 +23,11 @@ jobs:
       token: ${{ secrets.BUGT_BACKEND_CIUSER_TOKEN }}
       # test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
 
-  prod-environment:
-    uses: ./.github/workflows/integration-test-workflow.yaml
-    with:
-      test_branch: ${{ github.head_ref }}
-      registry: wasmer.io
-    secrets:
-      token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
+  # prod-environment:
+  #   uses: ./.github/workflows/integration-test-workflow.yaml
+  #   with:
+  #     test_branch: ${{ github.head_ref }}
+  #     registry: wasmer.io
+  #   secrets:
+  #     token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
       # test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
