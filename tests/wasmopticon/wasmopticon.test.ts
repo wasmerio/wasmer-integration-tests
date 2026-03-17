@@ -13,34 +13,10 @@ import {
 import { AppInfo } from "../../src";
 import { appGetToAppInfo } from "../../src/convert";
 import { truncateOutput } from "../../src/util";
+import { findPackageDirs } from "../../src/fs";
 
 // Increase timeout: deploying multiple apps can take time.
 jest.setTimeout(20 * 60 * 1000);
-
-// findPackageDirs by recursively crawling some directory root looking for indicators of a deployable project
-export function findPackageDirs(root: string): string[] {
-  let foundDirs: string[] = [];
-  const entries = fs.readdirSync(root, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const currentPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      // Shipit creates a copy. We don't want to attempt to deploy this copy, as this will create nested deployments
-      // This issue only arises while debugging/multiple subsequent runs
-      if (currentPath.includes(".shipit")) {
-        continue;
-      }
-      if (
-        fs.existsSync(path.join(currentPath, "wasmer.toml")) ||
-        fs.existsSync(path.join(currentPath, "pyproject.toml"))
-      ) {
-        foundDirs.push(currentPath);
-      }
-      foundDirs = foundDirs.concat(findPackageDirs(currentPath));
-    }
-  }
-  return foundDirs;
-}
 
 async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
   const appYamlPath = path.join(dir, "app.yaml");

@@ -1,0 +1,12 @@
+[project]
+name = "wasmer-integ-tests-shipit-toolbox"
+version = "0.1.0"
+description = "Toolbox with all kinds of juicy python tests exposed as endpoints"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.116.1",
+    "httpx>=0.28.1",
+    "hypercorn>=0.17.3",
+    "uvicorn>=0.35.0",
+]
