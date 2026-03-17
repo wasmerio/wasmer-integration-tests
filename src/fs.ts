@@ -40,3 +40,28 @@ export async function buildTempDir(files: DirEntry): Promise<Path> {
   await buildDir(tempDir, files);
   return tempDir;
 }
+
+// findPackageDirs by recursively crawling some directory root looking for indicators of a deployable project
+export function findPackageDirs(root: string): string[] {
+  let foundDirs: string[] = [];
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const currentPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      // Shipit creates a copy. We don't want to attempt to deploy this copy, as this will create nested deployments
+      // This issue only arises while debugging/multiple subsequent runs
+      if (currentPath.includes(".shipit")) {
+        continue;
+      }
+      if (
+        fs.existsSync(path.join(currentPath, "wasmer.toml")) ||
+        fs.existsSync(path.join(currentPath, "pyproject.toml"))
+      ) {
+        foundDirs.push(currentPath);
+      }
+      foundDirs = foundDirs.concat(findPackageDirs(currentPath));
+    }
+  }
+  return foundDirs;
+}
