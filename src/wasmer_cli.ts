@@ -1,10 +1,12 @@
 import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import * as toml from "@iarna/toml";
 import { env } from "node:process";
 import { z } from "zod";
 import { Path } from "./fs";
+import { TestEnv } from "./env";
 
 // The global wasmer config file.
 export interface WasmerConfig {
@@ -64,4 +66,15 @@ export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
     url: parsedData.url,
     path: dir,
   };
+}
+
+export function resolveOwner(env: TestEnv): string {
+  if (process.env.WASMER_NAMESPACE) {
+    return process.env.WASMER_NAMESPACE;
+  }
+
+  const whoami = spawnSync(env.wasmerBinary, ["whoami"], { encoding: "utf8" });
+  const match = whoami.stdout.match(/as user\s+([^\s]+)/);
+
+  return match?.[1] ?? env.namespace;
 }
