@@ -415,7 +415,8 @@ test.concurrent("app-info-get", async () => {
     cwd: info.dir,
   });
 
-  const expectedUrl = `https://${info.version.name}.${env.appDomain}`;
+  const appUrlProtocol = process.env.EDGE_URL_PROTOCOL ?? "https";
+  const expectedUrl = `${appUrlProtocol}://${info.version.name}.${env.appDomain}`;
 
   const stdout = output.stdout;
 
