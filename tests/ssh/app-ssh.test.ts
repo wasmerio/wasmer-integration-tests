@@ -106,18 +106,16 @@ async function sshShellExec(
       let stderr = "";
       let code = undefined;
       let done = false;
+      const codeMarkerRegex = new RegExp(`${END}:(\\d+)`);
 
       const parseCode = (buf: string): boolean => {
         if (code !== undefined) {
           return true; // exit code was set already
         }
-        const idx = buf.indexOf(`${END}:`);
-        if (idx === -1) return false;
-        const tail = buf.substring(idx + END.length + 1).trim();
-        const match = tail.match(/(\d+)/);
+        const match = buf.match(codeMarkerRegex);
         if (match) {
           code = parseInt(match[1], 10);
-          console.log(`Here is tail: ${tail}`);
+          console.log(`Here is exit code marker: ${match[0]}`);
         } else {
           // No return code yet, await more data
           return false;
