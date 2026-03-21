@@ -408,8 +408,19 @@ export class TestEnv {
     if (!permalink) {
       throw new Error(`Missing permalink for app ${appID}`);
     }
-    const match = permalink.match(
-      /^https?:\/\/([a-z0-9-]+)\.id\.wasmer(fun){0,1}\.(?:app|dev)(?:\/|$)/i,
+
+    // Backend can return either a full URL or a bare host (especially in local runs).
+    // Normalize to a host before extracting the permalink ID.
+    const permalinkHost = (() => {
+      const trimmed = permalink.trim();
+      const asUrl = /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : `http://${trimmed}`;
+      return new URL(asUrl).hostname;
+    })();
+
+    const match = permalinkHost.match(
+      /^([a-z0-9-]+)\.id\.wasmer(fun)?\.(?:app|dev|localhost)$/i,
     );
     if (!match) {
       throw new Error(`Invalid permalink format: ${permalink}`);
