@@ -34,11 +34,13 @@ test.concurrent("dns-zonefile", async () => {
 
   // Resolve a server in the cluster.
   console.log("Resolving Edge DNS server ip...");
-  const aRecords = await dns.promises.resolve4(env.appDomain);
-  if (aRecords.length === 0) {
+  const appDomainRecord = await dns.promises.lookup(env.appDomain, {
+    family: 4,
+  });
+  if (!appDomainRecord.address) {
     throw new Error(`No DNS A records found for ${env.appDomain}`);
   }
-  const dnsServerIp = aRecords[0];
+  const dnsServerIp = appDomainRecord.address;
   const resolver = new dns.promises.Resolver();
   resolver.setServers([dnsServerIp]);
   console.log("Resolved Edge DNS server ip: " + dnsServerIp);

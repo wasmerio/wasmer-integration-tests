@@ -571,8 +571,10 @@ subscription PublishAppFromRepoAutobuild(
 
     // Get edge server IP
     try {
-      const edgeServerIps = await resolver.resolve4(this.appDomain);
-      if (edgeServerIps.length === 0) {
+      const edgeServerIp = await dns.lookup(this.appDomain, {
+        family: 4,
+      });
+      if (!edgeServerIp.address) {
         throw new Error(
           `Could not DNS-resolve IPs found for app domain ${this.appDomain}`,
         );
@@ -581,7 +583,7 @@ subscription PublishAppFromRepoAutobuild(
       if (this.edgeServer) {
         resolver.setServers([this.edgeServer]);
       } else {
-        resolver.setServers([edgeServerIps[0]]);
+        resolver.setServers([edgeServerIp.address]);
       }
 
       const [a, aaaa] = await Promise.all([
