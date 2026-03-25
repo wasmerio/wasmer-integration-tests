@@ -71,122 +71,35 @@ const setupApp = async (env: TestEnv) => {
   };
 };
 
-/**
- * Executes a command over an interactive SSH shell and returns
- * its exit code, stdout and stderr.
- *
- * Implementation details:
- * - Opens conn.shell() and writes START/END sentinels.
- * - Waits for END in stdout to detect command completion.
- * - Extracts text between the second START and the END marker.
- * - Does this to achieve best effort stdout, but since the write
- *   is also output in stdout, as well as any shell formating, it's difficult
- *   to isolate the command's stdout using the shell alone
- * - Collects stderr from stream.stderr.
- *
- * Note: assumes a POSIX-like shell on the remote side.
- *
- * @param {Client} conn SSH2 client already connected.
- * @param {string} command Remote shell command to execute.
- * @returns {Promise<object>} Resolves with { code, stdout-ish, stderr-ish }.
- * Rejects on shell errors.
- */
-async function sshShellExec(
+// Execute a remote command over non-interactive SSH.
+async function sshExec(
   conn: Client,
   command: string,
   allowNonZeroExitCode = false,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const START = `__START_${Math.random().toString(36).slice(2)}__`;
-  const END = `__END_${Math.random().toString(36).slice(2)}__`;
   return await new Promise((resolve, reject) => {
     console.info(`Ssh client trying to run: ${command}`);
-    conn.shell((err, stream) => {
+    conn.exec(command, (err, stream) => {
       if (err) return reject(err);
       let stdout = "";
       let stderr = "";
-      let code = undefined;
-      let done = false;
-      const codeMarkerRegex = new RegExp(`${END}:(\\d+)`);
-
-      const parseCode = (buf: string): boolean => {
-        if (code !== undefined) {
-          return true; // exit code was set already
-        }
-        const match = buf.match(codeMarkerRegex);
-        if (match) {
-          code = parseInt(match[1], 10);
-          console.log(`Here is exit code marker: ${match[0]}`);
-        } else {
-          // No return code yet, await more data
-          return false;
-        }
-        return true;
-      };
-      const finish = () => {
-        if (done) return;
-        done = true;
-        try {
-          stream.removeListener("data", onStdout);
-        } catch (e) {
-          console.error(`failed to remove listener from stdout: ${e}`);
-        }
-        try {
-          stream.stderr.removeListener("data", onStderr);
-        } catch (e) {
-          console.error(`failed to remove listener from stderr: ${e}`);
-        }
-        const startIdx = stdout.indexOf(START);
-        let endIdx = -1;
-        if (startIdx !== -1) {
-          endIdx = stdout.indexOf(END, startIdx);
-        }
-        let cmdOut = "";
-        if (startIdx !== -1 && endIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length, endIdx);
-        } else if (startIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length);
-        }
-        if (code === undefined) {
-          return reject(
-            new Error(
-              `ssh error: command=${command}, stream closed before exit code marker was observed, stdout=${cmdOut}, stderr=${stderr}`,
-            ),
-          );
-        }
-        if (!allowNonZeroExitCode && code !== 0) {
-          return reject(
-            new Error(
-              `ssh error: command=${command}, code=${code}, stdout=${cmdOut}, stderr=${stderr}`,
-            ),
-          );
-        }
-        stream.end();
-        resolve({ code, stdout: cmdOut, stderr });
-      };
-      const onStdout = (d: Buffer) => {
+      stream.on("data", (d: Buffer) => {
         stdout += d.toString();
-        if (parseCode(stdout)) {
-          stream.end();
-        }
-      };
-      const onStderr = (d: Buffer) => {
-        const t = d.toString();
-        stderr += t;
-        if (parseCode(stderr)) {
-          stream.end();
-        }
-      };
-      stream.on("data", onStdout);
-      stream.stderr.on("data", onStderr);
-      stream.on("close", () => {
-        console.log("stream close");
-        finish();
       });
-      stream.write(`echo ${START}\n`);
-      stream.write(`${command}\n`);
-      stream.write(`RC=$?\n`);
-      stream.write(`echo ${END}:$RC\n`);
-      stream.write(`echo ${END}:$RC 1>&2\n`);
+      stream.stderr.on("data", (d: Buffer) => {
+        stderr += d.toString();
+      });
+      stream.on("close", (code: number | null) => {
+        const exitCode = code ?? 255;
+        if (!allowNonZeroExitCode && exitCode !== 0) {
+          return reject(
+            new Error(
+              `ssh error: command=${command}, code=${exitCode}, stdout=${stdout}, stderr=${stderr}`,
+            ),
+          );
+        }
+        resolve({ code: exitCode, stdout, stderr });
+      });
     });
   });
 }
@@ -257,24 +170,24 @@ test("app-ssh", async () => {
   await connectSshWithRetry();
   try {
     console.info(`Starting tests on with ${sshUsername}@${hostname}`);
-    const who = await sshShellExec(conn, "whoami");
+    const who = await sshExec(conn, "whoami");
     expect(who.code).toBe(0);
     // TODO(WAX-495): Enable test after done
     // expect(who.stdout.trim()).toBe(sshUsername);
     const testData = fileToAdd;
     const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
-    const io = await sshShellExec(conn, writeCmd);
+    const io = await sshExec(conn, writeCmd);
     expect(io.code).toBe(0);
     // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
     expect(io.stdout).toContain("abc123");
-    const checkData = await sshShellExec(
+    const checkData = await sshExec(
       conn,
       "test -d /data && echo ok || echo missing",
     );
     expect(checkData.code).toBe(0);
     expect(checkData.stdout).toContain("ok");
 
-    const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
+    const errCase = await sshExec(conn, "echo oops 1>&2; false", true);
     expect(errCase.code).not.toBe(0);
     expect(errCase.stderr).toContain("oops");
   } finally {
@@ -285,7 +198,7 @@ test("app-ssh", async () => {
   console.log("Connect with key");
   await connectSshWithRetry(5, 5000, "./tests/ssh/id_rsa_test");
   try {
-    const checkData = await sshShellExec(conn, `cat ${fileToAdd}`);
+    const checkData = await sshExec(conn, `cat ${fileToAdd}`);
     expect(checkData.code).toBe(0);
     expect(checkData.stdout).toContain("abc123");
   } finally {
@@ -293,7 +206,7 @@ test("app-ssh", async () => {
   }
 
   // Cleanup app on success. If not, we can inspect the app via creds listed above
-  env.deleteApp(sshDeployment);
+  await env.deleteApp(sshDeployment);
 });
 
 test("app-sftp", async () => {
@@ -373,7 +286,7 @@ test("app-sftp", async () => {
     console.log(`Validating file contents`);
     expect(text).toBe("abc123");
     console.log(`Deleting file: ${remotePath}`);
-    sftp.delete(remotePath);
+    await sftp.delete(remotePath);
     list = await sftp.list("/data");
     names = list.map((e: { name: string }) => e.name);
     expect(names).not.toContain(remotePath.split("/").pop() as string);
@@ -399,5 +312,5 @@ test("app-sftp", async () => {
   ).rejects.toBeTruthy();
 
   // Cleanup app on success. If not, we can inspect the app via creds listed above
-  env.deleteApp(sshDeployment);
+  await env.deleteApp(sshDeployment);
 });
