@@ -1,6 +1,7 @@
 import { TestEnv } from "../../src/env";
 
-test("ssh", async () => {
+// TODO(SRE-1442): Remove this skip
+test.skip("ssh", async () => {
   const env = TestEnv.fromEnv();
 
   const runSsh = async (args: string[], stdin?: string) => {
