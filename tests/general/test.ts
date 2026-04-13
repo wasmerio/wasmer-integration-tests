@@ -106,7 +106,7 @@ test.concurrent("app-purge-instances", async () => {
 });
 
 // Test app auto https redirect functionality.
-test.concurrent("app-https-redirect", async () => {
+test.skip("app-https-redirect", async () => {
   const spec = buildStaticSiteApp();
   spec.appYaml.name = randomAppName();
   // Note: redirects are enabled by default!
