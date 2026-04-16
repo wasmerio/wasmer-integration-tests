@@ -2,6 +2,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as process from "node:process";
 import * as toml from "@iarna/toml";
+import { createRequire } from "node:module";
 import { promises as dns } from "dns";
 
 import { spawn, SpawnOptions } from "child_process";
@@ -21,6 +22,25 @@ import {
 } from "./app/construct";
 import { AppGet } from "./app/appGet";
 import { HEADER_APP_VERSION_ID, HEADER_WASMER_REQUEST_ID } from "./edge";
+
+const LOCAL_STACKMACHINE_CJS_PATH =
+  "/home/theduke/dev/github.com/stackmachine/stackmachine-js/dist/index.cjs";
+const requireLocal = createRequire(__filename);
+
+export interface StackMachineSdk {
+  getApp(
+    input: { id: string } | { owner?: string; name: string },
+  ): Promise<unknown>;
+  deleteApp(input: { id: string }): Promise<void>;
+  uploadFile(
+    file: Blob,
+    setUploadFilesProgress?: (progress: number) => void,
+  ): Promise<string>;
+  deployApp(input: Record<string, unknown>): Promise<{
+    finish(): Promise<{ id: string; app: unknown }>;
+    subscribeToProgress(callback: (data: unknown) => void): void;
+  }>;
+}
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -415,6 +435,28 @@ export class TestEnv {
       throw new Error(`Invalid permalink format: ${permalink}`);
     }
     return match[1];
+  }
+
+  async stackmachineSdk(): Promise<StackMachineSdk> {
+    // The published SDK is ESM-only today, which Jest in this repo cannot load
+    // from node_modules. Use the local CommonJS build until the published
+    // package can be consumed directly by this test harness.
+    const { StackMachine } = requireLocal(LOCAL_STACKMACHINE_CJS_PATH) as {
+      StackMachine: {
+        init(config: {
+          apiUrl: string;
+          token: string;
+        }): Promise<StackMachineSdk>;
+      };
+    };
+    return StackMachine.init({
+      apiUrl: this.registry,
+      token: this.token,
+    });
+  }
+
+  async stachmachineSdk(): Promise<StackMachineSdk> {
+    return this.stackmachineSdk();
   }
 
   async *graphqlSubscription(
