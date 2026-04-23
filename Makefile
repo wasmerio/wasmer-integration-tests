@@ -1,5 +1,6 @@
 .PHONY: fmt fmt-check check lint test clean all
 JSPATHS = ./src ./tests ./bin
+JEST_ARGS ?=
 
 setup:
 	@node -v | awk -F. '{ if ($$1 < 22) { print "Node version 22+ is required. Please install it."; exit 1; } }'
@@ -18,4 +19,4 @@ check: setup
 lint: setup fmt-check check
 
 test: setup
-	pnpm run test
+	pnpm exec jest $(JEST_ARGS)
