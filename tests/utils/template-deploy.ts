@@ -214,8 +214,9 @@ async function normalizeTemplateForLocalDeploy(
 
   const pythonVersionPath = path.join(dir, ".python-version");
   if (fs.existsSync(pythonVersionPath)) {
-    const pythonVersion = (await fs.promises.readFile(pythonVersionPath, "utf-8"))
-      .trim();
+    const pythonVersion = (
+      await fs.promises.readFile(pythonVersionPath, "utf-8")
+    ).trim();
     if (pythonVersion === "3.13") {
       await fs.promises.writeFile(pythonVersionPath, "3.12\n");
     }
