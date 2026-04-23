@@ -6,6 +6,7 @@ import { promises as dns } from "dns";
 
 import { spawn, SpawnOptions } from "child_process";
 import { StackMachine } from "stackmachine";
+import WebSocket from "ws";
 
 import { AppInfo, BackendClient } from "./backend";
 import {
@@ -36,6 +37,17 @@ export interface StackMachineSdk {
     finish(): Promise<{ id: string; app: unknown }>;
     subscribeToProgress(callback: (data: unknown) => void): void;
   }>;
+}
+
+// The published StackMachine SDK currently builds its GraphQL subscription
+// client without forwarding `webSocketImpl` to `graphql-ws`. In browser-like
+// runtimes and modern Node versions, `graphql-ws` can use the existing global
+// `WebSocket`. Some CI runtimes still do not expose that global, so we install
+// the `ws` implementation only as a fallback and leave any native global alone.
+function ensureNodeWebSocket(): void {
+  if (typeof globalThis.WebSocket === "undefined") {
+    globalThis.WebSocket = WebSocket as typeof globalThis.WebSocket;
+  }
 }
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
@@ -434,6 +446,7 @@ export class TestEnv {
   }
 
   async stackmachineSdk(): Promise<StackMachineSdk> {
+    ensureNodeWebSocket();
     return StackMachine.init({
       apiUrl: this.registry,
       token: this.token,
