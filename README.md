@@ -80,7 +80,7 @@ When running the backend monorepo's local v2 workflow, prefer the root wrapper
 commands from the parent repository:
 
 ```
-just start-local-debug-env
+just start-local-env
 just run-backend
 just run-integration-tests
 ```
