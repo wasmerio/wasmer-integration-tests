@@ -93,11 +93,12 @@ async function runShellCommand(
 }
 
 async function tryShipitDeploy(workDir: string, env: TestEnv) {
-  const cmd = `uvx --refresh shipit-cli==0.10.1 --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
+  const cmd = `shipit --wasmer-deploy --wasmer-registry=${env.registry} --wasmer-app-owner=${env.namespace} --skip-prepare`;
   const procEnv = { ...process.env };
   procEnv.WASMER_REGISTRY = env.registry;
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
   procEnv.WASMER_NAMESPACE = env.namespace;
+  procEnv.PATH = `/home/lorkin/Projects/wasmer/backend/scripts/local-dev/bin:${procEnv.PATH ?? ""}`;
 
   // We get output here but we can't parse it to some app info
   // since the output isn't even close to being anything json

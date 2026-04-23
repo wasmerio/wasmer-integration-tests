@@ -65,8 +65,30 @@ Defaults:
   repository. If not specified, tests will either use a local directory if it
   exists, or clone the repository on demand.
 - EDGE_SERVER: <null> Instead Edge with regular DNS resolution, test a specific
-  Edge server. NOTE: currently not fully working due to deno not fully
-  implementing the required Node.js APIs.
+  Edge HTTP server by rewriting app requests to a local gateway while keeping
+  the original `Host` header.
+- EDGE_SSH_SERVER: <null> Override the SSH/SFTP target used by the SSH suite.
+  Useful for local development when Edge listens on a non-default port such as
+  `ssh://127.0.0.1:9022`.
+- EDGE_DNS_SERVER: <null> Override the DNS server target used by the DNS suite.
+  Useful for local development when Edge DNS listens on `127.0.0.1:9053`
+  instead of the standard port `53`.
+
+### Local backend v2
+
+When running the backend monorepo's local v2 workflow, prefer the root wrapper
+commands from the parent repository:
+
+```
+just start-local-debug-env
+just run-backend
+just run-integration-tests
+```
+
+That workflow generates `.local-dev/test-env.sh` in the parent repo and exports
+the right `WASMER_REGISTRY`, `WASMER_TOKEN`, `WASMER_NAMESPACE`, `EDGE_SERVER`,
+`EDGE_SSH_SERVER`, and `EDGE_DNS_SERVER` values for the local Rust backend plus host-run Edge
+stack.
 
 ## Writing tests
 

@@ -1,6 +1,8 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as process from "node:process";
+import * as http from "node:http";
+import * as https from "node:https";
 import * as toml from "@iarna/toml";
 import { promises as dns } from "dns";
 
@@ -27,6 +29,8 @@ export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
 export const ENV_VAR_TOKEN: string = "WASMER_TOKEN";
 export const ENV_VAR_APP_DOMAIN: string = "WASMER_APP_DOMAIN";
 export const ENV_VAR_EDGE_SERVER: string = "EDGE_SERVER";
+export const ENV_VAR_EDGE_SSH_SERVER: string = "EDGE_SSH_SERVER";
+export const ENV_VAR_EDGE_DNS_SERVER: string = "EDGE_DNS_SERVER";
 export const ENV_VAR_WASMER_PATH: string = "WASMER_PATH";
 export const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
 export const ENV_VAR_VERBOSE: string = "VERBOSE";
@@ -35,7 +39,7 @@ export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_BUGT: string = "https://registry.wasmer.fun/graphql";
 export const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
-export const REGISTRY_LOCAL: string = "http://localhost:8003/graphql";
+export const REGISTRY_LOCAL: string = "http://localhost:8000/graphql";
 export const REGISTRY_PORT_FOWARDED: string = "http://localhost:8083/graphql";
 
 export const appDomainMap = {
@@ -69,6 +73,11 @@ export interface DeployOptions {
   noWait?: boolean;
 }
 
+const nativeFetch = globalThis.fetch.bind(globalThis);
+let edgeFetchBridgeConfig:
+  | { edgeServer: string; appDomain: string }
+  | null = null;
+
 export interface AppFetchOptions extends RequestInit {
   // Ignore non-success status codes.
   noAssertSuccess?: boolean;
@@ -92,6 +101,12 @@ export class TestEnv {
 
   /// IP or hostname of the specific Edge server to test.
   edgeServer: string | null = null;
+
+  /// Host:port endpoint for local SSH/SFTP tests.
+  edgeSshServer: string | null = null;
+
+  /// Host:port endpoint for local DNS tests.
+  edgeDnsServer: string | null = null;
 
   // Name or path of the `wasmer` binary to use.
   wasmerBinary: string = "wasmer";
@@ -121,6 +136,8 @@ export class TestEnv {
     }
 
     const edgeServer = process.env[ENV_VAR_EDGE_SERVER];
+    const edgeSshServer = process.env[ENV_VAR_EDGE_SSH_SERVER];
+    const edgeDnsServer = process.env[ENV_VAR_EDGE_DNS_SERVER];
     const wasmerBinary = process.env[ENV_VAR_WASMER_PATH];
     let maybeToken: string | null = process.env[ENV_VAR_TOKEN] ?? null;
 
@@ -153,6 +170,13 @@ export class TestEnv {
 
     if (edgeServer) {
       env.edgeServer = edgeServer;
+      installEdgeFetchBridge(edgeServer, env.appDomain);
+    }
+    if (edgeSshServer) {
+      env.edgeSshServer = edgeSshServer;
+    }
+    if (edgeDnsServer) {
+      env.edgeDnsServer = edgeDnsServer;
     }
 
     if (wasmerBinary) {
@@ -186,8 +210,19 @@ export class TestEnv {
   }
 
   async runWasmerCommand(options: CommandOptions): Promise<CommandOutput> {
-    const args = options.args;
+    const args = [...options.args];
     const env = { ...process.env, ...options.env };
+
+    if (
+      this.edgeServer &&
+      !args.includes("--no-wait") &&
+      ((args[0] === "deploy" && args.length >= 1) ||
+        (args[0] === "app" &&
+          args[1] === "create" &&
+          args.includes("--deploy")))
+    ) {
+      args.push("--no-wait");
+    }
 
     if (!args.includes("--registry")) {
       env["WASMER_REGISTRY"] = this.registry;
@@ -409,7 +444,7 @@ export class TestEnv {
       throw new Error(`Missing permalink for app ${appID}`);
     }
     const match = permalink.match(
-      /^https?:\/\/([a-z0-9-]+)\.id\.wasmer(fun){0,1}\.(?:app|dev)(?:\/|$)/i,
+      /^https?:\/\/([a-z0-9-]+)\.id\.(?:wasmer(?:fun)?\.(?:app|dev)|localhost)(?:\/|$)/i,
     );
     if (!match) {
       throw new Error(`Invalid permalink format: ${permalink}`);
@@ -567,8 +602,9 @@ subscription PublishAppFromRepoAutobuild(
         );
       }
 
-      if (this.edgeServer) {
-        resolver.setServers([this.edgeServer]);
+      if (this.edgeDnsServer) {
+        const target = parseSocketTarget(this.edgeDnsServer, 53);
+        resolver.setServers([`${target.host}:${target.port}`]);
       } else {
         resolver.setServers([edgeServerIps[0]]);
       }
@@ -593,17 +629,23 @@ subscription PublishAppFromRepoAutobuild(
     options: AppFetchOptions = {},
   ): Promise<Response> {
     let url: string;
-    if (this.edgeServer) {
-      if (!options.headers) {
-        options.headers = {};
-      }
-      options.headers["host"] = url;
-      url = this.edgeServer;
-    }
     if (urlOrPath.startsWith("http")) {
       url = urlOrPath;
     } else {
       url = app.url + (urlOrPath.startsWith("/") ? "" : "/") + urlOrPath;
+    }
+
+    let edgeHostOverride: string | null = null;
+    let edgeForwardedProto: string | null = null;
+    if (this.edgeServer) {
+      const directUrl = new URL(url);
+      const edgeTarget = new URL(this.edgeServer);
+      edgeTarget.pathname = directUrl.pathname;
+      edgeTarget.search = directUrl.search;
+      edgeTarget.hash = directUrl.hash;
+      edgeHostOverride = directUrl.host;
+      edgeForwardedProto = directUrl.protocol.replace(/:$/, "");
+      url = edgeTarget.toString();
     }
 
     let waitForVersionId: string | null = null;
@@ -625,7 +667,14 @@ subscription PublishAppFromRepoAutobuild(
     const RETRY_TIMEOUT_SECS = 60;
     while (true) {
       console.debug(`Fetching URL ${url}`, { options });
-      const response = await fetch(url, options);
+      const response = edgeHostOverride
+        ? await fetchWithHostOverride(
+            url,
+            options,
+            edgeHostOverride,
+            edgeForwardedProto,
+          )
+        : await fetch(url, options);
       console.debug(`Fetched URL ${url}`);
       if (this.verbose) {
         console.debug({
@@ -681,4 +730,164 @@ subscription PublishAppFromRepoAutobuild(
       return response;
     }
   }
+
+  edgeSshTarget(defaultPort = 22): { host: string; port: number } | null {
+    if (!this.edgeSshServer) {
+      return null;
+    }
+    return parseSocketTarget(this.edgeSshServer, defaultPort);
+  }
+}
+
+function parseSocketTarget(
+  value: string,
+  defaultPort: number,
+): { host: string; port: number } {
+  if (value.includes("://")) {
+    const parsed = new URL(value);
+    return {
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : defaultPort,
+    };
+  }
+
+  const match = value.match(/^(.*):(\d+)$/);
+  if (match) {
+    return {
+      host: match[1],
+      port: Number(match[2]),
+    };
+  }
+
+  return { host: value, port: defaultPort };
+}
+
+function installEdgeFetchBridge(edgeServer: string, appDomain: string): void {
+  if (
+    edgeFetchBridgeConfig &&
+    edgeFetchBridgeConfig.edgeServer === edgeServer &&
+    edgeFetchBridgeConfig.appDomain === appDomain
+  ) {
+    return;
+  }
+
+  edgeFetchBridgeConfig = { edgeServer, appDomain };
+  globalThis.fetch = (async (
+    input: Request | string | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    if (!shouldRouteViaEdgeBridge(url.hostname, appDomain)) {
+      return nativeFetch(input, init);
+    }
+
+    const edgeTarget = new URL(edgeServer);
+    edgeTarget.pathname = url.pathname;
+    edgeTarget.search = url.search;
+    edgeTarget.hash = url.hash;
+    return fetchWithHostOverride(
+      edgeTarget.toString(),
+      request,
+      url.host,
+      url.protocol.replace(/:$/, ""),
+    );
+  }) as typeof fetch;
+}
+
+function shouldRouteViaEdgeBridge(hostname: string, appDomain: string): boolean {
+  const normalizedHost = hostname.trim().toLowerCase().replace(/\.$/, "");
+  const normalizedDomain = appDomain.trim().toLowerCase().replace(/\.$/, "");
+  if (!normalizedDomain) {
+    return false;
+  }
+  return normalizedHost.endsWith(`.${normalizedDomain}`);
+}
+
+async function fetchWithHostOverride(
+  targetUrl: string,
+  init: RequestInit | Request,
+  hostHeader: string,
+  forwardedProto?: string | null,
+): Promise<Response> {
+  const request = init instanceof Request ? init : new Request(targetUrl, init);
+  const target = new URL(targetUrl);
+  const body =
+    request.method === "GET" || request.method === "HEAD"
+      ? undefined
+      : Buffer.from(await request.arrayBuffer());
+  const headers = new Headers(request.headers);
+  headers.set("host", hostHeader);
+  if (forwardedProto) {
+    headers.set("x-forwarded-proto", forwardedProto);
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    const client = target.protocol === "https:" ? https : http;
+    const req = client.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port ? Number(target.port) : undefined,
+        path: `${target.pathname}${target.search}`,
+        method: request.method,
+        headers: Object.fromEntries(headers.entries()),
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on("end", () => {
+          const responseHeaders = new Headers();
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (value === undefined) {
+              continue;
+            }
+            let normalizedValue = Array.isArray(value)
+              ? value.join(", ")
+              : String(value);
+            if (key.toLowerCase() === "location") {
+              normalizedValue = normalizeLocalRedirectLocation(
+                normalizedValue,
+                hostHeader,
+              );
+            }
+            responseHeaders.set(
+              key,
+              normalizedValue,
+            );
+          }
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: res.statusCode ?? 500,
+              statusText: res.statusMessage ?? "",
+              headers: responseHeaders,
+            }),
+          );
+        });
+      },
+    );
+
+    req.on("error", reject);
+    if (body) {
+      req.write(body);
+    }
+    req.end();
+  });
+}
+
+function normalizeLocalRedirectLocation(
+  location: string,
+  hostHeader: string,
+): string {
+  try {
+    const parsed = new URL(location);
+    const hostOnly = hostHeader.split(":")[0];
+    if (parsed.hostname === hostOnly && parsed.port === "9443") {
+      parsed.port = "";
+      return parsed.toString();
+    }
+  } catch {
+    return location;
+  }
+  return location;
 }
