@@ -96,6 +96,44 @@ async function sshShellExec(
   command: string,
   allowNonZeroExitCode = false,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
+  if (process.env.EDGE_SSH_SERVER) {
+    return await new Promise((resolve, reject) => {
+      conn.exec(command, (err, stream) => {
+        if (err) return reject(err);
+        let stdout = "";
+        let stderr = "";
+        let code: number | undefined;
+
+        stream.on("data", (d: Buffer) => {
+          stdout += d.toString();
+        });
+        stream.stderr.on("data", (d: Buffer) => {
+          stderr += d.toString();
+        });
+        stream.on("exit", (exitCode?: number) => {
+          code = exitCode ?? 0;
+        });
+        stream.on("close", () => {
+          if (code === undefined) {
+            return reject(
+              new Error(
+                `ssh error: command=${command}, stream closed before exit code was observed, stdout=${stdout}, stderr=${stderr}`,
+              ),
+            );
+          }
+          if (!allowNonZeroExitCode && code !== 0) {
+            return reject(
+              new Error(
+                `ssh error: command=${command}, code=${code}, stdout=${stdout}, stderr=${stderr}`,
+              ),
+            );
+          }
+          resolve({ code, stdout, stderr });
+        });
+      });
+    });
+  }
+
   const START = `__START_${Math.random().toString(36).slice(2)}__`;
   const END = `__END_${Math.random().toString(36).slice(2)}__`;
   return await new Promise((resolve, reject) => {
@@ -197,9 +235,11 @@ test("app-ssh", async () => {
   const env = TestEnv.fromEnv();
   const { sshUsername, password, sshDeployment } = await setupApp(env);
 
-  const hostname = new URL(sshDeployment.url).host;
+  const target = env.edgeSshTarget();
+  const hostname = target?.host ?? new URL(sshDeployment.url).hostname;
+  const port = target?.port ?? 22;
 
-  console.log(`SSH to ${sshUsername}@${hostname}, password: ${password}`);
+  console.log(`SSH to ${sshUsername}@${hostname}:${port}, password: ${password}`);
   const conn = new Client();
   async function connectSshWithRetry(
     tries = 5,
@@ -224,7 +264,7 @@ test("app-ssh", async () => {
           if (withKey) {
             conn.connect({
               host: hostname,
-              port: 22,
+              port,
               username: sshUsername,
               privateKey: readFileSync(withKey),
               readyTimeout: 5000,
@@ -232,7 +272,7 @@ test("app-ssh", async () => {
           } else {
             conn.connect({
               host: hostname,
-              port: 22,
+              port,
               username: sshUsername,
               password,
               readyTimeout: 5000,
@@ -302,10 +342,12 @@ test("app-sftp", async () => {
   const env = TestEnv.fromEnv();
   const { sshUsername, password, sshDeployment } = await setupApp(env);
 
-  const hostname = new URL(sshDeployment.url).host;
+  const target = env.edgeSshTarget();
+  const hostname = target?.host ?? new URL(sshDeployment.url).hostname;
+  const port = target?.port ?? 22;
 
   console.log(
-    `SSH: userrname: ${sshUsername}, password: ${password}, hostname: ${hostname}`,
+    `SSH: userrname: ${sshUsername}, password: ${password}, hostname: ${hostname}:${port}`,
   );
   const sftp = new SftpClient();
   async function connectSftpWithRetry(
@@ -318,7 +360,7 @@ test("app-sftp", async () => {
       try {
         await sftp.connect({
           host: hostname,
-          port: 22,
+          port,
           username: sshUsername,
           password,
           readyTimeout: 5000,
