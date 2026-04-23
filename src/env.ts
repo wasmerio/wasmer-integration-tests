@@ -102,9 +102,8 @@ export interface DeployOptions {
 }
 
 const nativeFetch = globalThis.fetch.bind(globalThis);
-let edgeFetchBridgeConfig:
-  | { edgeServer: string; appDomain: string }
-  | null = null;
+let edgeFetchBridgeConfig: { edgeServer: string; appDomain: string } | null =
+  null;
 
 export interface AppFetchOptions extends RequestInit {
   // Ignore non-success status codes.
@@ -835,7 +834,10 @@ function installEdgeFetchBridge(edgeServer: string, appDomain: string): void {
   }) as typeof fetch;
 }
 
-function shouldRouteViaEdgeBridge(hostname: string, appDomain: string): boolean {
+function shouldRouteViaEdgeBridge(
+  hostname: string,
+  appDomain: string,
+): boolean {
   const normalizedHost = hostname.trim().toLowerCase().replace(/\.$/, "");
   const normalizedDomain = appDomain.trim().toLowerCase().replace(/\.$/, "");
   if (!normalizedDomain) {
@@ -891,10 +893,7 @@ async function fetchWithHostOverride(
                 hostHeader,
               );
             }
-            responseHeaders.set(
-              key,
-              normalizedValue,
-            );
+            responseHeaders.set(key, normalizedValue);
           }
           resolve(
             new Response(Buffer.concat(chunks), {
