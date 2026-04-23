@@ -23,8 +23,6 @@ import {
 import { AppGet } from "./app/appGet";
 import { HEADER_APP_VERSION_ID, HEADER_WASMER_REQUEST_ID } from "./edge";
 
-const LOCAL_STACKMACHINE_CJS_PATH =
-  "/home/theduke/dev/github.com/stackmachine/stackmachine-js/dist/index.cjs";
 const requireLocal = createRequire(__filename);
 
 export interface StackMachineSdk {
@@ -438,10 +436,11 @@ export class TestEnv {
   }
 
   async stackmachineSdk(): Promise<StackMachineSdk> {
-    // The published SDK is ESM-only today, which Jest in this repo cannot load
-    // from node_modules. Use the local CommonJS build until the published
-    // package can be consumed directly by this test harness.
-    const { StackMachine } = requireLocal(LOCAL_STACKMACHINE_CJS_PATH) as {
+    // Use require() so that Jest (CommonJS transform) can load the package.
+    // The stackmachine package ships a CJS build at dist/index.cjs (the
+    // "main" / "require" export condition), so requireLocal resolves it
+    // correctly from node_modules.
+    const { StackMachine } = requireLocal("stackmachine") as {
       StackMachine: {
         init(config: {
           apiUrl: string;
