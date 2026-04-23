@@ -1,13 +1,5 @@
-import { createRequire } from "node:module";
-
+import { createZip } from "stackmachine";
 import { AppInfo, randomAppName, sleep, TestEnv } from "../../src";
-
-const requireLocal = createRequire(__filename);
-const { createZip } = requireLocal(
-  "/home/theduke/dev/github.com/stackmachine/stackmachine-js/dist/index.cjs",
-) as {
-  createZip(files: Record<string, string>): Promise<Blob>;
-};
 
 jest.setTimeout(600_000);
 
