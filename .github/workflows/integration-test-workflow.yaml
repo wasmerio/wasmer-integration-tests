@@ -78,6 +78,9 @@ jobs:
               npx jest tests/wasmopticon
             requires_python: true
             python_version: "3.13"
+          - id: stackmachine-sdk
+            test_command: |
+              npx jest ./tests/stackmachine/stackmachine-sdk.test.ts
 
     steps:
       - name: Clone repository
