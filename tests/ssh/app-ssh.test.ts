@@ -239,7 +239,9 @@ test("app-ssh", async () => {
   const hostname = target?.host ?? new URL(sshDeployment.url).hostname;
   const port = target?.port ?? 22;
 
-  console.log(`SSH to ${sshUsername}@${hostname}:${port}, password: ${password}`);
+  console.log(
+    `SSH to ${sshUsername}@${hostname}:${port}, password: ${password}`,
+  );
   const conn = new Client();
   async function connectSshWithRetry(
     tries = 5,

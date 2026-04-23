@@ -7,6 +7,8 @@ import * as toml from "@iarna/toml";
 import { promises as dns } from "dns";
 
 import { spawn, SpawnOptions } from "child_process";
+import { StackMachine } from "stackmachine";
+import WebSocket from "ws";
 
 import { AppInfo, BackendClient } from "./backend";
 import {
@@ -23,6 +25,32 @@ import {
 } from "./app/construct";
 import { AppGet } from "./app/appGet";
 import { HEADER_APP_VERSION_ID, HEADER_WASMER_REQUEST_ID } from "./edge";
+
+export interface StackMachineSdk {
+  getApp(
+    input: { id: string } | { owner?: string; name: string },
+  ): Promise<unknown>;
+  deleteApp(input: { id: string }): Promise<void>;
+  uploadFile(
+    file: Blob,
+    setUploadFilesProgress?: (progress: number) => void,
+  ): Promise<string>;
+  deployApp(input: Record<string, unknown>): Promise<{
+    finish(): Promise<{ id: string; app: unknown }>;
+    subscribeToProgress(callback: (data: unknown) => void): void;
+  }>;
+}
+
+// The published StackMachine SDK currently builds its GraphQL subscription
+// client without forwarding `webSocketImpl` to `graphql-ws`. In browser-like
+// runtimes and modern Node versions, `graphql-ws` can use the existing global
+// `WebSocket`. Some CI runtimes still do not expose that global, so we install
+// the `ws` implementation only as a fallback and leave any native global alone.
+function ensureNodeWebSocket(): void {
+  if (typeof globalThis.WebSocket === "undefined") {
+    globalThis.WebSocket = WebSocket as typeof globalThis.WebSocket;
+  }
+}
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
 export const ENV_VAR_NAMESPACE: string = "WASMER_NAMESPACE";
@@ -74,9 +102,8 @@ export interface DeployOptions {
 }
 
 const nativeFetch = globalThis.fetch.bind(globalThis);
-let edgeFetchBridgeConfig:
-  | { edgeServer: string; appDomain: string }
-  | null = null;
+let edgeFetchBridgeConfig: { edgeServer: string; appDomain: string } | null =
+  null;
 
 export interface AppFetchOptions extends RequestInit {
   // Ignore non-success status codes.
@@ -452,6 +479,18 @@ export class TestEnv {
     return match[1];
   }
 
+  async stackmachineSdk(): Promise<StackMachineSdk> {
+    ensureNodeWebSocket();
+    return StackMachine.init({
+      apiUrl: this.registry,
+      token: this.token,
+    });
+  }
+
+  async stachmachineSdk(): Promise<StackMachineSdk> {
+    return this.stackmachineSdk();
+  }
+
   async *graphqlSubscription(
     endpoint: string,
     token: string,
@@ -795,7 +834,10 @@ function installEdgeFetchBridge(edgeServer: string, appDomain: string): void {
   }) as typeof fetch;
 }
 
-function shouldRouteViaEdgeBridge(hostname: string, appDomain: string): boolean {
+function shouldRouteViaEdgeBridge(
+  hostname: string,
+  appDomain: string,
+): boolean {
   const normalizedHost = hostname.trim().toLowerCase().replace(/\.$/, "");
   const normalizedDomain = appDomain.trim().toLowerCase().replace(/\.$/, "");
   if (!normalizedDomain) {
@@ -851,10 +893,7 @@ async function fetchWithHostOverride(
                 hostHeader,
               );
             }
-            responseHeaders.set(
-              key,
-              normalizedValue,
-            );
+            responseHeaders.set(key, normalizedValue);
           }
           resolve(
             new Response(Buffer.concat(chunks), {
