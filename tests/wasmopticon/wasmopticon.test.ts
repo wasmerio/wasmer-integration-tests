@@ -48,6 +48,7 @@ async function runShellCommand(
   const spawnOpts: SpawnOptions = {
     cwd: opts.cwd,
     env: opts.env,
+    detached: opts.timeoutMs !== undefined,
     shell: true,
     stdio: ["ignore", "pipe", "pipe"],
   };
@@ -63,12 +64,37 @@ async function runShellCommand(
   );
 
   return await new Promise((resolve, reject) => {
+    let timedOut = false;
+    let timeout: NodeJS.Timeout | undefined;
+
+    if (opts.timeoutMs !== undefined) {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        if (proc.pid !== undefined) {
+          try {
+            process.kill(-proc.pid, "SIGTERM");
+          } catch {
+            proc.kill("SIGTERM");
+          }
+          setTimeout(() => {
+            try {
+              process.kill(-proc.pid!, "SIGKILL");
+            } catch {
+              proc.kill("SIGKILL");
+            }
+          }, 2000).unref();
+        }
+      }, opts.timeoutMs);
+    }
+
     proc.on("error", (err) => {
+      if (timeout) clearTimeout(timeout);
       reject(err);
     });
     proc.stdout?.on("data", (c: Buffer) => stdoutChunks.push(c));
     proc.stderr?.on("data", (c: Buffer) => stderrChunks.push(c));
     proc.on("close", (code) => {
+      if (timeout) clearTimeout(timeout);
       let stdout = Buffer.concat(stdoutChunks).toString("utf8");
       let stderr = Buffer.concat(stderrChunks).toString("utf8");
       const { truncatedStdout, truncatedStderr } = truncateOutput(
@@ -80,7 +106,12 @@ async function runShellCommand(
         stdout = truncatedStdout;
         stderr = truncatedStderr;
       }
-      if (code !== 0) {
+      if (timedOut) {
+        const err = new Error(
+          `Command timed out after ${opts.timeoutMs}ms\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+        );
+        reject(err);
+      } else if (code !== 0) {
         const err = new Error(
           `Command failed with exit code ${code}\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
         );
@@ -108,6 +139,7 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
     {
       cwd: workDir,
       env: procEnv,
+      timeoutMs: 60_000,
     },
     env.verbose,
   );
@@ -139,10 +171,16 @@ describe("wasmopticon: Crawl and deploy", () => {
       app = await tryShipitDeploy(workDir, env);
     } catch (err) {
       console.error("failed to deploy via shipit", err);
-      console.info("failling back to normal deploy");
-      app = await env.deployAppDir(workDir, {
-        extraCliArgs: ["--build-remote"],
-      });
+      const shipitDeployDir = path.join(workDir, ".shipit", "wasmer");
+      if (fs.existsSync(shipitDeployDir)) {
+        console.info("resolving app from shipit output after deploy command failure");
+        app = appGetToAppInfo(await env.getAppGetFromDir(shipitDeployDir));
+      } else {
+        console.info("failling back to normal deploy");
+        app = await env.deployAppDir(workDir, {
+          extraCliArgs: ["--build-remote"],
+        });
+      }
     }
     await env.deleteApp(app);
   });
