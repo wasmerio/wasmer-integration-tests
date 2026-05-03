@@ -68,8 +68,18 @@ const setupApp = async (env: TestEnv) => {
     sshUsername,
     password,
     sshDeployment,
+    dir,
   };
 };
+
+function edgeSshCliArgs(env: TestEnv): string[] {
+  const target = env.edgeSshTarget();
+  if (!target) {
+    return [];
+  }
+
+  return ["--host", target.host, "--ssh-port", String(target.port)];
+}
 
 /**
  * Executes a command over an interactive SSH shell and returns
@@ -338,6 +348,34 @@ test("app-ssh", async () => {
 
   // Cleanup app on success. If not, we can inspect the app via creds listed above
   env.deleteApp(sshDeployment);
+});
+
+test("wasmer ssh can target an app by flag or app.yaml", async () => {
+  const env = TestEnv.fromEnv();
+  const { sshDeployment, dir } = await setupApp(env);
+  const targetArgs = edgeSshCliArgs(env);
+
+  try {
+    await env.runWasmerCommand({
+      args: [
+        "ssh",
+        "--app",
+        sshDeployment.id,
+        ...targetArgs,
+        "--",
+        "test",
+        "-d",
+        "/data",
+      ],
+    });
+
+    await env.runWasmerCommand({
+      args: ["ssh", ...targetArgs, "--", "test", "-d", "/data"],
+      cwd: dir,
+    });
+  } finally {
+    await env.deleteApp(sshDeployment);
+  }
 });
 
 test("app-sftp", async () => {
