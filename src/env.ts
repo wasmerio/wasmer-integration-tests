@@ -63,6 +63,7 @@ export const ENV_VAR_WASMER_PATH: string = "WASMER_PATH";
 export const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
 export const ENV_VAR_VERBOSE: string = "VERBOSE";
 export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
+export const ENV_VAR_KEEP_APPS: string = "KEEP_APPS";
 
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_BUGT: string = "https://registry.wasmer.fun/graphql";
@@ -104,6 +105,66 @@ export interface DeployOptions {
 const nativeFetch = globalThis.fetch.bind(globalThis);
 let edgeFetchBridgeConfig: { edgeServer: string; appDomain: string } | null =
   null;
+
+type JestStateLike = {
+  currentTestName?: string;
+  testPath?: string;
+};
+
+type JestExpectLike = {
+  getState(): JestStateLike;
+};
+
+function currentJestState(): JestStateLike {
+  const maybeGlobal = globalThis as typeof globalThis & {
+    expect?: JestExpectLike;
+  };
+  return maybeGlobal.expect?.getState() ?? {};
+}
+
+function currentJestTestName(): string | null {
+  return currentJestState().currentTestName ?? null;
+}
+
+function deployedAppsRegistryPath(): string {
+  return path.join(process.cwd(), ".jest-deployed-apps.jsonl");
+}
+
+async function recordDeployedApp(env: TestEnv, info: AppInfo): Promise<void> {
+  const state = currentJestState();
+  const record = {
+    timestamp: new Date().toISOString(),
+    workerId: process.env.JEST_WORKER_ID ?? null,
+    testPath: state.testPath ?? null,
+    testName: state.currentTestName ?? null,
+    origin: info.origin ?? state.currentTestName ?? null,
+    namespace: env.namespace,
+    appId: info.id,
+    appName: info.version.name,
+    appUrl: info.url,
+    appPermalink: info.app.permalink,
+    appDashboard: env.appDashboardUrl(info),
+    appDir: info.dir,
+  };
+  await fs.promises.appendFile(
+    deployedAppsRegistryPath(),
+    `${JSON.stringify(record)}\n`,
+    "utf-8",
+  );
+}
+
+function colorize(code: string, value: string): string {
+  if (process.env.NO_COLOR) {
+    return value;
+  }
+  return `\u001b[${code}m${value}\u001b[0m`;
+}
+
+const ANSI_BOLD = "1";
+const ANSI_DIM = "2";
+const ANSI_CYAN = "36";
+const ANSI_GREEN = "32";
+const ANSI_YELLOW = "33";
 
 export interface AppFetchOptions extends RequestInit {
   // Ignore non-success status codes.
@@ -407,6 +468,7 @@ export class TestEnv {
       await this.fetchApp(info, "/");
     }
 
+    await recordDeployedApp(this, info);
     console.debug("App deployed", { info });
     return info;
   }
@@ -424,6 +486,7 @@ export class TestEnv {
       id: version.appId,
       url: app.url,
       dir,
+      origin: currentJestTestName() ?? undefined,
     };
 
     return info;
@@ -450,9 +513,69 @@ export class TestEnv {
   }
 
   async deleteApp(app: AppInfo): Promise<void> {
+    if (process.env[ENV_VAR_KEEP_APPS]) {
+      const label = (value: string) => colorize(ANSI_DIM, value.padEnd(14));
+      const origin = app.origin ?? currentJestTestName() ?? "unknown";
+      const title = colorize(
+        ANSI_BOLD,
+        colorize(ANSI_CYAN, "KEEP_APPS: app preserved"),
+      );
+      process.stderr.write(
+        [
+          `\n${colorize(
+            ANSI_CYAN,
+            "┌────────────────────────────────────────────────────────",
+          )}`,
+          `${colorize(ANSI_CYAN, "│")} ${title}`,
+          `${colorize(
+            ANSI_CYAN,
+            "├────────────────────────────────────────────────────────",
+          )}`,
+          `${colorize(ANSI_CYAN, "│")} ${label("origin")} ${origin}`,
+          `${colorize(ANSI_CYAN, "│")} ${label("app id")} ${colorize(
+            ANSI_YELLOW,
+            app.id,
+          )}`,
+          `${colorize(ANSI_CYAN, "│")} ${label(
+            "app name",
+          )} ${this.namespace}/${app.version.name}`,
+          `${colorize(ANSI_CYAN, "│")} ${label("app url")} ${colorize(
+            ANSI_GREEN,
+            app.url,
+          )}`,
+          `${colorize(ANSI_CYAN, "│")} ${label("permalink")} ${colorize(
+            ANSI_GREEN,
+            app.app.permalink,
+          )}`,
+          `${colorize(ANSI_CYAN, "│")} ${label("dashboard")} ${colorize(
+            ANSI_GREEN,
+            this.appDashboardUrl(app),
+          )}`,
+          `${colorize(
+            ANSI_CYAN,
+            "└────────────────────────────────────────────────────────",
+          )}`,
+          "",
+        ].join("\n"),
+      );
+      return;
+    }
+
     await this.runWasmerCommand({
       args: ["app", "delete", app.id],
     });
+  }
+
+  appDashboardUrl(app: AppInfo): string {
+    const registryUrl = new URL(this.registry);
+    registryUrl.pathname = "";
+    registryUrl.search = "";
+    registryUrl.hash = "";
+    registryUrl.hostname = registryUrl.hostname.replace(/^registry\./, "");
+
+    return `${registryUrl.toString().replace(/\/$/, "")}/apps/${encodeURIComponent(
+      this.namespace,
+    )}/${encodeURIComponent(app.version.name)}`;
   }
 
   // wasmerAppGet returns more info than app info, using command wasmer app get <app-id>

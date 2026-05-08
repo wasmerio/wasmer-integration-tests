@@ -4,3 +4,4 @@ target
 node_modules
 wordpress
 tests/generated-templates.json
+.jest-deployed-apps.jsonl

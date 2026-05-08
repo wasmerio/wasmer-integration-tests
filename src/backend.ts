@@ -24,6 +24,8 @@ export interface AppInfo {
   url: string;
   // Directory holding the app.
   dir: Path;
+  // Best-effort test/deployment origin, used for debugging retained apps.
+  origin?: string;
 }
 
 export interface ApiAppsInNamespace {
