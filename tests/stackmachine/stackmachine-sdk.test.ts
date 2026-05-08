@@ -79,7 +79,14 @@ async function deployUploadedApp(
   });
 
   const appVersion = await build.finish();
-  return appVersion.app as DeployAppLike;
+  const app = appVersion.app as DeployAppLike;
+  await env.recordDeployedApp({
+    appId: app.id,
+    appName: app.name,
+    appUrl: app.url,
+    appPermalink: app.url,
+  });
+  return app;
 }
 
 async function deployInlinePhpApp(
@@ -114,16 +121,33 @@ async function waitForLogs(
   timeoutMs = 200_000,
 ): Promise<void> {
   const start = Date.now();
+  let latestLogs:
+    | Awaited<
+        ReturnType<NonNullable<DeployAppLike["activeVersion"]>["fetchLogs"]>
+      >
+    | undefined;
   while (Date.now() - start < timeoutMs) {
-    const logs = await app.activeVersion?.fetchLogs(
+    latestLogs = await app.activeVersion?.fetchLogs(
       new Date(Date.now() - 30 * 60 * 1000),
     );
-    if (logs?.some((entry) => entry.message.includes(substring))) {
+    if (latestLogs?.some((entry) => entry.message.includes(substring))) {
       return;
     }
     await sleep(3_000);
   }
-  throw new Error(`Timed out waiting for logs containing '${substring}'`);
+  throw new Error(
+    [
+      `Timed out waiting for logs containing '${substring}' for app '${app.id}' (${app.url})`,
+      "Latest logs:",
+      ...(latestLogs ?? []).map((entry) => {
+        const datetime =
+          entry.datetime instanceof Date
+            ? entry.datetime.toISOString()
+            : String(entry.datetime);
+        return `${datetime} ${entry.stream} ${entry.instanceId} ${entry.message}`;
+      }),
+    ].join("\n"),
+  );
 }
 
 async function waitForDeletion(
@@ -197,6 +221,11 @@ describe("stackmachine sdk", () => {
 
   afterEach(async () => {
     const env = TestEnv.fromEnv();
+    if (env.shouldPreserveAppsForCurrentTest()) {
+      cleanupAppIds.length = 0;
+      return;
+    }
+
     while (cleanupAppIds.length > 0) {
       const appId = cleanupAppIds.pop();
       if (!appId) {
@@ -425,6 +454,12 @@ describe("stackmachine sdk", () => {
 
     const appVersion = await build.finish();
     const app = appVersion.app as DeployAppLike;
+    await env.recordDeployedApp({
+      appId: app.id,
+      appName,
+      appUrl: app.url,
+      appPermalink: app.url,
+    });
     cleanupAppIds.push(app.id);
 
     expect(app.adminUrl).toBeTruthy();

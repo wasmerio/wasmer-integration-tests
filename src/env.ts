@@ -115,6 +115,15 @@ type JestExpectLike = {
   getState(): JestStateLike;
 };
 
+export interface DeployedAppRecordInput {
+  appId: string;
+  appName: string;
+  appUrl: string;
+  appPermalink?: string;
+  appDir?: string;
+  origin?: string;
+}
+
 function currentJestState(): JestStateLike {
   const maybeGlobal = globalThis as typeof globalThis & {
     expect?: JestExpectLike;
@@ -126,31 +135,70 @@ function currentJestTestName(): string | null {
   return currentJestState().currentTestName ?? null;
 }
 
+const FAILED_JEST_TEST_NAMES_KEY = Symbol.for(
+  "wasmer-integration-tests.failed-jest-test-names",
+);
+
+function failedJestTestNames(): Set<string> {
+  const globalWithFailures = globalThis as typeof globalThis & {
+    [FAILED_JEST_TEST_NAMES_KEY]?: Set<string>;
+  };
+  globalWithFailures[FAILED_JEST_TEST_NAMES_KEY] ??= new Set<string>();
+  return globalWithFailures[FAILED_JEST_TEST_NAMES_KEY];
+}
+
+export function markCurrentJestTestFailed(): void {
+  const testName = currentJestTestName();
+  if (testName) {
+    failedJestTestNames().add(testName);
+  }
+}
+
+export function currentJestTestFailed(): boolean {
+  const testName = currentJestTestName();
+  return testName ? failedJestTestNames().has(testName) : false;
+}
+
 function deployedAppsRegistryPath(): string {
   return path.join(process.cwd(), ".jest-deployed-apps.jsonl");
 }
 
-async function recordDeployedApp(env: TestEnv, info: AppInfo): Promise<void> {
+async function appendDeployedAppRecord(
+  env: TestEnv,
+  input: DeployedAppRecordInput,
+): Promise<void> {
   const state = currentJestState();
   const record = {
     timestamp: new Date().toISOString(),
     workerId: process.env.JEST_WORKER_ID ?? null,
     testPath: state.testPath ?? null,
     testName: state.currentTestName ?? null,
-    origin: info.origin ?? state.currentTestName ?? null,
+    origin: input.origin ?? state.currentTestName ?? null,
+    registry: env.registry,
     namespace: env.namespace,
-    appId: info.id,
-    appName: info.version.name,
-    appUrl: info.url,
-    appPermalink: info.app.permalink,
-    appDashboard: env.appDashboardUrl(info),
-    appDir: info.dir,
+    appId: input.appId,
+    appName: input.appName,
+    appUrl: input.appUrl,
+    appPermalink: input.appPermalink ?? null,
+    appDashboard: env.appDashboardUrlFromName(input.appName),
+    appDir: input.appDir ?? null,
   };
   await fs.promises.appendFile(
     deployedAppsRegistryPath(),
     `${JSON.stringify(record)}\n`,
     "utf-8",
   );
+}
+
+async function recordDeployedApp(env: TestEnv, info: AppInfo): Promise<void> {
+  await appendDeployedAppRecord(env, {
+    appId: info.id,
+    appName: info.version.name,
+    appUrl: info.url,
+    appPermalink: info.app.permalink,
+    appDir: info.dir,
+    origin: info.origin,
+  });
 }
 
 function colorize(code: string, value: string): string {
@@ -512,13 +560,24 @@ export class TestEnv {
     return this.deployAppDir(dir, options);
   }
 
+  async recordDeployedApp(input: DeployedAppRecordInput): Promise<void> {
+    await appendDeployedAppRecord(this, input);
+  }
+
+  shouldPreserveAppsForCurrentTest(): boolean {
+    return Boolean(process.env[ENV_VAR_KEEP_APPS]) || currentJestTestFailed();
+  }
+
   async deleteApp(app: AppInfo): Promise<void> {
-    if (process.env[ENV_VAR_KEEP_APPS]) {
+    if (this.shouldPreserveAppsForCurrentTest()) {
       const label = (value: string) => colorize(ANSI_DIM, value.padEnd(14));
       const origin = app.origin ?? currentJestTestName() ?? "unknown";
+      const reason = process.env[ENV_VAR_KEEP_APPS]
+        ? "KEEP_APPS"
+        : "FAILED TEST";
       const title = colorize(
         ANSI_BOLD,
-        colorize(ANSI_CYAN, "KEEP_APPS: app preserved"),
+        colorize(ANSI_CYAN, `${reason}: app preserved`),
       );
       process.stderr.write(
         [
@@ -567,6 +626,10 @@ export class TestEnv {
   }
 
   appDashboardUrl(app: AppInfo): string {
+    return this.appDashboardUrlFromName(app.version.name);
+  }
+
+  appDashboardUrlFromName(appName: string): string {
     const registryUrl = new URL(this.registry);
     registryUrl.pathname = "";
     registryUrl.search = "";
@@ -575,7 +638,7 @@ export class TestEnv {
 
     return `${registryUrl.toString().replace(/\/$/, "")}/apps/${encodeURIComponent(
       this.namespace,
-    )}/${encodeURIComponent(app.version.name)}`;
+    )}/${encodeURIComponent(appName)}`;
   }
 
   // wasmerAppGet returns more info than app info, using command wasmer app get <app-id>

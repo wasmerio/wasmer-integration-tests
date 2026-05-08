@@ -1,6 +1,11 @@
 // Re-export common dependencies.
 
-export { TestEnv } from "./env";
+export {
+  currentJestTestFailed,
+  markCurrentJestTestFailed,
+  TestEnv,
+} from "./env";
+export type { DeployedAppRecordInput } from "./env";
 export { sleep } from "./util";
 
 export type { AppDefinition } from "./app/construct";
