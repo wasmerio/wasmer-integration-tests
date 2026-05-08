@@ -60,6 +60,9 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.18.0)
+      jest-environment-node:
+        specifier: ^29.7.0
+        version: 29.7.0
       prettier:
         specifier: ^3.7.3
         version: 3.7.3

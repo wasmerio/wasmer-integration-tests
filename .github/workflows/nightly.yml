@@ -23,7 +23,6 @@ jobs:
       token: ${{ secrets.BUGT_BACKEND_CIUSER_TOKEN }}
       # Bugt tests are broken due to a few reasons. Future fix!
       # test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
-
   prod-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:

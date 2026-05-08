@@ -2,10 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 
-import type { AppTemplate } from "../../src/backend";
-import { appGetToAppInfo } from "../../src/convert";
+import type { AppInfo, AppTemplate } from "../../src/backend";
 import { createTempDir } from "../../src/fs";
-import { TestEnv, randomAppName } from "../../src/index";
+import {
+  TestEnv,
+  markCurrentJestTestFailed,
+  randomAppName,
+} from "../../src/index";
 
 export type TemplateDeployOptions = {
   formatFailureOutput?: boolean;
@@ -39,86 +42,174 @@ export async function deployAndValidateTemplate(
 ): Promise<void> {
   const appName = randomAppName();
   const tempDir = await createTempDir();
-  let appId: string | null = null;
+  let appCreated = false;
+  let appInfo: AppInfo | null = null;
 
   console.log(
     `Testing template='${tpl.slug}', appName='${appName}', tempDir='${tempDir}'`,
   );
 
   try {
-    try {
-      // NOTE: `wasmer deploy` currently does not handle --app-name flags correctly,
-      // so need to first create the app, then deploy to it.
+    // NOTE: `wasmer deploy` currently does not handle --app-name flags correctly,
+    // so need to first create the app, then deploy to it.
+    await env.runWasmerCommand({
+      args: [
+        "app",
+        "create",
+        "--name",
+        appName,
+        "--non-interactive",
+        "--template",
+        tpl.slug,
+        "--owner",
+        env.namespace,
+      ],
+      cwd: tempDir,
+    });
+    appCreated = true;
+
+    await normalizeTemplateForLocalDeploy(env, tempDir);
+
+    if (env.edgeServer && tpl.slug === "hono-starter") {
+      await runLocalCommand("pnpm", ["install"], tempDir);
+      await runLocalCommand(
+        "pnpm",
+        [
+          "add",
+          "-D",
+          "vite",
+          "@hono/vite-cloudflare-pages",
+          "@hono/vite-dev-server",
+          "typescript",
+          "miniflare",
+        ],
+        tempDir,
+      );
+      await runLocalCommand("pnpm", ["exec", "vite", "build"], tempDir);
+      await env.runWasmerCommand({
+        args: ["deploy", "--owner", env.namespace, "--non-interactive"],
+        cwd: tempDir,
+      });
+    } else {
       await env.runWasmerCommand({
         args: [
-          "app",
-          "create",
-          "--name",
-          appName,
-          "--non-interactive",
-          "--template",
-          tpl.slug,
+          "deploy",
           "--owner",
           env.namespace,
+          "--build-remote",
+          "--non-interactive",
         ],
         cwd: tempDir,
       });
-
-      await normalizeTemplateForLocalDeploy(env, tempDir);
-
-      if (env.edgeServer && tpl.slug === "hono-starter") {
-        await runLocalCommand("pnpm", ["install"], tempDir);
-        await runLocalCommand(
-          "pnpm",
-          [
-            "add",
-            "-D",
-            "vite",
-            "@hono/vite-cloudflare-pages",
-            "@hono/vite-dev-server",
-            "typescript",
-            "miniflare",
-          ],
-          tempDir,
-        );
-        await runLocalCommand("pnpm", ["exec", "vite", "build"], tempDir);
-        await env.runWasmerCommand({
-          args: ["deploy", "--owner", env.namespace, "--non-interactive"],
-          cwd: tempDir,
-        });
-      } else {
-        await env.runWasmerCommand({
-          args: [
-            "deploy",
-            "--owner",
-            env.namespace,
-            "--build-remote",
-            "--non-interactive",
-          ],
-          cwd: tempDir,
-        });
-      }
-
-      const appGet = await env.wasmerAppGet(`${env.namespace}/${appName}`);
-      const appInfo = appGetToAppInfo(appGet);
-      appId = appInfo.id;
-
-      await env.fetchApp(appInfo, "/");
-    } catch (err) {
-      if (options?.formatFailureOutput) {
-        throw formatTemplateCommandError(err);
-      }
-      throw err;
     }
+
+    appInfo = await loadTemplateAppInfo(env, appName, tempDir, tpl.slug);
+    await recordTemplateApp(env, appInfo);
+
+    await env.fetchApp(appInfo, "/");
+  } catch (err) {
+    if (appInfo) {
+      markCurrentJestTestFailed();
+    }
+    if (options?.formatFailureOutput) {
+      throw formatTemplateCommandError(err);
+    }
+    throw err;
   } finally {
-    if (appId) {
+    if (appInfo) {
+      await env.deleteApp(appInfo);
+    } else if (appCreated) {
       await env.runWasmerCommand({
-        args: ["app", "delete", appId],
+        args: ["app", "delete", `${env.namespace}/${appName}`],
+        noAssertSuccess: true,
       });
     }
 
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function loadTemplateAppInfo(
+  env: TestEnv,
+  appName: string,
+  appDir: string,
+  templateSlug: string,
+): Promise<AppInfo> {
+  const { stdout } = await env.runWasmerCommand({
+    args: ["app", "get", `${env.namespace}/${appName}`, "--format", "json"],
+  });
+  const appGet = asRecord(JSON.parse(stdout));
+  const activeVersion = asRecordOrNull(appGet.active_version);
+  const id = stringField(appGet, "id");
+  const name = stringField(appGet, "name", appName);
+  const url = stringField(appGet, "url");
+  const permalink = stringField(appGet, "permalink", url);
+  const activeVersionId = activeVersion
+    ? stringField(activeVersion, "id", id)
+    : id;
+
+  return {
+    version: {
+      name,
+      appId: id,
+      appVersionId: activeVersionId,
+      url,
+      path: appDir,
+    },
+    app: {
+      id,
+      url,
+      permalink,
+      activeVersionId: activeVersion?.id === undefined ? null : activeVersionId,
+    },
+    id,
+    url,
+    dir: appDir,
+    origin: `Template remote build: ${templateSlug}`,
+  };
+}
+
+async function recordTemplateApp(
+  env: TestEnv,
+  appInfo: AppInfo,
+): Promise<void> {
+  await env.recordDeployedApp({
+    appId: appInfo.id,
+    appName: appInfo.version.name,
+    appUrl: appInfo.url,
+    appPermalink: appInfo.app.permalink,
+    appDir: appInfo.dir,
+    origin: appInfo.origin,
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Expected object, got ${typeof value}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function asRecordOrNull(value: unknown): Record<string, unknown> | null {
+  if (value == null) {
+    return null;
+  }
+  return asRecord(value);
+}
+
+function stringField(
+  record: Record<string, unknown>,
+  fieldName: string,
+  fallback?: string,
+): string {
+  const value = record[fieldName];
+  if (typeof value === "string") {
+    return value;
+  }
+  if (fallback !== undefined) {
+    return fallback;
+  }
+  throw new Error(`Expected string field '${fieldName}' in app get output`);
 }
 
 function formatTemplateCommandError(err: unknown): Error {
