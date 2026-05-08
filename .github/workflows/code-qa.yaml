@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - fix/broken-pipeline-test-report
   pull_request:
     branches:
       - main
