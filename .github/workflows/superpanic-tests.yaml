@@ -67,33 +67,33 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ${{ matrix.test_command }}
-      - name: Notify superpanic status
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: ${{ always() }}
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          if [ "${{ steps.test.outcome }}" = "failure" ]; then
-            state="alerting"
-          else
-            state="ok"
-          fi
-          title="Integ. Test. Superpanic [${{ matrix.id }}] (run ${{ github.run_id }})"
-          grouping="${{ matrix.id }}"
-          link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
-          payload=$(jq -n \
-            --arg link_to_upstream_details "$link" \
-            --arg state "$state" \
-            --arg title "$title" \
-            --arg grouping "$grouping" \
-            '{
-              link_to_upstream_details: $link_to_upstream_details,
-              state: $state,
-              title: $title,
-              grouping: $grouping
-            }')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "$payload" \
-            ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
+      # - name: Notify superpanic status
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   if: ${{ always() }}
+      #   run: |
+      #     jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+      #     job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+      #     if [ "${{ steps.test.outcome }}" = "failure" ]; then
+      #       state="alerting"
+      #     else
+      #       state="ok"
+      #     fi
+      #     title="Integ. Test. Superpanic [${{ matrix.id }}] (run ${{ github.run_id }})"
+      #     grouping="${{ matrix.id }}"
+      #     link="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
+      #     payload=$(jq -n \
+      #       --arg link_to_upstream_details "$link" \
+      #       --arg state "$state" \
+      #       --arg title "$title" \
+      #       --arg grouping "$grouping" \
+      #       '{
+      #         link_to_upstream_details: $link_to_upstream_details,
+      #         state: $state,
+      #         title: $title,
+      #         grouping: $grouping
+      #       }')
+      #     curl -X POST \
+      #       -H 'Content-type: application/json' \
+      #       --data "$payload" \
+      #       ${{ secrets.GRAFANA_CLOUD_APP_DEPLOYMENTS_INTEGRATION_WH }}
