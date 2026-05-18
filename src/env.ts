@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as process from "node:process";
 import * as http from "node:http";
 import * as https from "node:https";
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as toml from "@iarna/toml";
 import { promises as dns } from "dns";
 
@@ -89,6 +90,7 @@ export interface CommandOptions {
   env?: Record<string, string>;
   stdin?: string;
   noAssertSuccess?: boolean;
+  quiet?: boolean;
 }
 
 export interface CommandOutput {
@@ -115,6 +117,8 @@ type JestExpectLike = {
   getState(): JestStateLike;
 };
 
+const jestStateStorage = new AsyncLocalStorage<JestStateLike>();
+
 export interface DeployedAppRecordInput {
   appId: string;
   appName: string;
@@ -125,13 +129,25 @@ export interface DeployedAppRecordInput {
 }
 
 function currentJestState(): JestStateLike {
+  const stored = jestStateStorage.getStore();
+  if (stored) {
+    return stored;
+  }
+
   const maybeGlobal = globalThis as typeof globalThis & {
     expect?: JestExpectLike;
   };
   return maybeGlobal.expect?.getState() ?? {};
 }
 
-function currentJestTestName(): string | null {
+export function runWithJestTestState<T>(
+  state: JestStateLike,
+  callback: () => T,
+): T {
+  return jestStateStorage.run(state, callback);
+}
+
+export function currentJestTestName(): string | null {
   return currentJestState().currentTestName ?? null;
 }
 
@@ -378,7 +394,10 @@ export class TestEnv {
     if (!this.verbose) {
       printSpawn.env = { OBFUSCATED: "Rerun with VERBOSE=true to see." };
     }
-    console.debug("Running command...", printSpawn);
+    const quiet = options.quiet === true && !this.verbose;
+    if (!quiet) {
+      console.debug("Running command...", printSpawn);
+    }
     const proc = spawn(this.wasmerBinary, args, spawnOpts);
 
     if (options.stdin) {
@@ -389,7 +408,9 @@ export class TestEnv {
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
-    console.debug("command output >>>");
+    if (!quiet) {
+      console.debug("command output >>>");
+    }
 
     const collectOutput = (
       stream: NodeJS.ReadableStream,
@@ -405,7 +426,9 @@ export class TestEnv {
               (chunkStr.length - this.maxRowLength) +
               " more characters (env var VERBOSE=true to see all)";
           }
-          console.debug(chunkStr);
+          if (!quiet) {
+            console.debug(chunkStr);
+          }
           chunks.push(chunk);
         });
         stream.on("end", resolve);
@@ -421,7 +444,9 @@ export class TestEnv {
     const stdout = Buffer.concat(stdoutChunks).toString();
     const stderr = Buffer.concat(stderrChunks).toString();
 
-    console.log(`<<< command finished with code ${code}`);
+    if (!quiet) {
+      console.log(`<<< command finished with code ${code}`);
+    }
 
     const result: CommandOutput = { code, stdout, stderr };
     if (this.verbose) {

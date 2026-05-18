@@ -4,29 +4,29 @@
     "test": "jest"
   },
   "devDependencies": {
-    "@eslint/js": "^9.34.0",
+    "@eslint/js": "^9.39.4",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.18.0",
+    "@types/node": "^22.19.19",
     "@types/ssh2": "^1.15.5",
-    "@types/ssh2-sftp-client": "^9.0.5",
-    "eslint": "^9.34.0",
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "eslint": "^9.39.4",
     "jest": "^29.7.0",
     "jest-environment-node": "^29.7.0",
-    "prettier": "^3.7.3",
-    "ts-jest": "^29.4.1",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.41.0"
+    "prettier": "^3.8.3",
+    "ts-jest": "^29.4.9",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.3"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@types/js-yaml": "^4.0.9",
-    "execa": "^9.6.0",
-    "js-yaml": "^4.1.0",
+    "execa": "^9.6.1",
+    "js-yaml": "^4.1.1",
     "ssh2": "^1.17.0",
-    "ssh2-sftp-client": "^12.0.1",
-    "stackmachine": "0.1.6",
+    "ssh2-sftp-client": "^12.1.1",
+    "stackmachine": "0.1.8",
     "tcp-port-used": "^1.0.2",
-    "ws": "^8.18.3",
+    "ws": "^8.20.1",
     "zod": "^3.25.76"
   }
 }

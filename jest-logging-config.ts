@@ -1,6 +1,10 @@
 import nodeConsole from "console";
 
-import { markCurrentJestTestFailed } from "./src/env";
+import {
+  currentJestTestName,
+  markCurrentJestTestFailed,
+  runWithJestTestState,
+} from "./src/env";
 
 if (process.env.VERBOSE === "true") {
   // Allow opting into streaming logs to stdout/stderr for debugging.
@@ -15,7 +19,94 @@ type JestTestApi = ((
 ) => unknown) &
   Record<string, unknown>;
 
-function wrapTestCallback(fn: unknown): unknown {
+type JestStateLike = {
+  currentTestName?: string;
+  testPath?: string;
+};
+
+type JestExpectLike = {
+  getState(): JestStateLike;
+};
+
+type ConsoleMethod = (...args: unknown[]) => void;
+
+const CONSOLE_TEST_MARKER_PREFIX = "[[wasmer-test:";
+const CONSOLE_TEST_MARKER_SUFFIX = "]] ";
+
+function currentJestState(fallbackTestName?: string): JestStateLike {
+  const maybeGlobal = globalThis as typeof globalThis & {
+    expect?: JestExpectLike;
+  };
+  const state = maybeGlobal.expect?.getState() ?? {};
+  const currentTestName =
+    fallbackTestName && !state.currentTestName?.endsWith(fallbackTestName)
+      ? fallbackTestName
+      : (state.currentTestName ?? fallbackTestName);
+  return {
+    currentTestName,
+    testPath: state.testPath,
+  };
+}
+
+function withCurrentJestState<T>(
+  callback: () => T,
+  fallbackTestName?: string,
+): T {
+  return runWithJestTestState(currentJestState(fallbackTestName), callback);
+}
+
+function installTestTaggedConsole(): void {
+  if (process.env.VERBOSE === "true") {
+    return;
+  }
+
+  const baseConsole = global.console;
+  const taggedConsole = Object.create(baseConsole) as Console;
+  const methods: Array<keyof Console> = [
+    "debug",
+    "error",
+    "info",
+    "log",
+    "warn",
+  ];
+
+  for (const method of methods) {
+    const original = baseConsole[method];
+    if (typeof original !== "function") {
+      continue;
+    }
+
+    Object.defineProperty(taggedConsole, method, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: (...args: unknown[]) => {
+        const testName = currentJestTestName();
+        if (!testName) {
+          (original as ConsoleMethod).apply(baseConsole, args);
+          return;
+        }
+
+        const marker = `${CONSOLE_TEST_MARKER_PREFIX}${encodeURIComponent(
+          testName,
+        )}${CONSOLE_TEST_MARKER_SUFFIX}`;
+        if (typeof args[0] === "string") {
+          (original as ConsoleMethod).call(
+            baseConsole,
+            `${marker}${args[0]}`,
+            ...args.slice(1),
+          );
+        } else {
+          (original as ConsoleMethod).call(baseConsole, marker, ...args);
+        }
+      },
+    });
+  }
+
+  global.console = taggedConsole;
+}
+
+function wrapTestCallback(fn: unknown, testName?: string): unknown {
   if (typeof fn !== "function") {
     return fn;
   }
@@ -36,7 +127,10 @@ function wrapTestCallback(fn: unknown): unknown {
       };
 
       try {
-        return callback.call(this, wrappedDone);
+        return withCurrentJestState(
+          () => callback.call(this, wrappedDone),
+          testName,
+        );
       } catch (error) {
         markCurrentJestTestFailed();
         throw error;
@@ -49,7 +143,10 @@ function wrapTestCallback(fn: unknown): unknown {
     ...args: unknown[]
   ): Promise<unknown> {
     try {
-      return await callback.apply(this, args);
+      return await withCurrentJestState(
+        () => callback.apply(this, args),
+        testName,
+      );
     } catch (error) {
       markCurrentJestTestFailed();
       throw error;
@@ -132,7 +229,11 @@ function wrapTestApi(api: unknown): unknown {
     fn?: JestTestCallback,
     timeout?: number,
   ): unknown {
-    return testApi(name, wrapTestCallback(fn) as JestTestCallback, timeout);
+    return testApi(
+      name,
+      wrapTestCallback(fn, name) as JestTestCallback,
+      timeout,
+    );
   } as JestTestApi;
 
   for (const key of Reflect.ownKeys(testApi)) {
@@ -163,6 +264,8 @@ function wrapTestApi(api: unknown): unknown {
 
   return wrapped;
 }
+
+installTestTaggedConsole();
 
 const globalWithJest = globalThis as unknown as {
   expect?: unknown;

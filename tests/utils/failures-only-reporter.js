@@ -4,12 +4,28 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 
 const REGISTRY_PATH = path.join(process.cwd(), ".jest-deployed-apps.jsonl");
+const CONSOLE_TEST_MARKER_RE = /^\[\[wasmer-test:([^\]]+)\]\]\s?/;
 
 function color(code, value) {
   if (process.env.NO_COLOR) {
     return value;
   }
   return `\u001b[${code}m${value}\u001b[0m`;
+}
+
+function matchesFailingTest(record, failingTestNames) {
+  if (!failingTestNames) {
+    return true;
+  }
+
+  const candidates = [record.testName, record.origin].filter(
+    (value) => typeof value === "string" && value.length > 0,
+  );
+  return candidates.some(
+    (candidate) =>
+      failingTestNames.has(candidate) ||
+      [...failingTestNames].some((testName) => testName.endsWith(candidate)),
+  );
 }
 
 function readDeployedAppsForTestFile(testFilePath, failingTestNames = null) {
@@ -37,10 +53,7 @@ function readDeployedAppsForTestFile(testFilePath, failingTestNames = null) {
       if (path.normalize(record.testPath) !== normalizedTestPath) {
         return false;
       }
-      if (failingTestNames && record.testName) {
-        return failingTestNames.has(record.testName);
-      }
-      return true;
+      return matchesFailingTest(record, failingTestNames);
     });
 
   const byAppId = new Map();
@@ -51,25 +64,14 @@ function readDeployedAppsForTestFile(testFilePath, failingTestNames = null) {
 }
 
 function readAppsForFailure(testFilePath, failingTestNames) {
-  const exactApps = readDeployedAppsForTestFile(testFilePath, failingTestNames);
-  if (exactApps.length > 0 || !failingTestNames) {
-    return { apps: exactApps, matchedFailingTest: true };
-  }
-
-  return {
-    apps: readDeployedAppsForTestFile(testFilePath),
-    matchedFailingTest: false,
-  };
+  return readDeployedAppsForTestFile(testFilePath, failingTestNames);
 }
 
 function formatAppContext(testFilePath, failingTestNames) {
-  const { apps, matchedFailingTest } = readAppsForFailure(
-    testFilePath,
-    failingTestNames,
-  );
+  const apps = readAppsForFailure(testFilePath, failingTestNames);
   if (apps.length === 0) {
     return [
-      color("33", "\nNo deployed app records found for failing test file."),
+      color("33", "\nNo deployed app records found for failing test(s)."),
       `Registry: ${REGISTRY_PATH}`,
       "",
     ].join("\n");
@@ -77,18 +79,10 @@ function formatAppContext(testFilePath, failingTestNames) {
 
   const lines = [
     "",
-    color("1", color("36", "Deployed apps for failing test file")),
+    color("1", color("36", "Deployed apps for failing test(s)")),
     color("36", "────────────────────────────────────"),
     `Test file: ${testFilePath}`,
     `Failing-test apps are preserved by default. Use ${color("33", "KEEP_APPS=1")} to preserve apps for passing tests too.`,
-    ...(matchedFailingTest
-      ? []
-      : [
-          color(
-            "33",
-            "No app record matched the failing test name exactly; showing all app records from this failing file.",
-          ),
-        ]),
     "",
   ];
 
@@ -120,6 +114,37 @@ function getFailingTestNames(testResult) {
     names.add([...result.ancestorTitles, result.title].join(" "));
   }
   return names;
+}
+
+function parseConsoleTestMarker(message) {
+  const match = message.match(CONSOLE_TEST_MARKER_RE);
+  if (!match) {
+    return { testName: null, message };
+  }
+
+  let testName = match[1];
+  try {
+    testName = decodeURIComponent(testName);
+  } catch {
+    // Keep the encoded value if the marker is malformed.
+  }
+
+  return {
+    testName,
+    message: message.slice(match[0].length),
+  };
+}
+
+function consoleEntryForFailingTests(entry, failingTestNames) {
+  const parsed = parseConsoleTestMarker(entry.message);
+  if (
+    parsed.testName &&
+    failingTestNames &&
+    !matchesFailingTest({ testName: parsed.testName }, failingTestNames)
+  ) {
+    return null;
+  }
+  return { ...entry, message: parsed.message };
 }
 
 function truncate(value) {
@@ -167,15 +192,15 @@ function fetchAppLogs(app) {
 }
 
 function formatAppLogs(testFilePath, failingTestNames) {
-  const { apps } = readAppsForFailure(testFilePath, failingTestNames);
+  const apps = readAppsForFailure(testFilePath, failingTestNames);
   if (apps.length === 0) {
     return "";
   }
 
   const lines = [
     "",
-    color("1", color("36", "App logs for failing test file")),
-    color("36", "──────────────────────────────"),
+    color("1", color("36", "App logs for failing test(s)")),
+    color("36", "────────────────────────────"),
   ];
 
   for (const app of apps) {
@@ -202,8 +227,13 @@ class FailuresOnlyReporter {
       const failingTestNames = getFailingTestNames(testResult);
       const appTestNames = failingTestNames.size > 0 ? failingTestNames : null;
       for (const entry of buffer) {
-        const log = globalThis.console?.[entry.type] ?? globalThis.console?.log;
-        log(entry.message);
+        const filteredEntry = consoleEntryForFailingTests(entry, appTestNames);
+        if (!filteredEntry) {
+          continue;
+        }
+        const log =
+          globalThis.console?.[filteredEntry.type] ?? globalThis.console?.log;
+        log(filteredEntry.message);
       }
       process.stderr.write(
         `${formatAppContext(testResult.testFilePath, appTestNames)}\n`,

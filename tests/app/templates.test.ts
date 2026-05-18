@@ -15,7 +15,7 @@ describe("app templates deploy", () => {
   for (const tpl of filterTemplates(templates)) {
     test.concurrent("Template remote build: " + tpl.slug, async () => {
       const env = TestEnv.fromEnv();
-      process.stdout.write(`Starting template test for '${tpl.slug}'\n`);
+      console.info(`Starting template test for '${tpl.slug}'`);
       await deployAndValidateTemplate(env, tpl, {
         formatFailureOutput: true,
       });

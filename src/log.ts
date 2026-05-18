@@ -1,6 +1,7 @@
 import { fail } from "node:assert";
+
 import { TestEnv } from "./env";
-import { resolve } from "node:path";
+import { sleep } from "./util";
 
 export function countSubstrings(str: string, subStr: string): number {
   if (subStr === "") {
@@ -13,6 +14,24 @@ export function countSubstrings(str: string, subStr: string): number {
     pos = str.indexOf(subStr, pos + 1);
   }
   return count;
+}
+
+const LOG_POLL_INTERVAL_MS = 3000;
+const DEFAULT_FAILURE_LOG_LENGTH = 4000;
+
+function truncateFailureLogs(logs: string): string {
+  if (process.env.VERBOSE === "true") {
+    return logs;
+  }
+
+  const maxLength = Number(
+    process.env.MAX_LOG_SNIFF_FAILURE_LENGTH ?? DEFAULT_FAILURE_LOG_LENGTH,
+  );
+  if (logs.length <= maxLength) {
+    return logs;
+  }
+
+  return `${logs.slice(-maxLength)}\n... and ${logs.length - maxLength} earlier characters omitted (rerun with VERBOSE=true to see all logs)`;
 }
 
 export class LogSniff {
@@ -29,26 +48,20 @@ export class LogSniff {
     requiredHits: number = 1,
     minimumTimeoutMs: number = 0,
   ): Promise<void> {
-    const t0 = new Date().getTime();
-    let resolveTest: (value: void | PromiseLike<void>) => void;
-    const p = new Promise<void>((resolveMe) => {
-      if (resolve != null) {
-        resolveTest = resolveMe;
-      }
-    });
-    let latestError: Error;
-    const intervalID = setInterval(async () => {
-      const now = new Date().getTime();
-      const overMinimumTimeframe = now > t0 + minimumTimeoutMs;
-      const overTestTimeout = now > t0 + withinMs;
-      let amSubstrings = -1;
-      let allLogs = "";
+    const start = Date.now();
+    const deadline = start + withinMs;
+    let latestError: Error | undefined;
+    let latestHitCount = -1;
+    let latestLogs = "";
+
+    while (true) {
       try {
-        allLogs = await getAllLogs(this.env, appName);
-        amSubstrings = countSubstrings(allLogs, want);
-        if (amSubstrings === requiredHits && overMinimumTimeframe) {
-          clearInterval(intervalID);
-          resolveTest();
+        latestLogs = await getAllLogs(this.env, appName);
+        latestHitCount = countSubstrings(latestLogs, want);
+        if (
+          latestHitCount === requiredHits &&
+          Date.now() >= start + minimumTimeoutMs
+        ) {
           return;
         }
       } catch (e) {
@@ -57,19 +70,22 @@ export class LogSniff {
         }
       }
 
-      if (overTestTimeout) {
+      const now = Date.now();
+      if (now >= deadline) {
         const errorStr = latestError ? ` Latest error: ${latestError}.` : "";
-        const amSubstringsStr =
-          amSubstrings > 0 ? `Latest amSubstrings: ${amSubstrings}.` : "";
-        // Wrap the allLogs print with newlines to make it easier to read
-        allLogs = allLogs !== "" ? `\n${allLogs}` : "";
+        const hitCountStr =
+          latestHitCount >= 0 ? ` Latest hit count: ${latestHitCount}.` : "";
+        const logsStr = latestLogs
+          ? ` Latest logs:\n${truncateFailureLogs(latestLogs)}`
+          : "";
 
         fail(
-          `failed to find any substring: '${want}' from the apps logs within: ${withinMs}ms.${amSubstringsStr}${errorStr} Latest logs:${allLogs}`,
+          `failed to find substring '${want}' ${requiredHits} time(s) in app logs within ${withinMs}ms.${hitCountStr}${errorStr}${logsStr}`,
         );
       }
-    }, 3000);
-    await p;
+
+      await sleep(Math.min(LOG_POLL_INTERVAL_MS, deadline - now));
+    }
   }
 }
 
@@ -82,6 +98,7 @@ export async function getAllLogs(
 ): Promise<string> {
   const cmdResp = await env.runWasmerCommand({
     args: ["app", "logs", `wasmer-integration-tests/${appName}`],
+    quiet: true,
   });
   if (cmdResp.code != 0) {
     throw new Error(
