@@ -33,7 +33,7 @@ const setupApp = async (env: TestEnv) => {
       ],
     },
   };
-  writeAppDefinition(dir, definition);
+  await writeAppDefinition(dir, definition);
   const info = await env.deployAppDir(dir);
   const permalinkID = await env.getAppPermalinkID(info.id);
   const sshUsername = `${permalinkID}_`;
@@ -61,7 +61,7 @@ const setupApp = async (env: TestEnv) => {
       },
     ],
   });
-  writeAppDefinition(dir, definition);
+  await writeAppDefinition(dir, definition);
 
   const sshDeployment = await env.deployAppDir(dir);
   return {
@@ -249,9 +249,7 @@ test("app-ssh", async () => {
   const hostname = target?.host ?? new URL(sshDeployment.url).hostname;
   const port = target?.port ?? 22;
 
-  console.log(
-    `SSH to ${sshUsername}@${hostname}:${port}, password: ${password}`,
-  );
+  console.log(`SSH to ${sshUsername}@${hostname}:${port}`);
   const conn = new Client();
   async function connectSshWithRetry(
     tries = 5,
@@ -306,48 +304,49 @@ test("app-ssh", async () => {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
-  const fileToAdd =
-    "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
-  await connectSshWithRetry();
   try {
-    console.info(`Starting tests on with ${sshUsername}@${hostname}`);
-    const who = await sshShellExec(conn, "whoami");
-    expect(who.code).toBe(0);
-    // TODO(WAX-495): Enable test after done
-    // expect(who.stdout.trim()).toBe(sshUsername);
-    const testData = fileToAdd;
-    const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
-    const io = await sshShellExec(conn, writeCmd);
-    expect(io.code).toBe(0);
-    // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
-    expect(io.stdout).toContain("abc123");
-    const checkData = await sshShellExec(
-      conn,
-      "test -d /data && echo ok || echo missing",
-    );
-    expect(checkData.code).toBe(0);
-    expect(checkData.stdout).toContain("ok");
+    const fileToAdd =
+      "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
+    await connectSshWithRetry();
+    try {
+      console.info(`Starting tests on with ${sshUsername}@${hostname}`);
+      const who = await sshShellExec(conn, "whoami");
+      expect(who.code).toBe(0);
+      // TODO(WAX-495): Enable test after done
+      // expect(who.stdout.trim()).toBe(sshUsername);
+      const testData = fileToAdd;
+      const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
+      const io = await sshShellExec(conn, writeCmd);
+      expect(io.code).toBe(0);
+      // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
+      expect(io.stdout).toContain("abc123");
+      const checkData = await sshShellExec(
+        conn,
+        "test -d /data && echo ok || echo missing",
+      );
+      expect(checkData.code).toBe(0);
+      expect(checkData.stdout).toContain("ok");
 
-    const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
-    expect(errCase.code).not.toBe(0);
-    expect(errCase.stderr).toContain("oops");
+      const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
+      expect(errCase.code).not.toBe(0);
+      expect(errCase.stderr).toContain("oops");
+    } finally {
+      conn.end();
+    }
+
+    // Connect with key
+    console.log("Connect with key");
+    await connectSshWithRetry(5, 5000, "./tests/ssh/id_rsa_test");
+    try {
+      const checkData = await sshShellExec(conn, `cat ${fileToAdd}`);
+      expect(checkData.code).toBe(0);
+      expect(checkData.stdout).toContain("abc123");
+    } finally {
+      conn.end();
+    }
   } finally {
-    conn.end();
+    await env.deleteApp(sshDeployment);
   }
-
-  // Connect with key
-  console.log("Connect with key");
-  await connectSshWithRetry(5, 5000, "./tests/ssh/id_rsa_test");
-  try {
-    const checkData = await sshShellExec(conn, `cat ${fileToAdd}`);
-    expect(checkData.code).toBe(0);
-    expect(checkData.stdout).toContain("abc123");
-  } finally {
-    conn.end();
-  }
-
-  // Cleanup app on success. If not, we can inspect the app via creds listed above
-  env.deleteApp(sshDeployment);
 });
 
 test("wasmer ssh can target an app by flag or app.yaml", async () => {
@@ -386,9 +385,7 @@ test("app-sftp", async () => {
   const hostname = target?.host ?? new URL(sshDeployment.url).hostname;
   const port = target?.port ?? 22;
 
-  console.log(
-    `SSH: userrname: ${sshUsername}, password: ${password}, hostname: ${hostname}:${port}`,
-  );
+  console.log(`SFTP to ${sshUsername}@${hostname}:${port}`);
   const sftp = new SftpClient();
   async function connectSftpWithRetry(
     tries = 5,
@@ -417,71 +414,72 @@ test("app-sftp", async () => {
 
   const t0 = performance.now();
 
-  await connectSftpWithRetry();
-  const remotePath =
-    "/data/node-lib-test-" + Math.random().toString(36).slice(2) + ".txt";
   try {
-    console.info(
-      `Connection OK! It took: ${performance.now() - t0}ms. Proceeding with tests`,
-    );
-    const data = Buffer.from("abc123");
-    console.log(`Putting file to: ${remotePath}`);
-    await sftp.put(data, remotePath);
-    const list = await sftp.list("/data");
-    const names = list.map((e: { name: string }) => e.name);
-    console.log(`Checking file exists: ${JSON.stringify(list, null, " ")}`);
-    expect(names).toContain(remotePath.split("/").pop() as string);
-    const got = (await sftp.get(remotePath)) as Buffer;
-    const text = Buffer.isBuffer(got)
-      ? got.toString()
-      : Buffer.from(got as ArrayBuffer).toString();
-    console.log(`Validating file contents`);
-    expect(text).toBe("abc123");
+    await connectSftpWithRetry();
+    const remotePath =
+      "/data/node-lib-test-" + Math.random().toString(36).slice(2) + ".txt";
+    try {
+      console.info(
+        `Connection OK! It took: ${performance.now() - t0}ms. Proceeding with tests`,
+      );
+      const data = Buffer.from("abc123");
+      console.log(`Putting file to: ${remotePath}`);
+      await sftp.put(data, remotePath);
+      const list = await sftp.list("/data");
+      const names = list.map((e: { name: string }) => e.name);
+      console.log(`Checking file exists: ${JSON.stringify(list, null, " ")}`);
+      expect(names).toContain(remotePath.split("/").pop() as string);
+      const got = (await sftp.get(remotePath)) as Buffer;
+      const text = Buffer.isBuffer(got)
+        ? got.toString()
+        : Buffer.from(got as ArrayBuffer).toString();
+      console.log(`Validating file contents`);
+      expect(text).toBe("abc123");
+    } finally {
+      await sftp.end();
+    }
+
+    // Connect again, expect files to still exist
+    await connectSftpWithRetry();
+    try {
+      let list = await sftp.list("/data");
+      let names = list.map((e: { name: string }) => e.name);
+      console.log(
+        `Validating that file exists after reconnect: ${JSON.stringify(list, null, " ")}`,
+      );
+      expect(names).toContain(remotePath.split("/").pop() as string);
+      const got = (await sftp.get(remotePath)) as Buffer;
+      const text = Buffer.isBuffer(got)
+        ? got.toString()
+        : Buffer.from(got as ArrayBuffer).toString();
+      console.log(`Validating file contents`);
+      expect(text).toBe("abc123");
+      console.log(`Deleting file: ${remotePath}`);
+      await sftp.delete(remotePath);
+      list = await sftp.list("/data");
+      names = list.map((e: { name: string }) => e.name);
+      expect(names).not.toContain(remotePath.split("/").pop() as string);
+    } finally {
+      await sftp.end();
+    }
+
+    await expect(
+      (async () => {
+        const bad = new SftpClient();
+        try {
+          await bad.connect({
+            host: hostname,
+            port,
+            username: sshUsername,
+            password: password + "x",
+            readyTimeout: 15000,
+          });
+        } finally {
+          await bad.end();
+        }
+      })(),
+    ).rejects.toBeTruthy();
   } finally {
-    await sftp.end();
+    await env.deleteApp(sshDeployment);
   }
-
-  // Connect again, expect files to still exist
-  await connectSftpWithRetry();
-  try {
-    let list = await sftp.list("/data");
-    let names = list.map((e: { name: string }) => e.name);
-    console.log(
-      `Validating that file exists after reconnect: ${JSON.stringify(list, null, " ")}`,
-    );
-    expect(names).toContain(remotePath.split("/").pop() as string);
-    const got = (await sftp.get(remotePath)) as Buffer;
-    const text = Buffer.isBuffer(got)
-      ? got.toString()
-      : Buffer.from(got as ArrayBuffer).toString();
-    console.log(`Validating file contents`);
-    expect(text).toBe("abc123");
-    console.log(`Deleting file: ${remotePath}`);
-    sftp.delete(remotePath);
-    list = await sftp.list("/data");
-    names = list.map((e: { name: string }) => e.name);
-    expect(names).not.toContain(remotePath.split("/").pop() as string);
-  } finally {
-    await sftp.end();
-  }
-
-  await expect(
-    (async () => {
-      const bad = new SftpClient();
-      try {
-        await bad.connect({
-          host: hostname,
-          port: 22,
-          username: sshUsername,
-          password: password + "x",
-          readyTimeout: 15000,
-        });
-      } finally {
-        await bad.end();
-      }
-    })(),
-  ).rejects.toBeTruthy();
-
-  // Cleanup app on success. If not, we can inspect the app via creds listed above
-  env.deleteApp(sshDeployment);
 });

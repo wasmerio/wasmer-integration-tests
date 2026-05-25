@@ -1,5 +1,9 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import {
   AppYaml,
+  createTempDir,
   ExecJob,
   loadAppYaml,
   LogSniff,
@@ -11,45 +15,67 @@ import {
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { validateWordpressIsLive } from "../../src/wordpress";
 
+function wordpressJobEnvVars(): Record<string, string> {
+  return {
+    WP_ADMIN_EMAIL: "admin@example.com",
+    WP_ADMIN_PASSWORD: generateNeedlesslySecureRandomPassword(),
+    WP_ADMIN_USERNAME: "admin",
+    WP_SITE_TITLE: "Integration test " + Math.random(),
+    WP_LOCALE: "en_US",
+    AUTH_KEY: generateNeedlesslySecureRandomPassword(),
+    AUTH_SALT: generateNeedlesslySecureRandomPassword(),
+    LOGGED_IN_KEY: generateNeedlesslySecureRandomPassword(),
+    LOGGED_IN_SALT: generateNeedlesslySecureRandomPassword(),
+    NONCE_KEY: generateNeedlesslySecureRandomPassword(),
+    NONCE_SALT: generateNeedlesslySecureRandomPassword(),
+  };
+}
 
 function randomizeJobDatabaseEnvVarsForWP(appYaml: AppYaml): void {
-  if (appYaml.jobs) {
-    for (const j of appYaml.jobs) {
-      const execJobCheck = ExecJob.safeParse(j.action);
-      if (execJobCheck.success) {
-        const execJobAction = execJobCheck.data;
-        const newEnvs = {
-          WP_ADMIN_EMAIL: "admin@example.com",
-          WP_ADMIN_PASSWORD: generateNeedlesslySecureRandomPassword(),
-          WP_ADMIN_USERNAME: "admin",
-          WP_SITE_TITLE: "Integration test " + Math.random(),
-          WP_LOCALE: "en_US",
-          AUTH_KEY: generateNeedlesslySecureRandomPassword(),
-          AUTH_SALT: generateNeedlesslySecureRandomPassword(),
-          LOGGED_IN_KEY: generateNeedlesslySecureRandomPassword(),
-          LOGGED_IN_SALT: generateNeedlesslySecureRandomPassword(),
-          NONCE_KEY: generateNeedlesslySecureRandomPassword(),
-          NONCE_SALT: generateNeedlesslySecureRandomPassword(),
-        };
-        execJobAction.execute.env = newEnvs;
-        j.action = execJobAction;
-      }
+  if (!appYaml.jobs) {
+    return;
+  }
+
+  for (const j of appYaml.jobs) {
+    const execJobCheck = ExecJob.safeParse(j.action);
+    if (!execJobCheck.success) {
+      continue;
     }
+
+    const execJobAction = execJobCheck.data;
+    if (!execJobAction.execute.env?.WP_ADMIN_EMAIL) {
+      continue;
+    }
+
+    execJobAction.execute.env = wordpressJobEnvVars();
+    j.action = execJobAction;
   }
 }
 
+async function copyWordpressFixture(): Promise<string> {
+  const dir = await createTempDir();
+  await fs.cp(path.join(process.cwd(), "wordpress"), dir, {
+    recursive: true,
+    filter: (src) => {
+      const name = path.basename(src);
+      return name !== ".git" && name !== ".jest-deployed-apps.jsonl";
+    },
+  });
+  return dir;
+}
+
 /**
- * updateAppYaml by valdiating there is a local file app.yaml, then performing
+ * updateAppYaml by validating there is a local file app.yaml, then performing
  * the necessary updates to the local state in memory, then lastly overwrite the
  * app.yaml file. Returns the updated version of appYaml.
  */
-function updateAppYaml(env: TestEnv): AppYaml {
-  const appYaml = loadAppYaml("./");
+function updateAppYaml(env: TestEnv, dir: string): AppYaml {
+  const appYaml = loadAppYaml(dir);
   appYaml.name = randomAppName();
   appYaml.app_id = undefined;
   appYaml.owner = env.namespace;
   randomizeJobDatabaseEnvVarsForWP(appYaml);
-  saveAppYaml("./", appYaml);
+  saveAppYaml(dir, appYaml);
   return appYaml;
 }
 
@@ -60,22 +86,22 @@ function updateAppYaml(env: TestEnv): AppYaml {
  */
 test("app-wordpress", async () => {
   const env = TestEnv.fromEnv();
-  // NOTE: Instead of setting up app.yaml/deployment manually, use wordpress as submodule
-  // This might force resetting the repo on local runs
-  process.chdir("./wordpress")
-  const appYaml = updateAppYaml(env);
+  // NOTE: Instead of setting up app.yaml/deployment manually, use wordpress as submodule.
+  // Copy it first so local test runs don't dirty the repository app.yaml.
+  const dir = await copyWordpressFixture();
+  const appYaml = updateAppYaml(env, dir);
   const logSniff = new LogSniff(env);
 
-  const appInfo = await env.deployAppDir("./");
+  const appInfo = await env.deployAppDir(dir);
 
   await logSniff.assertLogsWithin(
     appYaml.name!,
-    "WordPress installed successfully.",
+    "Installation complete",
     60 * SECOND,
   );
 
-  console.log("Validating app: ", appInfo!.url);
+  console.log("Validating app: ", appInfo.url);
 
-  await validateWordpressIsLive(appInfo!.url);
-  await env.deleteApp(appInfo!);
+  await validateWordpressIsLive(appInfo.url);
+  await env.deleteApp(appInfo);
 });

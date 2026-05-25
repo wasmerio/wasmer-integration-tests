@@ -1,5 +1,6 @@
 import { createZip } from "stackmachine";
 import { AppInfo, randomAppName, sleep, TestEnv } from "../../src";
+import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 
 jest.setTimeout(600_000);
 
@@ -432,7 +433,7 @@ describe("stackmachine sdk", () => {
 
   test("deployWordpress example", async () => {
     const env = TestEnv.fromEnv();
-    const client = await env.stachmachineSdk();
+    const client = await env.stackmachineSdk();
     const appName = randomAppName();
 
     const build = await client.deployApp({
@@ -444,7 +445,7 @@ describe("stackmachine sdk", () => {
       extraData: {
         wordpress: {
           adminEmail: "admin@example.com",
-          adminPassword: "%L7:D3Sd{![r",
+          adminPassword: generateNeedlesslySecureRandomPassword(),
           adminUsername: "admin",
           language: "en_US",
           siteName: "Gallant Goldberg",

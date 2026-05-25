@@ -698,10 +698,6 @@ export class TestEnv {
     });
   }
 
-  async stachmachineSdk(): Promise<StackMachineSdk> {
-    return this.stackmachineSdk();
-  }
-
   async *graphqlSubscription(
     endpoint: string,
     token: string,
