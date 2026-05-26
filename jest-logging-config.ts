@@ -55,6 +55,61 @@ function withCurrentJestState<T>(
   return runWithJestTestState(currentJestState(fallbackTestName), callback);
 }
 
+function isObjectLike(value: unknown): value is object {
+  return (
+    (typeof value === "object" && value !== null) || typeof value === "function"
+  );
+}
+
+function readUnknownProperty(value: unknown, property: string): unknown {
+  if (!isObjectLike(value) || !(property in value)) {
+    return undefined;
+  }
+
+  try {
+    return (value as Record<string, unknown>)[property];
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeThrownValue(error: unknown): unknown {
+  if (error instanceof Error || !isObjectLike(error)) {
+    return error;
+  }
+
+  const constructorName = readUnknownProperty(
+    readUnknownProperty(error, "constructor"),
+    "name",
+  );
+  const type = readUnknownProperty(error, "type");
+  if (constructorName !== "ErrorEvent" && type !== "error") {
+    return error;
+  }
+
+  const message = readUnknownProperty(error, "message");
+  const nestedError = readUnknownProperty(error, "error");
+  const target =
+    readUnknownProperty(error, "target") ??
+    readUnknownProperty(error, "currentTarget");
+  const targetUrl = readUnknownProperty(target, "url");
+  const readyState = readUnknownProperty(target, "readyState");
+
+  const details = [
+    "A non-Error ErrorEvent was thrown.",
+    typeof message === "string" && message ? `message=${message}` : null,
+    typeof targetUrl === "string" ? `webSocket.url=${targetUrl}` : null,
+    typeof readyState === "number"
+      ? `webSocket.readyState=${readyState}`
+      : null,
+    nestedError instanceof Error
+      ? `nestedError=${nestedError.stack ?? nestedError.message}`
+      : null,
+  ].filter((line): line is string => Boolean(line));
+
+  return new Error(details.join("\n"), { cause: error });
+}
+
 function installTestTaggedConsole(): void {
   if (process.env.VERBOSE === "true") {
     return;
@@ -123,7 +178,7 @@ function wrapTestCallback(fn: unknown, testName?: string): unknown {
         if (error) {
           markCurrentJestTestFailed();
         }
-        (done as (error?: unknown) => void)(error);
+        (done as (error?: unknown) => void)(normalizeThrownValue(error));
       };
 
       try {
@@ -133,7 +188,7 @@ function wrapTestCallback(fn: unknown, testName?: string): unknown {
         );
       } catch (error) {
         markCurrentJestTestFailed();
-        throw error;
+        throw normalizeThrownValue(error);
       }
     };
   }
@@ -149,7 +204,7 @@ function wrapTestCallback(fn: unknown, testName?: string): unknown {
       );
     } catch (error) {
       markCurrentJestTestFailed();
-      throw error;
+      throw normalizeThrownValue(error);
     }
   };
 }
@@ -167,7 +222,7 @@ function markAsyncFailure(value: unknown): unknown {
   ) {
     return (value as Promise<unknown>).catch((error: unknown) => {
       markCurrentJestTestFailed();
-      throw error;
+      throw normalizeThrownValue(error);
     });
   }
 
@@ -197,7 +252,7 @@ function wrapMatcherObject(value: unknown): unknown {
           return markAsyncFailure(item.apply(target, args));
         } catch (error) {
           markCurrentJestTestFailed();
-          throw error;
+          throw normalizeThrownValue(error);
         }
       };
     },
