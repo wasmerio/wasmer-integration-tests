@@ -1,5 +1,8 @@
 import path from "node:path";
-import { sleep, TestEnv } from "../../src";
+
+import SftpClient from "ssh2-sftp-client";
+
+import { TestEnv } from "../../src";
 import {
   AppCapabilities,
   AppDefinition,
@@ -9,9 +12,14 @@ import {
 } from "../../src/app/construct";
 import { copyPackageAnonymous } from "../../src/package";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
-import { Client } from "ssh2";
-import SftpClient from "ssh2-sftp-client";
-import { readFileSync } from "node:fs";
+import {
+  connectSftpWithRetry,
+  connectSshWithRetry,
+  edgeSshCliArgs,
+  readTestSshPrivateKey,
+  readTestSshPublicKey,
+  sshShellExec,
+} from "../../src/ssh";
 
 const setupApp = async (env: TestEnv) => {
   const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
@@ -54,10 +62,7 @@ const setupApp = async (env: TestEnv) => {
             type: "plain",
           },
         ],
-        // This is from id_rsa_test.pub
-        authorized_keys: [
-          "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCdn8+RxPD9QnKQJgVlZurVh3AwyeEtbdA79YKrOmekzgrkcwBslUw49Q2fzJubF+7bgyTnyK7U3Rr33bcbr8tPoSJgiRnnOfFBVbPOQJBBCGxD2Lx1MKkR/RwDacTeNAucK20snYazZLWUL1xHTjyv77bp0VcGGNLg8J3RPeJo6vyUtUuGQDOUlauyTXZXmnAvTXurl7JC3mrRZxusqe64HN2Tsom6Gn5MB55oaeoyVEdSGKsPjuCifYIWPj3SBdumcxPu3yo0vORTMPoEqMjCQZtqa1AYW7VFKb65sunJYCDelpmGOLWWI2M4UdXqBrg4X12AFPdRAPFTR/qgMYUljKIKe+WWwgofk4w2CsXUWlYbruVtqNroAW6y4FWQtDnYnwON5FdCINKcrNNnem+SA3zNrXKJjvv4cfUG+IIBuYUvUh3BaFX6ds6lL6Pio+HYqTXIzoeWiM3hpZHRMRWem5tW9OsEt0U8T9KevkKYRwm2XNCZPJmZsYW/hCLtN5ULr7RQNRzPjJJvsg4t71nK5M1qt0D6VrFkvAUAf7zubJsUddnkxudCp303/uYq6CooblaeGms2CswqAV8ur7uJNiI/g3S289AZIl5ilB4IMNFAohZs2AH355Bk22WzmnWAo5DiW1qqUlo7bQonfzxM7+xBULgky/vBzsLZo/3iSw== lorkin@wasmerburk",
-        ],
+        authorized_keys: [await readTestSshPublicKey()],
       },
     ],
   });
@@ -72,175 +77,6 @@ const setupApp = async (env: TestEnv) => {
   };
 };
 
-function edgeSshCliArgs(env: TestEnv): string[] {
-  const target = env.edgeSshTarget();
-  if (!target) {
-    return [];
-  }
-
-  return ["--host", target.host, "--ssh-port", String(target.port)];
-}
-
-/**
- * Executes a command over an interactive SSH shell and returns
- * its exit code, stdout and stderr.
- *
- * Implementation details:
- * - Opens conn.shell() and writes START/END sentinels.
- * - Waits for END in stdout to detect command completion.
- * - Extracts text between the second START and the END marker.
- * - Does this to achieve best effort stdout, but since the write
- *   is also output in stdout, as well as any shell formating, it's difficult
- *   to isolate the command's stdout using the shell alone
- * - Collects stderr from stream.stderr.
- *
- * Note: assumes a POSIX-like shell on the remote side.
- *
- * @param {Client} conn SSH2 client already connected.
- * @param {string} command Remote shell command to execute.
- * @returns {Promise<object>} Resolves with { code, stdout-ish, stderr-ish }.
- * Rejects on shell errors.
- */
-async function sshShellExec(
-  conn: Client,
-  command: string,
-  allowNonZeroExitCode = false,
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  if (process.env.EDGE_SSH_SERVER) {
-    return await new Promise((resolve, reject) => {
-      conn.exec(command, (err, stream) => {
-        if (err) return reject(err);
-        let stdout = "";
-        let stderr = "";
-        let code: number | undefined;
-
-        stream.on("data", (d: Buffer) => {
-          stdout += d.toString();
-        });
-        stream.stderr.on("data", (d: Buffer) => {
-          stderr += d.toString();
-        });
-        stream.on("exit", (exitCode?: number) => {
-          code = exitCode ?? 0;
-        });
-        stream.on("close", () => {
-          if (code === undefined) {
-            return reject(
-              new Error(
-                `ssh error: command=${command}, stream closed before exit code was observed, stdout=${stdout}, stderr=${stderr}`,
-              ),
-            );
-          }
-          if (!allowNonZeroExitCode && code !== 0) {
-            return reject(
-              new Error(
-                `ssh error: command=${command}, code=${code}, stdout=${stdout}, stderr=${stderr}`,
-              ),
-            );
-          }
-          resolve({ code, stdout, stderr });
-        });
-      });
-    });
-  }
-
-  const START = `__START_${Math.random().toString(36).slice(2)}__`;
-  const END = `__END_${Math.random().toString(36).slice(2)}__`;
-  return await new Promise((resolve, reject) => {
-    console.info(`Ssh client trying to run: ${command}`);
-    conn.shell((err, stream) => {
-      if (err) return reject(err);
-      let stdout = "";
-      let stderr = "";
-      let code = undefined;
-      let done = false;
-
-      const parseCode = (buf: string): boolean => {
-        if (code !== undefined) {
-          return true; // exit code was set already
-        }
-        const idx = buf.indexOf(`${END}:`);
-        if (idx === -1) return false;
-        const tail = buf.substring(idx + END.length + 1).trim();
-        const match = tail.match(/(\d+)/);
-        if (match) {
-          code = parseInt(match[1], 10);
-          console.log(`Here is tail: ${tail}`);
-        } else {
-          // No return code yet, await more data
-          return false;
-        }
-        return true;
-      };
-      const finish = () => {
-        if (done) return;
-        done = true;
-        try {
-          stream.removeListener("data", onStdout);
-        } catch (e) {
-          console.error(`failed to remove listener from stdout: ${e}`);
-        }
-        try {
-          stream.stderr.removeListener("data", onStderr);
-        } catch (e) {
-          console.error(`failed to remove listener from stderr: ${e}`);
-        }
-        const startIdx = stdout.indexOf(START);
-        let endIdx = -1;
-        if (startIdx !== -1) {
-          endIdx = stdout.indexOf(END, startIdx);
-        }
-        let cmdOut = "";
-        if (startIdx !== -1 && endIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length, endIdx);
-        } else if (startIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length);
-        }
-        if (code === undefined) {
-          return reject(
-            new Error(
-              `ssh error: command=${command}, stream closed before exit code marker was observed, stdout=${cmdOut}, stderr=${stderr}`,
-            ),
-          );
-        }
-        if (!allowNonZeroExitCode && code !== 0) {
-          return reject(
-            new Error(
-              `ssh error: command=${command}, code=${code}, stdout=${cmdOut}, stderr=${stderr}`,
-            ),
-          );
-        }
-        stream.end();
-        resolve({ code, stdout: cmdOut, stderr });
-      };
-      const onStdout = (d: Buffer) => {
-        stdout += d.toString();
-        if (parseCode(stdout)) {
-          stream.end();
-        }
-      };
-      const onStderr = (d: Buffer) => {
-        const t = d.toString();
-        stderr += t;
-        if (parseCode(stderr)) {
-          stream.end();
-        }
-      };
-      stream.on("data", onStdout);
-      stream.stderr.on("data", onStderr);
-      stream.on("close", () => {
-        console.log("stream close");
-        finish();
-      });
-      stream.write(`echo ${START}\n`);
-      stream.write(`${command}\n`);
-      stream.write(`RC=$?\n`);
-      stream.write(`echo ${END}:$RC\n`);
-      stream.write(`echo ${END}:$RC 1>&2\n`);
-    });
-  });
-}
-
 test("app-ssh", async () => {
   const env = TestEnv.fromEnv();
   const { sshUsername, password, sshDeployment } = await setupApp(env);
@@ -250,99 +86,62 @@ test("app-ssh", async () => {
   const port = target?.port ?? 22;
 
   console.log(`SSH to ${sshUsername}@${hostname}:${port}`);
-  const conn = new Client();
-  async function connectSshWithRetry(
-    tries = 5,
-    delayMs = 3000,
-    withKey = "",
-  ): Promise<void> {
-    let lastErr: unknown = null;
-    for (let i = 0; i < tries; i++) {
-      console.info(`Connection attempt [${i}/${tries}]`);
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const onReady = () => {
-            conn.removeListener("error", onError);
-            resolve();
-          };
-          const onError = (e: unknown) => {
-            conn.removeListener("ready", onReady);
-            reject(e);
-          };
-          conn.once("ready", onReady);
-          conn.once("error", onError);
-          if (withKey) {
-            conn.connect({
-              host: hostname,
-              port,
-              username: sshUsername,
-              privateKey: readFileSync(withKey),
-              readyTimeout: 5000,
-            });
-          } else {
-            conn.connect({
-              host: hostname,
-              port,
-              username: sshUsername,
-              password,
-              readyTimeout: 5000,
-            });
-          }
-        });
-        return;
-      } catch (e) {
-        console.error(`Connection failed: ${e}`);
-        lastErr = e;
-        try {
-          conn.end();
-        } catch {
-          continue;
-        }
-        await sleep(delayMs);
-      }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-  }
 
   try {
     const fileToAdd =
       "/data/ssh-e2e-" + Math.random().toString(36).slice(2) + ".txt";
-    await connectSshWithRetry();
+    const passwordConn = await connectSshWithRetry({
+      host: hostname,
+      port,
+      username: sshUsername,
+      password,
+    });
     try {
       console.info(`Starting tests on with ${sshUsername}@${hostname}`);
-      const who = await sshShellExec(conn, "whoami");
+      const who = await sshShellExec(passwordConn, "whoami");
       expect(who.code).toBe(0);
       // TODO(WAX-495): Enable test after done
       // expect(who.stdout.trim()).toBe(sshUsername);
       const testData = fileToAdd;
       const writeCmd = "printf abc123 > " + testData + " && cat " + testData;
-      const io = await sshShellExec(conn, writeCmd);
+      const io = await sshShellExec(passwordConn, writeCmd);
       expect(io.code).toBe(0);
       // Quite tricky to extract exact a specific command's stdout from interractive shells, so we're happy with finding a substring
       expect(io.stdout).toContain("abc123");
       const checkData = await sshShellExec(
-        conn,
+        passwordConn,
         "test -d /data && echo ok || echo missing",
       );
       expect(checkData.code).toBe(0);
       expect(checkData.stdout).toContain("ok");
 
-      const errCase = await sshShellExec(conn, "echo oops 1>&2; false", true);
+      const errCase = await sshShellExec(
+        passwordConn,
+        "echo oops 1>&2; false",
+        true,
+      );
       expect(errCase.code).not.toBe(0);
       expect(errCase.stderr).toContain("oops");
     } finally {
-      conn.end();
+      passwordConn.end();
     }
 
     // Connect with key
     console.log("Connect with key");
-    await connectSshWithRetry(5, 5000, "./tests/ssh/id_rsa_test");
+    const keyConn = await connectSshWithRetry({
+      host: hostname,
+      port,
+      username: sshUsername,
+      privateKey: readTestSshPrivateKey(),
+      tries: 5,
+      delayMs: 5000,
+    });
     try {
-      const checkData = await sshShellExec(conn, `cat ${fileToAdd}`);
+      const checkData = await sshShellExec(keyConn, `cat ${fileToAdd}`);
       expect(checkData.code).toBe(0);
       expect(checkData.stdout).toContain("abc123");
     } finally {
-      conn.end();
+      keyConn.end();
     }
   } finally {
     await env.deleteApp(sshDeployment);
@@ -387,35 +186,16 @@ test("app-sftp", async () => {
 
   console.log(`SFTP to ${sshUsername}@${hostname}:${port}`);
   const sftp = new SftpClient();
-  async function connectSftpWithRetry(
-    tries = 5,
-    delayMs = 3000,
-  ): Promise<void> {
-    let lastErr: unknown = null;
-    for (let i = 0; i < tries; i++) {
-      console.info(`Connection attempt [${i}/${tries}]`);
-      try {
-        await sftp.connect({
-          host: hostname,
-          port,
-          username: sshUsername,
-          password,
-          readyTimeout: 5000,
-        });
-        return;
-      } catch (e) {
-        console.error(`Connection failed: ${e}`);
-        lastErr = e;
-        await sleep(delayMs);
-      }
-    }
-    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
-  }
 
   const t0 = performance.now();
 
   try {
-    await connectSftpWithRetry();
+    await connectSftpWithRetry(sftp, {
+      host: hostname,
+      port,
+      username: sshUsername,
+      password,
+    });
     const remotePath =
       "/data/node-lib-test-" + Math.random().toString(36).slice(2) + ".txt";
     try {
@@ -440,7 +220,12 @@ test("app-sftp", async () => {
     }
 
     // Connect again, expect files to still exist
-    await connectSftpWithRetry();
+    await connectSftpWithRetry(sftp, {
+      host: hostname,
+      port,
+      username: sshUsername,
+      password,
+    });
     try {
       let list = await sftp.list("/data");
       let names = list.map((e: { name: string }) => e.name);
