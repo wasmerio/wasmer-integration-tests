@@ -45,6 +45,44 @@ const pageInfoSchema = z.object({
   endCursor: z.string().nullable(),
 });
 
+const appRegionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  country: z.string(),
+  city: z.string(),
+  supportsVolumes: z.boolean(),
+  supportsDbs: z.boolean(),
+  active: z.boolean(),
+});
+
+export type AppRegion = z.infer<typeof appRegionSchema>;
+
+const appRegionFiltersSchema = z.object({
+  active: z.boolean().optional(),
+  supportsVolumes: z.boolean().optional(),
+  supportsDatabases: z.boolean().optional(),
+});
+
+export type AppRegionFilters = z.infer<typeof appRegionFiltersSchema>;
+
+const apiAppRegionsSchema = z.object({
+  pageInfo: pageInfoSchema,
+  regions: z.array(appRegionSchema),
+});
+
+export type ApiAppRegions = z.infer<typeof apiAppRegionsSchema>;
+
+const apiAppRegionsResponseSchema = z.object({
+  getAppRegions: z.object({
+    pageInfo: pageInfoSchema,
+    edges: z.array(
+      z.object({
+        node: appRegionSchema.nullable(),
+      }),
+    ),
+  }),
+});
+
 const apiAppTemplatesResponseSchema = z.object({
   getAppTemplates: z.object({
     pageInfo: pageInfoSchema,
@@ -304,6 +342,68 @@ mutation($id:ID!) {
       throw new Error("banApp mutation did not return an app id");
     }
     return id;
+  }
+
+  async getAppRegions(
+    filters: AppRegionFilters = {},
+    after: string | null = null,
+  ): Promise<ApiAppRegions> {
+    const query = `
+query($active:Boolean, $supportsVolumes:Boolean, $supportsDatabases:Boolean, $after:String) {
+  getAppRegions(
+    active:$active,
+    supportsVolumes:$supportsVolumes,
+    supportsDatabases:$supportsDatabases,
+    first:100,
+    after:$after
+  ) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      node {
+        id
+        name
+        country
+        city
+        supportsVolumes
+        supportsDbs
+        active
+      }
+    }
+  }
+}
+    `;
+
+    const parsedFilters = appRegionFiltersSchema.parse(filters);
+    const res = await this.gqlQuery(query, {
+      active: parsedFilters.active,
+      supportsVolumes: parsedFilters.supportsVolumes,
+      supportsDatabases: parsedFilters.supportsDatabases,
+      after,
+    });
+    const parsed = apiAppRegionsResponseSchema.parse(res.data!);
+    const data = parsed.getAppRegions;
+    const regions = data.edges
+      .map((edge) => edge.node)
+      .filter((region): region is AppRegion => region !== null);
+    return apiAppRegionsSchema.parse({
+      pageInfo: data.pageInfo,
+      regions,
+    });
+  }
+
+  async getAllAppRegions(filters: AppRegionFilters = {}): Promise<AppRegion[]> {
+    const allRegions: AppRegion[] = [];
+    let after: string | null = null;
+    while (true) {
+      const page = await this.getAppRegions(filters, after);
+      allRegions.push(...page.regions);
+      if (!page.pageInfo.hasNextPage) break;
+      after = page.pageInfo.endCursor;
+    }
+    return allRegions;
   }
 
   async getAppTemplates(after: string | null): Promise<ApiAppTemplates> {
