@@ -7,10 +7,12 @@ import {
   ExecJob,
   loadAppYaml,
   LogSniff,
+  markCurrentJestTestFailed,
   randomAppName,
   saveAppYaml,
   SECOND,
   TestEnv,
+  type AppInfo,
 } from "../../src/index";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { validateWordpressIsLive } from "../../src/wordpress";
@@ -92,16 +94,29 @@ test("app-wordpress", async () => {
   const appYaml = updateAppYaml(env, dir);
   const logSniff = new LogSniff(env);
 
-  const appInfo = await env.deployAppDir(dir);
+  let appInfo: AppInfo | null = null;
 
-  await logSniff.assertLogsWithin(
-    appYaml.name!,
-    "Installation complete",
-    60 * SECOND,
-  );
+  try {
+    appInfo = await env.deployAppDir(dir);
 
-  console.log("Validating app: ", appInfo.url);
+    await logSniff.assertLogsWithin(
+      appYaml.name!,
+      "Installation complete",
+      60 * SECOND,
+    );
 
-  await validateWordpressIsLive(appInfo.url);
-  await env.deleteApp(appInfo);
+    console.log("Validating app: ", appInfo.url);
+
+    await validateWordpressIsLive(appInfo.url);
+  } catch (err) {
+    if (appInfo) {
+      markCurrentJestTestFailed();
+    }
+    throw err;
+  } finally {
+    if (appInfo) {
+      await env.deleteApp(appInfo);
+    }
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

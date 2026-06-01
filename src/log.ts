@@ -97,7 +97,7 @@ export async function getAllLogs(
   appName: string,
 ): Promise<string> {
   const cmdResp = await env.runWasmerCommand({
-    args: ["app", "logs", `wasmer-integration-tests/${appName}`],
+    args: ["app", "logs", `${env.namespace}/${appName}`],
     quiet: true,
   });
   if (cmdResp.code != 0) {
