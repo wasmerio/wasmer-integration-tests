@@ -7,6 +7,7 @@ concurrency:
 permissions:
   contents: read # access to check out code and install dependencies for python (wasmopticon tests)
   actions: read
+  pull-requests: read
 
 on:
   workflow_call:
@@ -136,6 +137,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     steps:
       - name: Wait for failures
         id: fail
@@ -202,6 +204,34 @@ jobs:
             const c = cm.data.commit;
             const url = 'https://github.com/' + o + '/'
               + r + '/commit/' + sha;
+
+            let mergedPr = null;
+            if (pr?.merged === true && pr.html_url) {
+              mergedPr = pr;
+            } else if (
+              !pr &&
+              context.eventName === 'push' &&
+              context.ref?.startsWith('refs/heads/')
+            ) {
+              const branch = context.ref.replace('refs/heads/', '');
+              try {
+                const prs = await github.rest.repos
+                  .listPullRequestsAssociatedWithCommit({
+                    owner: o, repo: r, commit_sha: sha
+                  });
+                const merged = (prs.data || [])
+                  .filter(p => p.merged_at && p.base?.ref === branch)
+                  .sort((a, b) =>
+                    Date.parse(b.merged_at) - Date.parse(a.merged_at)
+                  );
+                mergedPr = merged[0] || null;
+              } catch (err) {
+                core.warning(
+                  `Failed to load pull request associated with ${sha}: ${err.message}`
+                );
+              }
+            }
+
             core.setOutput('sha', sha);
             core.setOutput('ref', ref);
             core.setOutput('author', c.author.name);
@@ -210,6 +240,9 @@ jobs:
             core.setOutput('url', url);
             core.setOutput('is_pr', pr ? 'true' : 'false');
             core.setOutput('pr_num', pr ? String(pr.number) : '');
+            core.setOutput('merged_pr_num', mergedPr ? String(mergedPr.number) : '');
+            core.setOutput('merged_pr_title', mergedPr?.title || '');
+            core.setOutput('merged_pr_url', mergedPr?.html_url || '');
             core.setOutput('repository', o + '/' + r);
       - name: Compose notification
         id: notify
@@ -223,6 +256,9 @@ jobs:
           URL: ${{ steps.ci.outputs.url }}
           MESSAGE: ${{ steps.ci.outputs.message }}
           REPO: ${{ steps.ci.outputs.repository }}
+          MERGED_PR_NUM: ${{ steps.ci.outputs.merged_pr_num }}
+          MERGED_PR_TITLE: ${{ steps.ci.outputs.merged_pr_title }}
+          MERGED_PR_URL: ${{ steps.ci.outputs.merged_pr_url }}
           RELEASE_URL: ${{ inputs.release_url || github.event.release.html_url || '' }}
         run: |
           set -euo pipefail
@@ -233,6 +269,13 @@ jobs:
             send="false"
           fi
           release_line="${RELEASE_URL:+*Release:* ${RELEASE_URL}}"
+          merged_pr_line=""
+          if [ -n "${MERGED_PR_URL}" ]; then
+            merged_pr_line="*Merged PR:* <${MERGED_PR_URL}|#${MERGED_PR_NUM}>"
+            if [ -n "${MERGED_PR_TITLE}" ]; then
+              merged_pr_line="${merged_pr_line} ${MERGED_PR_TITLE}"
+            fi
+          fi
           if [ "${FAILURE_COUNT}" = "0" ]; then
             msg_lines=(
               '──────────────────────────────────────────────'
@@ -240,6 +283,9 @@ jobs:
               ''
               "*Repository:* ${REPO}"
             )
+            if [ -n "${merged_pr_line}" ]; then
+              msg_lines+=("${merged_pr_line}")
+            fi
             msg_lines+=(
               "*Commit:* <${URL}|${short_sha}>"
               ''
@@ -280,6 +326,9 @@ jobs:
               ''
               "*Repository:* ${REPO}"
             )
+            if [ -n "${merged_pr_line}" ]; then
+              msg_lines+=("${merged_pr_line}")
+            fi
             if [ -n "${release_line}" ]; then
               msg_lines+=("${release_line}")
             fi

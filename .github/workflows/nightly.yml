@@ -6,6 +6,11 @@ on:
     branches:
       - main
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
 jobs:
   dev-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml

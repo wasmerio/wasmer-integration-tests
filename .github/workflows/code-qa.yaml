@@ -7,6 +7,11 @@ on:
     branches:
       - main
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: code-qa
   cancel-in-progress: true
