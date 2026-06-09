@@ -1,0 +1,17 @@
+# Additional packages to mirror from the source registry into the disposable local registry.
+#
+# The local platform automatically discovers package dependencies from tests,
+# wasmopticon fixtures, and src/app constructors. Add one package per line here
+# only when a test depends on a package that cannot be found statically.
+#
+# Formats:
+#   namespace/name          # latest version from the source registry
+#   namespace/name@1.2.3    # exact version
+#   namespace/name@=1.2.3   # exact semver constraint
+#   namespace/name@^1.2.0   # semver range
+#   namespace/name 1.*      # whitespace form, useful for constraints with @
+#
+# By default only wasmer/*, php/*, and python/* package names are accepted.
+# Override LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST to add more namespaces.
+
+wasmer/s3-server
