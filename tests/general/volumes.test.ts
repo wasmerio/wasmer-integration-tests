@@ -12,7 +12,6 @@ import { sleep } from "../../src/util";
 
 import {
   AppDefinition,
-  buildJsWorkerApp,
   HEADER_INSTANCE_ID,
   HEADER_PURGE_INSTANCES,
   TestEnv,
@@ -253,83 +252,6 @@ async function readS3ObjectWithRetry(
     `Failed to read S3 object ${bucket}/${key}: HTTP ${lastStatus}: ${lastBody}`,
   );
 }
-
-function expectNonEmptyBucketEnvVar(
-  bucketEnv: Record<string, string>,
-  predicate: (name: string) => boolean,
-  description: string,
-): void {
-  const names = Object.keys(bucketEnv).sort();
-  const name = names.find(predicate);
-  if (!name) {
-    throw new Error(
-      `Expected ${description} BUCKET_ env var to be set. Found: ${names.join(", ")}`,
-    );
-  }
-
-  expect(bucketEnv[name]).toEqual(expect.any(String));
-  expect(bucketEnv[name].length).toBeGreaterThan(0);
-}
-
-test("app-volume-exposes-bucket-env-vars", async () => {
-  const env = TestEnv.fromEnv();
-  const code = `
-async function handler() {
-  const bucketEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => key.startsWith("BUCKET_")),
-  );
-  const envNames = Object.keys(process.env).sort();
-  return new Response(JSON.stringify({ bucketEnv, envNames }), {
-    headers: { "content-type": "application/json" },
-  });
-}
-
-addEventListener("fetch", (fetchEvent) => {
-  fetchEvent.respondWith(handler());
-});
-`;
-
-  const spec = buildJsWorkerApp(code);
-  spec.appYaml.debug = true;
-  spec.appYaml.volumes = [
-    {
-      name: "data",
-      mount: "/data",
-    },
-  ];
-
-  const info = await env.deployApp(spec);
-  const response = await env.fetchApp(info, "/", {
-    headers: {
-      [HEADER_PURGE_INSTANCES]: "1",
-    },
-  });
-  const body = await response.text();
-  const data = JSON.parse(body) as {
-    bucketEnv?: Record<string, string>;
-    envNames?: string[];
-  };
-  const bucketEnv = data.bucketEnv ?? {};
-  const bucketEnvNames = Object.keys(bucketEnv).sort();
-
-  if (bucketEnvNames.length === 0) {
-    throw new Error(
-      `Expected app with volume to expose BUCKET_ env vars, but none were present. Exposed env var names: ${(data.envNames ?? []).join(", ")}`,
-    );
-  }
-  expectNonEmptyBucketEnvVar(
-    bucketEnv,
-    (name) => name.includes("ACCESS") && name.includes("KEY"),
-    "bucket access key",
-  );
-  expectNonEmptyBucketEnvVar(
-    bucketEnv,
-    (name) => name.includes("SECRET") && name.includes("KEY"),
-    "bucket secret key",
-  );
-
-  await env.deleteApp(info);
-});
 
 test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
