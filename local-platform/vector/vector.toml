@@ -1,0 +1,11 @@
+[sources.http_logs]
+type = "http_server"
+address = "0.0.0.0:9089"
+encoding = "json"
+
+[sinks.loki]
+type = "loki"
+inputs = ["http_logs"]
+endpoint = "http://loki:3100"
+encoding.codec = "json"
+labels.source = "local-platform"

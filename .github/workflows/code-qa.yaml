@@ -26,6 +26,15 @@ jobs:
       token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
       test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
 
+  local-platform:
+    name: Local platform integration test
+    uses: ./.github/workflows/local-platform-test.yaml
+    with:
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'resolve_prod' }}
+      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_prod' }}
+      frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'resolve_prod' }}
+      test_command: pnpm exec jest tests/general/sql.test.ts --runInBand --verbose
+
   fmt:
     name: File format check
     runs-on: ubuntu-24.04

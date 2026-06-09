@@ -1,0 +1,52 @@
+name: Local Platform Test
+
+on:
+  workflow_call:
+    inputs:
+      backend_version:
+        type: string
+        required: true
+      edge_version:
+        type: string
+        required: true
+      frontend_version:
+        type: string
+        required: true
+      test_command:
+        type: string
+        default: pnpm exec jest ./tests/general/
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - run: make setup
+
+      - name: Run local platform tests
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          FRONTEND_VERSION: ${{ inputs.frontend_version }}
+          LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
+          WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
+          GH_TOKEN: ${{ github.token }}
+        run: make local-test
+
+      - name: Upload local platform logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-platform-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .local-platform/current
+          if-no-files-found: error
