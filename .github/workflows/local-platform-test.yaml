@@ -61,6 +61,7 @@ jobs:
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
           WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
           GH_TOKEN: ${{ secrets.pat || github.token }}
+          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
 
       - name: Upload local platform logs

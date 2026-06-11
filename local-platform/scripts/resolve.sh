@@ -136,11 +136,57 @@ resolve_edge_dev_github_release() {
   local tag="${EDGE_DEV_GITHUB_TAG:-}"
   local suffix="${EDGE_DEV_RELEASE_SUFFIX:-_dev1}"
 
-  if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
-    tag="$(gh release list --repo "$repo" --limit 200 --order desc --json tagName,publishedAt --jq "map(select(.tagName | endswith(\"$suffix\"))) | sort_by(.publishedAt) | last | .tagName // \"\"" 2>/dev/null || true)"
+  if [ -n "$tag" ]; then
+    log "Using explicit Edge dev release tag from EDGE_DEV_GITHUB_TAG: $tag"
+    printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
+    return
   fi
 
-  [ -n "$tag" ] || fail "EDGE_VERSION=resolve_dev requires EDGE_DEV_GITHUB_TAG or GitHub release access to the latest $repo release ending in $suffix. Ensure LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on $repo."
+  log "Resolving latest Edge dev release from $repo (tag suffix: $suffix, asset pattern: $pattern)"
+
+  if command -v gh >/dev/null 2>&1; then
+    local release_json release_error
+    release_error="$RUN_DIR/logs/edge-release-list.err"
+    if release_json="$(gh release list --repo "$repo" --limit 200 --order desc --json tagName,publishedAt 2>"$release_error")"; then
+      local recent_tags
+      recent_tags="$(printf '%s' "$release_json" | node -e '
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const releases = JSON.parse(input || "[]");
+  const tags = releases.slice(0, 8).map(release => release.tagName).filter(Boolean);
+  process.stdout.write(tags.join(", "));
+});
+')"
+      if [ -n "$recent_tags" ]; then
+        log "Recent Edge releases: $recent_tags"
+      else
+        log_warn "GitHub returned no Edge releases for $repo"
+      fi
+
+      tag="$(printf '%s' "$release_json" | node -e '
+const suffix = process.argv[1];
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const releases = JSON.parse(input || "[]");
+  const matches = releases
+    .filter(release => typeof release.tagName === "string" && release.tagName.endsWith(suffix))
+    .sort((a, b) => Date.parse(a.publishedAt || "") - Date.parse(b.publishedAt || ""));
+  process.stdout.write(matches.at(-1)?.tagName || "");
+});
+' "$suffix")"
+    else
+      local error_summary
+      error_summary="$(head -n 5 "$release_error" 2>/dev/null | tr '\n' ' ' || true)"
+      log_warn "Failed to list Edge releases from $repo: ${error_summary:-unknown gh error}"
+    fi
+  else
+    log_warn "GitHub CLI is not installed; cannot resolve latest Edge dev release automatically"
+  fi
+
+  [ -n "$tag" ] || fail "EDGE_VERSION=resolve_dev could not find a $repo release ending in $suffix. If recent releases are only bugt/prod, wait for a dev release or set EDGE_DEV_GITHUB_TAG explicitly. Ensure LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on $repo."
+  log "Resolved Edge dev release tag: $tag"
   printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
 }
 

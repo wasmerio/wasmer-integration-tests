@@ -44,8 +44,10 @@ touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 
 log "Run directory: $RUN_DIR"
 log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION frontend=$FRONTEND_VERSION"
-if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
-  log "GitHub token is available for private artifact/release fetches"
+if is_truthy "${LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT:-}"; then
+  log "Custom artifact fetch PAT is present for private artifact/release fetches"
+elif [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
+  log_warn "Using default GitHub token; it may not access private wasmerio/edge or wasmerio/backend artifacts"
 else
   log_warn "No GitHub token is available; private artifact/release fetches may fail"
 fi
