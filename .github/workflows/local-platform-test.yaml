@@ -18,8 +18,6 @@ on:
     secrets:
       pat:
         required: false
-      READ_RUST_DEPENDENCIES_PAT:
-        required: false
 
 permissions:
   contents: read
@@ -47,7 +45,7 @@ jobs:
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
           WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
-          GH_TOKEN: ${{ secrets.pat || secrets.READ_RUST_DEPENDENCIES_PAT || github.token }}
+          GH_TOKEN: ${{ secrets.pat || github.token }}
         run: make local-test
 
       - name: Upload local platform logs

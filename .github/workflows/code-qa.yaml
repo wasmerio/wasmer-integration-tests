@@ -29,6 +29,8 @@ jobs:
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
       frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
       test_command: pnpm exec jest tests/general/sql.test.ts --runInBand --verbose
+    secrets:
+      pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 
   fmt:
     name: File format check
