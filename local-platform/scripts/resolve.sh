@@ -98,7 +98,7 @@ resolve_backend() {
       fi
       fail "BACKEND_VERSION=resolve_prod requires BACKEND_IMAGE_REF or kubectl access to deployment/${BACKEND_PROD_DEPLOYMENT:-stackmachine-core} in namespace ${BACKEND_PROD_KUBE_NAMESPACE:-backend}. Tried to configure prod context via AWS profile ${BACKEND_PROD_AWS_PROFILE:-tf-prod}, cluster ${BACKEND_PROD_EKS_CLUSTER:-eks-prod-us-east-1}."
       ;;
-    artifact:*|github-release:*|path:*|url:*)
+    artifact:*|github-artifact:*|github-release:*|path:*|url:*)
       printf 'local-platform-backend:%s' "$COMPOSE_PROJECT_NAME"
       ;;
     */*:*|*:*)
@@ -130,6 +130,20 @@ resolve_edge_github_release() {
   printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
 }
 
+resolve_edge_dev_github_release() {
+  local repo="${EDGE_DEV_GITHUB_REPO:-wasmerio/edge}"
+  local pattern="${EDGE_DEV_GITHUB_ASSET_PATTERN:-edge}"
+  local tag="${EDGE_DEV_GITHUB_TAG:-}"
+  local suffix="${EDGE_DEV_RELEASE_SUFFIX:-_dev1}"
+
+  if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
+    tag="$(gh release list --repo "$repo" --limit 100 --json tagName,publishedAt --jq "map(select(.tagName | endswith(\"$suffix\"))) | sort_by(.publishedAt) | last | .tagName // \"\"" 2>/dev/null || true)"
+  fi
+
+  [ -n "$tag" ] || fail "EDGE_VERSION=resolve_dev requires EDGE_DEV_GITHUB_TAG or GitHub release access to the latest $repo release ending in $suffix"
+  printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
+}
+
 resolve_edge() {
   local selector="$1"
   case "$selector" in
@@ -144,7 +158,18 @@ resolve_edge() {
       fi
       resolve_edge_github_release
       ;;
-    artifact:*|path:*|url:*|github-release:*)
+    resolve_dev|latest_dev|latest-dev)
+      if [ -n "${EDGE_DEV_BINARY_PATH:-}" ]; then
+        printf 'path:%s' "$EDGE_DEV_BINARY_PATH"
+        return
+      fi
+      if [ -n "${EDGE_DEV_BINARY_URL:-}" ]; then
+        printf 'url:%s' "$EDGE_DEV_BINARY_URL"
+        return
+      fi
+      resolve_edge_dev_github_release
+      ;;
+    artifact:*|github-artifact:*|path:*|url:*|github-release:*)
       printf '%s' "$selector"
       ;;
     v*)
@@ -172,7 +197,7 @@ resolve_frontend() {
         printf 'none:resolve_prod'
       fi
       ;;
-    artifact:*|path:*|url:*|none:*)
+    artifact:*|github-artifact:*|path:*|url:*|none:*)
       printf '%s' "$selector"
       ;;
     v*)
@@ -191,7 +216,7 @@ resolve_frontend() {
 BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_VERSION")"
 BACKEND_IMAGE_SOURCE=""
 case "$BACKEND_VERSION" in
-  artifact:*|github-release:*|path:*|url:*)
+  artifact:*|github-artifact:*|github-release:*|path:*|url:*)
     BACKEND_IMAGE_SOURCE="$BACKEND_VERSION"
     ;;
 esac

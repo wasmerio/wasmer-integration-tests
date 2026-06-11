@@ -338,13 +338,14 @@ FRONTEND_VERSION=<selector>
 
 ### Selector values
 
-| Selector                                   | Meaning                                                                   |
-| ------------------------------------------ | ------------------------------------------------------------------------- |
-| `resolve_prod`                             | Resolve the currently deployed production version for that service.       |
-| `v2026-...`                                | Use a released version/tag. Interpretation is service-specific.           |
-| Full Backend image ref                     | Allowed for Backend when a PR pipeline already produced an exact ECR ref. |
-| `artifact:<repo>:<run_id>:<artifact_name>` | Download a GitHub Actions artifact. Primary path for Edge PR binaries.    |
-| `path:/absolute/path`                      | Developer escape hatch for local binaries/manifests.                      |
+| Selector                                   | Meaning                                                                                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolve_prod`                             | Resolve the currently deployed production version for that service.                                                                           |
+| `v2026-...`                                | Use a released version/tag. Interpretation is service-specific.                                                                               |
+| Full Backend image ref                     | Allowed for Backend when a PR pipeline already produced an exact ECR ref.                                                                     |
+| `artifact:<repo>:<run_id>:<artifact_name>` | Download a GitHub Actions artifact from a specific run. Primary path for Edge PR binaries.                                                    |
+| `github-artifact:<repo>:<artifact_name>`   | Download the latest GitHub Actions artifact with that exact name across runs. Useful for pinned Backend CI image archives without ECR access. |
+| `path:/absolute/path`                      | Developer escape hatch for local binaries/manifests.                                                                                          |
 
 ### `resolve_prod` semantics
 
@@ -353,6 +354,11 @@ FRONTEND_VERSION=<selector>
 | Backend  | Current prod Helm/Kubernetes `stackmachine-core` image.                                          | `BACKEND_IMAGE_REF=<ecr>/stackmachine:<tag>`      |
 | Edge     | Current active prod Edge release, resolved from production Edge/Node API or deployment metadata. | Downloaded Edge binary path.                      |
 | Frontend | Current prod Frontend deployment metadata.                                                       | Frontend runtime artifact/image + Relay manifest. |
+
+`EDGE_VERSION=resolve_dev` resolves the latest Edge GitHub release whose tag ends
+in `_dev1` (override with `EDGE_DEV_RELEASE_SUFFIX`) and downloads the matching
+release asset. CI can use this to track the latest Edge binary deployed to the dev
+environment without touching ECR or Kubernetes.
 
 Rules:
 
