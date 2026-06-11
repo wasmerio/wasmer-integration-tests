@@ -20,14 +20,14 @@ concurrency:
 jobs:
   tests:
     name: Local platform integration test
-    # Use Backend's GitHub release Docker image archive by default so Code QA
-    # does not need AWS/ECR access. Override LOCAL_PLATFORM_BACKEND_VERSION for
+    # Use CI-produced artifacts by default so Code QA does not need AWS/ECR
+    # access or local AWS profiles. Override LOCAL_PLATFORM_*_VERSION for
     # candidate artifacts or emergency pinning.
     uses: ./.github/workflows/local-platform-test.yaml
     with:
-      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-release:wasmerio/backend:latest:backend-image.tar' }}
-      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_prod' }}
-      frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'resolve_prod' }}
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
+      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
+      frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
       test_command: pnpm exec jest tests/general/sql.test.ts --runInBand --verbose
 
   fmt:

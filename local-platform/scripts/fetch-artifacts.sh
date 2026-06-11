@@ -87,6 +87,23 @@ fetch_to_file() {
       cp "$candidate" "$destination"
       rm -rf "$tmp_dir"
       ;;
+    github-artifact:*)
+      require_cmd gh
+      local rest="${resolved#github-artifact:}"
+      local repo="${rest%%:*}"
+      local artifact_name="${rest#*:}"
+      [ -n "$repo" ] && [ -n "$artifact_name" ] || fail "Invalid GitHub artifact selector for $label: $resolved"
+      local tmp_dir="$RUN_DIR/artifacts/.${label}-download"
+      rm -rf "$tmp_dir"
+      mkdir -p "$tmp_dir"
+      log "Downloading latest GitHub Actions artifact $artifact_name from $repo"
+      gh run download --repo "$repo" --name "$artifact_name" --dir "$tmp_dir"
+      local candidate
+      candidate="$(find "$tmp_dir" -type f | sort | head -n 1 || true)"
+      [ -n "$candidate" ] || fail "Artifact $resolved did not contain any files"
+      cp "$candidate" "$destination"
+      rm -rf "$tmp_dir"
+      ;;
     github-release:*)
       require_cmd gh
       local rest="${resolved#github-release:}"
