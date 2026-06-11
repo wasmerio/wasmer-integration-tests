@@ -34,6 +34,10 @@ const cacheDir = path.resolve(
 const discoveryOutputPath = runDir
   ? path.join(runDir, "diagnostics", "package-seed.json")
   : null;
+const wasmerDownloadLogPath = runDir
+  ? path.join(runDir, "logs", "wasmer-package-download.log")
+  : null;
+let latestDiagnostics = null;
 const namespaceAllowlist = new Set(
   (
     process.env.LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST ??
@@ -79,6 +83,29 @@ function debug(message) {
   if (verbose) {
     console.debug(`[package-seed] ${message}`);
   }
+}
+
+async function appendDownloadLog(message) {
+  if (!wasmerDownloadLogPath) {
+    return;
+  }
+  await fs.promises.mkdir(path.dirname(wasmerDownloadLogPath), {
+    recursive: true,
+  });
+  await fs.promises.appendFile(wasmerDownloadLogPath, `${message}\n`);
+}
+
+async function writeDiagnostics(extra = {}) {
+  if (!discoveryOutputPath || !latestDiagnostics) {
+    return;
+  }
+  await fs.promises.mkdir(path.dirname(discoveryOutputPath), {
+    recursive: true,
+  });
+  await fs.promises.writeFile(
+    discoveryOutputPath,
+    `${JSON.stringify({ ...latestDiagnostics, ...extra }, null, 2)}\n`,
+  );
 }
 
 function isPackageName(value) {
@@ -504,7 +531,8 @@ function safePackageFilename(pkg) {
 }
 
 async function runWasmer(args, env, options = {}) {
-  debug(`wasmer ${args.join(" ")}`);
+  const command = `wasmer ${args.join(" ")}`;
+  debug(command);
   try {
     const result = await execFileAsync("wasmer", args, {
       ...options,
@@ -522,9 +550,22 @@ async function runWasmer(args, env, options = {}) {
     }
     return result;
   } catch (err) {
-    const stdout = err.stdout ? `\nstdout:\n${err.stdout}` : "";
-    const stderr = err.stderr ? `\nstderr:\n${err.stderr}` : "";
-    throw new Error(`wasmer ${args.join(" ")} failed${stdout}${stderr}`);
+    const exitDetails = [
+      err.code !== undefined ? `exitCode=${err.code}` : null,
+      err.signal ? `signal=${err.signal}` : null,
+      err.killed ? "killed=true" : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const stdout = err.stdout
+      ? `\nstdout:\n${err.stdout}`
+      : "\nstdout: <empty>";
+    const stderr = err.stderr
+      ? `\nstderr:\n${err.stderr}`
+      : "\nstderr: <empty>";
+    throw new Error(
+      `${command} failed${exitDetails ? ` (${exitDetails})` : ""}${stdout}${stderr}`,
+    );
   }
 }
 
@@ -654,22 +695,39 @@ async function downloadPackage(pkg) {
   log(
     `Downloading ${pkg.resolvedName}@${pkg.resolvedVersion} from ${sourceRegistry} to ${tempPath}`,
   );
-  await runWasmer(
-    [
-      "package",
-      "download",
-      `${pkg.resolvedName}@=${pkg.resolvedVersion}`,
-      "-o",
-      tempPath,
-    ],
-    {
-      WASMER_REGISTRY: sourceRegistry,
-      // Do not leak the disposable local-registry WASMER_TOKEN into source
-      // package downloads. Public packages should be fetched anonymously unless
-      // LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN is explicitly provided.
-      WASMER_TOKEN: sourceToken ?? "",
-    },
+  await appendDownloadLog(
+    `$ wasmer package download ${pkg.resolvedName}@=${pkg.resolvedVersion} -o ${tempPath}`,
   );
+  try {
+    await runWasmer(
+      [
+        "package",
+        "download",
+        `${pkg.resolvedName}@=${pkg.resolvedVersion}`,
+        "-o",
+        tempPath,
+      ],
+      {
+        WASMER_REGISTRY: sourceRegistry,
+        // Do not leak the disposable local-registry WASMER_TOKEN into source
+        // package downloads. Public packages should be fetched anonymously unless
+        // LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN is explicitly provided.
+        WASMER_TOKEN: sourceToken ?? "",
+        RUST_LOG: process.env.LOCAL_PLATFORM_WASMER_DOWNLOAD_RUST_LOG ?? "info",
+      },
+    );
+  } catch (err) {
+    let tempPathStatus = "missing";
+    try {
+      const stat = await fs.promises.stat(tempPath);
+      tempPathStatus = `exists size=${stat.size}`;
+    } catch {
+      // keep missing
+    }
+    const detail = `${err.message}\ntempPath: ${tempPathStatus}\ncacheDir: ${cacheDir}`;
+    await appendDownloadLog(detail);
+    throw new Error(detail);
+  }
   await fs.promises.rename(tempPath, outputPath);
   return outputPath;
 }
@@ -718,6 +776,9 @@ async function main() {
       .join(", ")}`,
   );
 
+  const wasmerVersion = (await runWasmer(["--version"], {})).stdout.trim();
+  log(`Wasmer CLI: ${wasmerVersion || "unknown version"}`);
+
   const resolved = await resolveAllRequirements(discovered);
   log(
     `Resolved ${resolved.length} package version(s): ${resolved
@@ -726,40 +787,33 @@ async function main() {
   );
 
   const results = [];
+  latestDiagnostics = {
+    sourceRegistry,
+    targetRegistry,
+    namespaceAllowlist: [...namespaceAllowlist],
+    directRefNamespaceAllowlist: [...directRefNamespaceAllowlist],
+    scanDirs,
+    seedFile,
+    wasmerVersion,
+    discovered,
+    resolved,
+    results,
+  };
+  await writeDiagnostics();
   if (dryRun) {
     log("Dry run enabled; not pushing packages into the target registry");
     for (const pkg of resolved) {
       results.push({ ...pkg, seeded: false, skippedReason: "dry-run" });
+      await writeDiagnostics();
     }
   } else {
     for (const pkg of resolved) {
       results.push(await seedPackage(pkg));
+      await writeDiagnostics();
     }
   }
 
-  if (discoveryOutputPath) {
-    await fs.promises.mkdir(path.dirname(discoveryOutputPath), {
-      recursive: true,
-    });
-    await fs.promises.writeFile(
-      discoveryOutputPath,
-      `${JSON.stringify(
-        {
-          sourceRegistry,
-          targetRegistry,
-          namespaceAllowlist: [...namespaceAllowlist],
-          directRefNamespaceAllowlist: [...directRefNamespaceAllowlist],
-          scanDirs,
-          seedFile,
-          discovered,
-          resolved,
-          results,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
+  await writeDiagnostics();
 
   const seededCount = results.filter((pkg) => pkg.seeded).length;
   if (dryRun) {
@@ -773,7 +827,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(`[package-seed] ERROR: ${err.message}`);
+  try {
+    await writeDiagnostics({ error: String(err?.message ?? err) });
+  } catch (diagnosticErr) {
+    console.error(
+      `[package-seed] ERROR: failed to write diagnostics: ${diagnosticErr.message}`,
+    );
+  }
   process.exitCode = 1;
 });

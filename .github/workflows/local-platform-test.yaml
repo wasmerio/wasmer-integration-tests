@@ -94,5 +94,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: local-platform-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .local-platform/current
+          path: |
+            .local-platform/current/logs/**
+            .local-platform/current/diagnostics/**
+            .local-platform/current/resolved.env
+            .local-platform/current/resolved.json
           if-no-files-found: error
