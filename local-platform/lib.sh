@@ -113,6 +113,12 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
 
+set_default_cache_dirs() {
+  : "${LOCAL_PLATFORM_PACKAGE_CACHE_DIR:=$LOCAL_PLATFORM_DIR/package-cache}"
+  : "${LOCAL_PLATFORM_EDGE_CACHE_DIR:=$LOCAL_PLATFORM_DIR/cache/edge}"
+  export LOCAL_PLATFORM_PACKAGE_CACHE_DIR LOCAL_PLATFORM_EDGE_CACHE_DIR
+}
+
 set_default_ports() {
   : "${BACKEND_HTTP_PORT:=18000}"
   : "${FRONTEND_HTTP_PORT:=13000}"

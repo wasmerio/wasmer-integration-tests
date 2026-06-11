@@ -284,6 +284,10 @@ services:
       - ${RUN_DIR}/artifacts/edge:/usr/local/bin/edge:ro
       - ${RUN_DIR}/edge/platform_config.yaml:/config/platform_config.yaml:ro
       - edge_data:/data
+      # Persist expensive Edge package/module caches outside the disposable run
+      # volume so CI/local runs can restore them without retaining app state.
+      - ${LOCAL_PLATFORM_EDGE_CACHE_DIR}/compiler_cache:/data/compiler_cache
+      - ${LOCAL_PLATFORM_EDGE_CACHE_DIR}/webc_cache:/data/webc_cache
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:

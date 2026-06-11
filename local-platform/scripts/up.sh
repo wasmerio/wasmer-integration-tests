@@ -27,6 +27,7 @@ fi
 [ -n "${EDGE_VERSION:-}" ] || fail "EDGE_VERSION is required"
 [ -n "${FRONTEND_VERSION:-}" ] || fail "FRONTEND_VERSION is required"
 set_default_ports
+set_default_cache_dirs
 check_required_ports_available
 
 short_sha="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || printf local)"
@@ -36,7 +37,15 @@ COMPOSE_PROJECT_NAME="wit_${timestamp}_${short_sha}"
 COMPOSE_PROJECT_NAME="$(printf '%s' "$COMPOSE_PROJECT_NAME" | tr '[:upper:]-' '[:lower:]_')"
 export RUN_DIR COMPOSE_PROJECT_NAME BACKEND_VERSION EDGE_VERSION FRONTEND_VERSION
 
-mkdir -p "$RUN_DIR/logs" "$RUN_DIR/diagnostics" "$RUN_DIR/edge" "$RUN_DIR/artifacts" "$LOCAL_PLATFORM_DIR"
+mkdir -p \
+  "$RUN_DIR/logs" \
+  "$RUN_DIR/diagnostics" \
+  "$RUN_DIR/edge" \
+  "$RUN_DIR/artifacts" \
+  "$LOCAL_PLATFORM_DIR" \
+  "$LOCAL_PLATFORM_PACKAGE_CACHE_DIR" \
+  "$LOCAL_PLATFORM_EDGE_CACHE_DIR/compiler_cache" \
+  "$LOCAL_PLATFORM_EDGE_CACHE_DIR/webc_cache"
 ln -sfn "runs/$(basename "$RUN_DIR")" "$LOCAL_PLATFORM_DIR/current"
 touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 

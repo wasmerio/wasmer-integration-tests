@@ -36,7 +36,7 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   tests:
-    name: Local platform integration test / ${{ matrix.id }}
+    name: Local platform integration test / ${{ matrix.display_id || matrix.id }}
     needs: test-suite-matrix
     # Use CI-produced artifacts by default so Code QA does not need AWS/ECR
     # access or local AWS profiles. Override LOCAL_PLATFORM_*_VERSION for

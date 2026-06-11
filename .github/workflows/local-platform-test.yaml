@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   test:
+    name: Run ${{ inputs.suite_id }} tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +57,19 @@ jobs:
           python-version: "3.13"
 
       - run: make setup
+
+      - name: Restore local platform package and compiler caches
+        id: local-platform-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .local-platform/package-cache
+            .local-platform/cache/edge/compiler_cache
+            .local-platform/cache/edge/webc_cache
+          key: local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml', 'wordpress/wasmer.toml') }}
+          restore-keys: |
+            local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-
+            local-platform-v1-${{ runner.os }}-
 
       - name: Log local platform selection
         env:
@@ -111,6 +125,17 @@ jobs:
           GH_TOKEN: ${{ secrets.pat }}
           LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
+
+      - name: Save local platform package and compiler caches
+        if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .local-platform/package-cache
+            .local-platform/cache/edge/compiler_cache
+            .local-platform/cache/edge/webc_cache
+          key: ${{ steps.local-platform-cache.outputs.cache-primary-key }}
 
       - name: Upload local platform logs
         if: failure()
