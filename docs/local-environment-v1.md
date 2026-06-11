@@ -552,10 +552,13 @@ This artifact must contain enough information to debug without rerunning:
 Minimum Makefile API:
 
 ```makefile
-.PHONY: local-test local-platform-up local-platform-down local-platform-logs
+.PHONY: local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs
 
 local-test:
 	bash ./local-platform/scripts/local-test.sh
+
+local-platform-prepare:
+	bash ./local-platform/scripts/prepare-test-environment.sh
 
 local-platform-up:
 	bash ./local-platform/scripts/up.sh
@@ -566,6 +569,8 @@ local-platform-down:
 local-platform-logs:
 	bash ./local-platform/scripts/print-logs.sh
 ```
+
+`local-platform-prepare` brings the stack up far enough to prepare the test environment and warm caches, then tears it back down.
 
 `local-platform-up` starts the same local platform without running tests or tearing it down. It leaves `.local-platform/current` pointing at the running stack, writes `test-env.sh`, keeps a background Compose log follower, and should be stopped with `make local-platform-down`.
 
@@ -608,6 +613,9 @@ on:
       test_command:
         type: string
         default: pnpm exec jest ./tests/general/
+      prepare_only:
+        type: boolean
+        default: false
 ```
 
 Workflow skeleton:
@@ -626,6 +634,7 @@ jobs:
       - run: make setup
 
       - name: Run local platform tests
+        if: ${{ !inputs.prepare_only }}
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           EDGE_VERSION: ${{ inputs.edge_version }}
@@ -633,6 +642,15 @@ jobs:
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           GH_TOKEN: ${{ github.token }}
         run: make local-test
+
+      - name: Prepare local platform test environment
+        if: ${{ inputs.prepare_only }}
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          FRONTEND_VERSION: ${{ inputs.frontend_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: make local-platform-prepare
 
       - name: Upload local platform logs
         if: failure()

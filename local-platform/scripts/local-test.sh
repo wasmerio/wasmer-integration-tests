@@ -28,6 +28,7 @@ fi
 [ -n "${EDGE_VERSION:-}" ] || fail "EDGE_VERSION is required"
 [ -n "${FRONTEND_VERSION:-}" ] || fail "FRONTEND_VERSION is required"
 LOCAL_TEST_COMMAND="${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
+LOCAL_PLATFORM_PREPARE_ONLY="${LOCAL_PLATFORM_PREPARE_ONLY:-0}"
 set_default_ports
 set_default_cache_dirs
 check_required_ports_available
@@ -78,9 +79,17 @@ cleanup() {
     fi
   fi
   if [ "$exit_code" -eq 0 ]; then
-    log "local-test passed; logs retained at $RUN_DIR"
+    if is_truthy "$LOCAL_PLATFORM_PREPARE_ONLY"; then
+      log "Prepared local platform test environment; logs retained at $RUN_DIR"
+    else
+      log "local-test passed; logs retained at $RUN_DIR"
+    fi
   else
-    log "local-test failed with status $exit_code; run retained at $RUN_DIR"
+    if is_truthy "$LOCAL_PLATFORM_PREPARE_ONLY"; then
+      log "prepare-test-environment failed with status $exit_code; run retained at $RUN_DIR"
+    else
+      log "local-test failed with status $exit_code; run retained at $RUN_DIR"
+    fi
   fi
   exit "$exit_code"
 }
@@ -149,6 +158,11 @@ if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
   compose --profile frontend up -d frontend
 else
   log "No FRONTEND_IMAGE_REF set; skipping frontend container"
+fi
+
+if is_truthy "$LOCAL_PLATFORM_PREPARE_ONLY"; then
+  log "Local platform test environment prepared; tearing the stack down"
+  exit 0
 fi
 
 log "Running tests: $LOCAL_TEST_COMMAND"

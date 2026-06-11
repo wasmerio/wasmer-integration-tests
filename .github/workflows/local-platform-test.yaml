@@ -15,6 +15,9 @@ on:
       test_command:
         type: string
         default: pnpm exec jest ./tests/general/
+      prepare_only:
+        type: boolean
+        default: false
       suite_id:
         type: string
         default: default
@@ -35,7 +38,7 @@ permissions:
 
 jobs:
   test:
-    name: ${{ inputs.job_name || format('Run {0} tests', inputs.suite_id) }}
+    name: ${{ inputs.job_name || (inputs.prepare_only && format('Prepare {0} test environment', inputs.suite_id) || format('Run {0} tests', inputs.suite_id)) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +86,7 @@ jobs:
           EDGE_VERSION: ${{ inputs.edge_version }}
           FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_PREPARE_ONLY: ${{ inputs.prepare_only }}
           LOCAL_PLATFORM_SUITE_ID: ${{ inputs.suite_id }}
           HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
         run: |
@@ -91,6 +95,7 @@ jobs:
           echo "  edge_version=$EDGE_VERSION"
           echo "  frontend_version=$FRONTEND_VERSION"
           echo "  suite_id=$LOCAL_PLATFORM_SUITE_ID"
+          echo "  prepare_only=$LOCAL_PLATFORM_PREPARE_ONLY"
           echo "  test_command=$LOCAL_TEST_COMMAND"
           echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
 
@@ -119,10 +124,24 @@ jobs:
             exit 1
           fi
 
-      - name: Run local platform tests
+      - name: Prepare local platform test environment
+        if: ${{ inputs.prepare_only }}
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
-          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY || 'ghcr.io/wasmerio/backend' }}
+          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY  }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          FRONTEND_VERSION: ${{ inputs.frontend_version }}
+          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
+          WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
+          GH_TOKEN: ${{ secrets.pat }}
+          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
+        run: make local-platform-prepare
+
+      - name: Run local platform tests
+        if: ${{ !inputs.prepare_only }}
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY }}
           EDGE_VERSION: ${{ inputs.edge_version }}
           FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}

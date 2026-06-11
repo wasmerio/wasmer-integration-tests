@@ -1,4 +1,5 @@
-# Additional packages to precompile before local-platform tests run.
+# Additional packages to precompile while preparing the local-platform test
+# environment.
 #
 # The local platform automatically precompiles every exact package version that
 # package seeding resolved into the disposable local registry. Add one package

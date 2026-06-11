@@ -39,18 +39,18 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   local-platform-cache:
-    name: Prepare local platform cache
-    # Warm package downloads and Edge compiler/webc caches once before the
-    # suite matrix fans out. This avoids every suite racing to compile the same
-    # packages on a cold cache.
+    name: Prepare local platform test environment cache
+    # Prepare the local platform test environment once before the suite matrix
+    # fans out. This warms package downloads and Edge compiler/webc caches so
+    # every suite does not race to compile the same packages on a cold cache.
     uses: ./.github/workflows/local-platform-test.yaml
     with:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
       frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
-      test_command: "true"
+      prepare_only: true
       suite_id: cache-warmup
-      job_name: Prepare local platform cache
+      job_name: Prepare local platform test environment cache
     secrets:
       pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 
