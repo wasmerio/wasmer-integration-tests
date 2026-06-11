@@ -18,3 +18,4 @@ local-platform/**/Dockerfile
 local-platform/**/*.toml
 local-platform/**/*.sql
 local-platform/package-seed.txt
+local-platform/package-compilation-list.txt
