@@ -665,7 +665,10 @@ async function downloadPackage(pkg) {
     ],
     {
       WASMER_REGISTRY: sourceRegistry,
-      ...(sourceToken ? { WASMER_TOKEN: sourceToken } : {}),
+      // Do not leak the disposable local-registry WASMER_TOKEN into source
+      // package downloads. Public packages should be fetched anonymously unless
+      // LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN is explicitly provided.
+      WASMER_TOKEN: sourceToken ?? "",
     },
   );
   await fs.promises.rename(tempPath, outputPath);
@@ -704,6 +707,12 @@ async function main() {
     return;
   }
 
+  log(`Source registry: ${sourceRegistry}`);
+  log(
+    sourceToken
+      ? "Using explicit source registry token from LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN"
+      : "No source registry token configured; source package downloads are anonymous",
+  );
   log(
     `Discovered ${discovered.length} package requirement(s): ${discovered
       .map((pkg) => `${pkg.name}@${pkg.constraint}`)
