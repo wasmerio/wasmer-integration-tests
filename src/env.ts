@@ -586,6 +586,151 @@ const ANSI_CYAN = "36";
 const ANSI_GREEN = "32";
 const ANSI_YELLOW = "33";
 
+const COMMAND_FAILURE_STREAM_LIMIT = 8_000;
+const COMMAND_FAILURE_WRAP_COLUMN = 160;
+const SENSITIVE_COMMAND_FLAGS = new Set([
+  "--api-key",
+  "--api_key",
+  "--authorization",
+  "--password",
+  "--secret",
+  "--token",
+]);
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function redactCommandArgs(args: string[]): string[] {
+  const redacted: string[] = [];
+  let redactNext = false;
+
+  for (const arg of args) {
+    if (redactNext) {
+      redacted.push("[REDACTED]");
+      redactNext = false;
+      continue;
+    }
+
+    const equalsIndex = arg.indexOf("=");
+    const flagName = equalsIndex === -1 ? arg : arg.slice(0, equalsIndex);
+    if (SENSITIVE_COMMAND_FLAGS.has(flagName.toLowerCase())) {
+      if (equalsIndex === -1) {
+        redacted.push(arg);
+        redactNext = true;
+      } else {
+        redacted.push(`${flagName}=[REDACTED]`);
+      }
+      continue;
+    }
+
+    redacted.push(arg);
+  }
+
+  return redacted;
+}
+
+function truncateCommandFailureOutput(
+  output: string,
+  verbose: boolean,
+): { text: string; truncated: boolean; omittedCharacters: number } {
+  if (verbose || output.length <= COMMAND_FAILURE_STREAM_LIMIT) {
+    return { text: output, truncated: false, omittedCharacters: 0 };
+  }
+
+  const headLength = Math.floor(COMMAND_FAILURE_STREAM_LIMIT * 0.35);
+  const tailLength = COMMAND_FAILURE_STREAM_LIMIT - headLength;
+  const omittedCharacters = output.length - COMMAND_FAILURE_STREAM_LIMIT;
+  return {
+    text: `${output.slice(
+      0,
+      headLength,
+    )}\n\n[... omitted ${omittedCharacters} characters; rerun with VERBOSE=true to see full output ...]\n\n${output.slice(
+      -tailLength,
+    )}`,
+    truncated: true,
+    omittedCharacters,
+  };
+}
+
+function wrapLongOutputLines(output: string): string {
+  return output
+    .split("\n")
+    .map((line) => {
+      if (line.length <= COMMAND_FAILURE_WRAP_COLUMN) {
+        return line;
+      }
+
+      const wrapped: string[] = [];
+      for (
+        let index = 0;
+        index < line.length;
+        index += COMMAND_FAILURE_WRAP_COLUMN
+      ) {
+        const prefix = index === 0 ? "" : "↳ ";
+        wrapped.push(
+          `${prefix}${line.slice(index, index + COMMAND_FAILURE_WRAP_COLUMN)}`,
+        );
+      }
+      return wrapped.join("\n");
+    })
+    .join("\n");
+}
+
+function formatCommandOutputBlock(
+  label: string,
+  output: string,
+  verbose: boolean,
+): string {
+  if (output.length === 0) {
+    return `${label}: <empty>`;
+  }
+
+  const rendered = truncateCommandFailureOutput(output, verbose);
+  const byteLength = Buffer.byteLength(output, "utf8");
+  const truncationSuffix = rendered.truncated
+    ? `, omitted ${rendered.omittedCharacters} characters from the middle`
+    : "";
+  return [
+    `--- ${label} (${byteLength} bytes${truncationSuffix}; long lines wrapped at ${COMMAND_FAILURE_WRAP_COLUMN} columns) ---`,
+    wrapLongOutputLines(rendered.text),
+    `--- end ${label} ---`,
+  ].join("\n");
+}
+
+function formatCommandFailure(params: {
+  binary: string;
+  args: string[];
+  cwd?: Path;
+  registry: string;
+  namespace: string;
+  result: CommandOutput;
+  verbose: boolean;
+}): string {
+  const command = [params.binary, ...redactCommandArgs(params.args)]
+    .map(shellQuote)
+    .join(" ");
+
+  return [
+    "Wasmer command failed.",
+    `Exit code: ${params.result.code}`,
+    `Command: ${command}`,
+    `Working directory: ${params.cwd ?? process.cwd()}`,
+    `Registry: ${params.registry}`,
+    `Namespace: ${params.namespace}`,
+    "",
+    "The test harness formats stdout/stderr below so Jest does not collapse long single-line CLI output.",
+    "Set VERBOSE=true to stream and include full command output.",
+    "",
+    formatCommandOutputBlock("stderr", params.result.stderr, params.verbose),
+    "",
+    formatCommandOutputBlock("stdout", params.result.stdout, params.verbose),
+  ].join("\n");
+}
+
 export interface AppFetchOptions extends RequestInit {
   // Ignore non-success status codes.
   noAssertSuccess?: boolean;
@@ -810,8 +955,17 @@ export class TestEnv {
     }
 
     if (code !== 0 && options.noAssertSuccess !== true) {
-      const data = JSON.stringify(result, null, 2);
-      throw new Error(`Command failed: ${data}`);
+      throw new Error(
+        formatCommandFailure({
+          binary: this.wasmerBinary,
+          args,
+          cwd: options.cwd,
+          registry: this.registry,
+          namespace: this.namespace,
+          result,
+          verbose: this.verbose,
+        }),
+      );
     }
 
     return result;
