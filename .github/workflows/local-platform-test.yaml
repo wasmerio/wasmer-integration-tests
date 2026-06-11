@@ -18,6 +18,9 @@ on:
       suite_id:
         type: string
         default: default
+      job_name:
+        type: string
+        default: ""
     secrets:
       pat:
         required: false
@@ -29,7 +32,7 @@ permissions:
 
 jobs:
   test:
-    name: Run ${{ inputs.suite_id }} tests
+    name: ${{ inputs.job_name || format('Run {0} tests', inputs.suite_id) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
