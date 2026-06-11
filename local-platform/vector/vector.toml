@@ -3,9 +3,35 @@ type = "http_server"
 address = "0.0.0.0:9089"
 encoding = "json"
 
+[transforms.instance_logs]
+type = "remap"
+inputs = ["http_logs"]
+source = '''
+# Edge sends payloads as {"log": {"message": "<json string>",
+# "app_id": "da_...", "app_version_id": "dav_..."}}. Backend/CLI log
+# queries expect Loki labels app/app_id/app_version_id and a top-level JSON
+# field named `message` containing the inner instance-log JSON.
+.app = "deploy-instances"
+.app_id = to_string!(.log.app_id)
+.app_version_id = to_string(.log.app_version_id) ?? ""
+.message = to_string!(.log.message)
+
+if exists(.log.app_id_numeric) {
+  .app_id_numeric = .log.app_id_numeric
+}
+if exists(.log.app_version_id_numeric) {
+  .app_version_id_numeric = .log.app_version_id_numeric
+}
+
+del(.log)
+'''
+
 [sinks.loki]
 type = "loki"
-inputs = ["http_logs"]
+inputs = ["instance_logs"]
 endpoint = "http://loki:3100"
 encoding.codec = "json"
+labels.app = "{{ app }}"
+labels.app_id = "{{ app_id }}"
+labels.app_version_id = "{{ app_version_id }}"
 labels.source = "local-platform"

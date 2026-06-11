@@ -249,6 +249,12 @@ services:
       - "${BACKEND_HTTP_PORT:-18000}:8000"
     volumes:
       - ${RUN_DIR}:/platform
+      # Source builds run inside the backend container but use the host Docker
+      # daemon, matching the local-dev-env `SOURCE_BUILD_PROVIDER=local_docker`
+      # configuration emitted by smbe. The Docker CLI streams build context to
+      # the daemon, so the project directory does not need to exist on the host.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CLI_PATH:-/usr/bin/docker}:/usr/bin/docker:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -286,7 +292,9 @@ services:
       - "${EDGE_NODE_API_PORT:-19050}:9050"
       - "${EDGE_GRPC_PORT:-19051}:9051"
       - "${EDGE_SSH_PORT:-19022}:9022"
-      - "${EDGE_DNS_PORT:-19053}:9053/udp"
+      # Edge's local config listens for DNS on port 53 inside the container.
+      # Publish the isolated host port directly to that listener.
+      - "${EDGE_DNS_PORT:-19053}:53/udp"
     depends_on:
       backend:
         condition: service_started

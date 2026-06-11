@@ -15,6 +15,9 @@ on:
       test_command:
         type: string
         default: pnpm exec jest ./tests/general/
+      suite_id:
+        type: string
+        default: default
     secrets:
       pat:
         required: false
@@ -60,12 +63,14 @@ jobs:
           EDGE_VERSION: ${{ inputs.edge_version }}
           FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_SUITE_ID: ${{ inputs.suite_id }}
           HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
         run: |
           echo "Local platform requested versions:"
           echo "  backend_version=$BACKEND_VERSION"
           echo "  edge_version=$EDGE_VERSION"
           echo "  frontend_version=$FRONTEND_VERSION"
+          echo "  suite_id=$LOCAL_PLATFORM_SUITE_ID"
           echo "  test_command=$LOCAL_TEST_COMMAND"
           echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
 
@@ -111,7 +116,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: local-platform-${{ github.run_id }}-${{ github.run_attempt }}
+          name: local-platform-${{ inputs.suite_id }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .local-platform/current/logs/**
             .local-platform/current/diagnostics/**

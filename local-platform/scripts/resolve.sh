@@ -268,6 +268,8 @@ case "$BACKEND_VERSION" in
 esac
 EDGE_RESOLVED="$(resolve_edge "$EDGE_VERSION")"
 FRONTEND_RESOLVED="$(resolve_frontend "$FRONTEND_VERSION")"
+DOCKER_CLI_PATH="${LOCAL_PLATFORM_DOCKER_CLI_PATH:-$(command -v docker)}"
+[ -x "$DOCKER_CLI_PATH" ] || fail "Docker CLI is not executable: $DOCKER_CLI_PATH"
 
 {
   write_env_var /dev/stdout BACKEND_VERSION "$BACKEND_VERSION"
@@ -279,6 +281,7 @@ FRONTEND_RESOLVED="$(resolve_frontend "$FRONTEND_VERSION")"
   write_env_var /dev/stdout FRONTEND_RESOLVED "$FRONTEND_RESOLVED"
   write_env_var /dev/stdout LOCAL_TEST_COMMAND "${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
   write_env_var /dev/stdout COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT_NAME"
+  write_env_var /dev/stdout DOCKER_CLI_PATH "$DOCKER_CLI_PATH"
   write_env_var /dev/stdout BACKEND_HTTP_PORT "$BACKEND_HTTP_PORT"
   write_env_var /dev/stdout FRONTEND_HTTP_PORT "$FRONTEND_HTTP_PORT"
   write_env_var /dev/stdout EDGE_HTTP_PORT "$EDGE_HTTP_PORT"
@@ -309,6 +312,7 @@ cat > "$RUN_DIR/resolved.json" <<JSON
   "edge_resolved": $(json_quote "$EDGE_RESOLVED"),
   "frontend_resolved": $(json_quote "$FRONTEND_RESOLVED"),
   "compose_project_name": $(json_quote "$COMPOSE_PROJECT_NAME"),
+  "docker_cli_path": $(json_quote "$DOCKER_CLI_PATH"),
   "ports": {
     "backend_http": $(json_quote "$BACKEND_HTTP_PORT"),
     "frontend_http": $(json_quote "$FRONTEND_HTTP_PORT"),

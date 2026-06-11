@@ -19,7 +19,7 @@ if [ -z "$mysql_app_host" ]; then
 fi
 [ -n "$mysql_app_host" ] || mysql_app_host="172.17.0.1"
 set +e
-timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-300}" \
+timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
   docker run --rm \
     --network "${COMPOSE_PROJECT_NAME}_default" \
     --user "$(id -u):$(id -g)" \
@@ -57,8 +57,7 @@ timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-300}" \
     --metrics-clickhouse-host clickhouse \
     --metrics-clickhouse-port 8123 \
     --write-test-env /platform/test-env.sh \
-    --write-backend-env /platform/backend.env \
-    --skip-templates > "$bootstrap_raw" 2>&1
+    --write-backend-env /platform/backend.env > "$bootstrap_raw" 2>&1
 bootstrap_status=$?
 set -e
 sed -E 's/(WASMER_TOKEN=).+$/\1<redacted>/; s/(EDGE_SYNC_TOKEN=).+$/\1<redacted>/' "$bootstrap_raw" > "$bootstrap_output" || true

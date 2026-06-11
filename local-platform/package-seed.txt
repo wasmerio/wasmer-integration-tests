@@ -16,8 +16,10 @@
 
 wasmer/s3-server
 wasmer/cli
+wasmer/bash@=1.0.21
 wasmer/bash@=1.0.25
 php/php-32@=8.3.2102
 php/php-32@=8.3.2101-rc.1
 php/php-eh@=8.3.404-beta.4
+php/php-eh@=8.3.404-beta.8
 python/python@=3.13.5

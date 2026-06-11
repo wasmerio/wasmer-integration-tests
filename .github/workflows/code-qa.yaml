@@ -18,17 +18,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-suite-matrix:
+    name: Load integration test suite matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.suites.outputs.matrix }}
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Read shared test suite manifest
+        id: suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -c '{include: .}' .github/integration-test-suites.json)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   tests:
-    name: Local platform integration test
+    name: Local platform integration test / ${{ matrix.id }}
+    needs: test-suite-matrix
     # Use CI-produced artifacts by default so Code QA does not need AWS/ECR
     # access or local AWS profiles. Override LOCAL_PLATFORM_*_VERSION for
     # candidate artifacts or emergency pinning.
     uses: ./.github/workflows/local-platform-test.yaml
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
     with:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
       frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
-      test_command: pnpm exec jest --runInBand --verbose
+      test_command: ${{ matrix.test_command }}
+      suite_id: ${{ matrix.id }}
     secrets:
       pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 

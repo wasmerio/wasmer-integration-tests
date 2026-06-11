@@ -43,45 +43,34 @@ on:
         description: "Add optional webhook which will be called if any tests have failed"
 
 jobs:
+  test-suite-matrix:
+    name: Load integration test suite matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.suites.outputs.matrix }}
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
+
+      - name: Read shared test suite manifest
+        id: suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -c '{include: .}' .github/integration-test-suites.json)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   test-suites:
-    name: Run ${{ matrix.id }} tests
+    name: Run ${{ matrix.display_id || matrix.id }} tests
+    needs: test-suite-matrix
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.timeout_minutes || 15 }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - id: general
-            test_command: |
-              npx jest ./tests/general/
-          - id: jobs
-            test_command: |
-              npx jest ./tests/validation/log.test.ts
-              npx jest ./tests/job
-          - id: apps
-            test_command: |
-              npx jest ./tests/app/app_banning.test.ts
-          - id: templates
-            test_command: |
-              npx jest ./tests/app/templates.test.ts
-          - id: wordpress
-            test_command: |
-              npx jest ./tests/validation/log.test.ts
-              npx jest ./tests/wordpress
-          - id: ssh
-            test_command: |
-              npx jest ./tests/ssh
-          - id: superpanic (without superpanic)
-            test_command: |
-              npx jest ./tests/superpanics
-          - id: wasmopticon
-            test_command: |
-              npx jest tests/wasmopticon
-            requires_python: true
-            python_version: "3.13"
-          - id: stackmachine-sdk
-            test_command: |
-              npx jest ./tests/stackmachine/stackmachine-sdk.test.ts
+      matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
 
     steps:
       - name: Clone repository

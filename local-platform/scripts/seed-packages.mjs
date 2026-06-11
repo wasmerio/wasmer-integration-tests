@@ -58,7 +58,7 @@ const directRefNamespaceAllowlist = new Set(
 );
 const scanDirs = (
   process.env.LOCAL_PLATFORM_PACKAGE_SCAN_DIRS ??
-  "tests,wasmopticon,fixtures,src/app"
+  "tests,wasmopticon,wordpress/wasmer.toml,fixtures,src/app"
 )
   .split(",")
   .map((part) => part.trim())
@@ -167,6 +167,23 @@ function addRequirement(requirements, name, constraint, source) {
 
 async function findFiles(root, predicate) {
   const result = [];
+
+  let rootStat;
+  try {
+    rootStat = await fs.promises.stat(root);
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return result;
+    }
+    throw err;
+  }
+
+  if (rootStat.isFile()) {
+    if (predicate(root)) {
+      result.push(root);
+    }
+    return result;
+  }
 
   async function walk(dir) {
     let entries;
