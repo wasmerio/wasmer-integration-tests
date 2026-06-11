@@ -13,6 +13,11 @@ touch "$RUN_DIR/backend.env"
 log "Generating backend/test env with smbe local-dev-env"
 bootstrap_output="$RUN_DIR/logs/bootstrap.log"
 bootstrap_raw="$RUN_DIR/.bootstrap.raw.log"
+mysql_app_host="${LOCAL_PLATFORM_MYSQL_APP_HOST:-}"
+if [ -z "$mysql_app_host" ]; then
+  mysql_app_host="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
+fi
+[ -n "$mysql_app_host" ] || mysql_app_host="172.17.0.1"
 set +e
 timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-300}" \
   docker run --rm \
@@ -38,16 +43,16 @@ timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-300}" \
     local-dev-env \
     --state-dir /platform/state \
     --namespace wasmer-integration-tests \
-    --public-url "http://localhost:${BACKEND_HTTP_PORT}" \
+    --public-url "http://backend:8000" \
     --app-domain localhost \
     --edge-server "http://127.0.0.1:${EDGE_HTTP_PORT}" \
     --edge-ssh-server "ssh://127.0.0.1:${EDGE_SSH_PORT}" \
     --edge-dns-server "127.0.0.1:${EDGE_DNS_PORT}" \
-    --mysql-host host.docker.internal \
+    --mysql-host "$mysql_app_host" \
     --mysql-port "$MYSQL_APP_DB_1_PORT" \
     --mysql-secondary-port "$MYSQL_APP_DB_2_PORT" \
-    --mysql-user admin \
-    --mysql-password admin \
+    --mysql-user root \
+    --mysql-password root \
     --loki-uri http://loki:3100 \
     --metrics-clickhouse-host clickhouse \
     --metrics-clickhouse-port 8123 \
@@ -73,6 +78,41 @@ rm -f "$bootstrap_raw"
 [ -s "$RUN_DIR/backend.env" ] || fail "Bootstrap did not write $RUN_DIR/backend.env"
 [ -s "$RUN_DIR/test-env.sh" ] || fail "Bootstrap did not write $RUN_DIR/test-env.sh"
 [ -s "$RUN_DIR/edge/platform_config.yaml" ] || fail "Bootstrap did not write $RUN_DIR/edge/platform_config.yaml"
+
+edge_grpc_token="$(node - "$RUN_DIR/state/keys/deploy_jwt_private_key.pem" <<'NODE'
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+
+const privateKey = fs.readFileSync(process.argv[2], "utf8");
+const now = Math.floor(Date.now() / 1000);
+const encode = (value) =>
+  Buffer.from(JSON.stringify(value))
+    .toString("base64url");
+const header = encode({ alg: "RS512", typ: "JWT" });
+const payload = encode({
+  exp: now + 30 * 24 * 60 * 60,
+  iat: now,
+  sub: "wasmerio-backend",
+  node_api_permissions: ["all"],
+});
+const signingInput = `${header}.${payload}`;
+const signature = crypto
+  .sign("RSA-SHA512", Buffer.from(signingInput), privateKey)
+  .toString("base64url");
+process.stdout.write(`${signingInput}.${signature}`);
+NODE
+)" || fail "Failed to generate Edge gRPC token"
+
+# The production Backend image used by local-platform carries source build
+# tooling under /opt rather than the backend repository path assumed by
+# smbe local-dev-env.
+{
+  printf '\n# local-platform source build tooling\n'
+  printf 'export PATH="/opt/source-build-tools/bin:$PATH"\n'
+  printf 'export EDGE_GRPC_ENDPOINT="edge:9051"\n'
+  printf 'export EDGE_GRPC_USE_INSECURE_CHANNEL="1"\n'
+  printf 'export EDGE_GRPC_TOKEN="%s"\n' "$edge_grpc_token"
+} >> "$RUN_DIR/backend.env"
 
 # Ensure the generated test env contains the isolated integration-test ports.
 {

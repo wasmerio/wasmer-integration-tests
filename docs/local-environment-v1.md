@@ -531,10 +531,13 @@ This artifact must contain enough information to debug without rerunning:
 Minimum Makefile API:
 
 ```makefile
-.PHONY: local-test local-platform-down local-platform-logs
+.PHONY: local-test local-platform-up local-platform-down local-platform-logs
 
 local-test:
 	bash ./local-platform/scripts/local-test.sh
+
+local-platform-up:
+	bash ./local-platform/scripts/up.sh
 
 local-platform-down:
 	bash ./local-platform/scripts/down.sh
@@ -542,6 +545,8 @@ local-platform-down:
 local-platform-logs:
 	bash ./local-platform/scripts/print-logs.sh
 ```
+
+`local-platform-up` starts the same local platform without running tests or tearing it down. It leaves `.local-platform/current` pointing at the running stack, writes `test-env.sh`, keeps a background Compose log follower, and should be stopped with `make local-platform-down`.
 
 `local-test.sh` should:
 

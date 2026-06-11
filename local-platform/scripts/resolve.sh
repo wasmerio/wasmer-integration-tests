@@ -77,6 +77,16 @@ resolve_backend() {
         printf '%s' "$BACKEND_IMAGE_REF"
         return
       fi
+      if is_ci; then
+        local image_repository="${BACKEND_IMAGE_REPOSITORY:-ghcr.io/wasmerio/backend}"
+        local tag="${BACKEND_PROD_GITHUB_TAG:-}"
+        if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
+          tag="$(gh release view --repo "${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}" --json tagName --jq .tagName 2>/dev/null || true)"
+        fi
+        [ -n "$tag" ] || fail "BACKEND_VERSION=resolve_prod in CI requires BACKEND_IMAGE_REF, BACKEND_PROD_GITHUB_TAG, or GitHub release access to ${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}"
+        printf '%s:%s' "$image_repository" "$tag"
+        return
+      fi
       if command -v kubectl >/dev/null 2>&1; then
         configure_prod_kube_context || true
         local image
@@ -88,8 +98,8 @@ resolve_backend() {
       fi
       fail "BACKEND_VERSION=resolve_prod requires BACKEND_IMAGE_REF or kubectl access to deployment/${BACKEND_PROD_DEPLOYMENT:-stackmachine-core} in namespace ${BACKEND_PROD_KUBE_NAMESPACE:-backend}. Tried to configure prod context via AWS profile ${BACKEND_PROD_AWS_PROFILE:-tf-prod}, cluster ${BACKEND_PROD_EKS_CLUSTER:-eks-prod-us-east-1}."
       ;;
-    path:*)
-      fail "BACKEND_VERSION path: selectors are not supported; pass a backend image ref instead"
+    artifact:*|github-release:*|path:*|url:*)
+      printf 'local-platform-backend:%s' "$COMPOSE_PROJECT_NAME"
       ;;
     */*:*|*:*)
       printf '%s' "$selector"
@@ -110,7 +120,7 @@ resolve_edge_github_release() {
   local tag="${EDGE_PROD_GITHUB_TAG:-}"
 
   if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
-    tag="$(gh release view --repo "$repo" --json tagName --jq .tagName 2>/dev/null || true)"
+    tag="$(gh release list --repo "$repo" --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | last | .tagName' 2>/dev/null || true)"
   fi
 
   if [ -z "$tag" ]; then
@@ -179,6 +189,12 @@ resolve_frontend() {
 }
 
 BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_VERSION")"
+BACKEND_IMAGE_SOURCE=""
+case "$BACKEND_VERSION" in
+  artifact:*|github-release:*|path:*|url:*)
+    BACKEND_IMAGE_SOURCE="$BACKEND_VERSION"
+    ;;
+esac
 EDGE_RESOLVED="$(resolve_edge "$EDGE_VERSION")"
 FRONTEND_RESOLVED="$(resolve_frontend "$FRONTEND_VERSION")"
 
@@ -187,6 +203,7 @@ FRONTEND_RESOLVED="$(resolve_frontend "$FRONTEND_VERSION")"
   write_env_var /dev/stdout EDGE_VERSION "$EDGE_VERSION"
   write_env_var /dev/stdout FRONTEND_VERSION "$FRONTEND_VERSION"
   write_env_var /dev/stdout BACKEND_IMAGE_REF "$BACKEND_IMAGE_REF"
+  write_env_var /dev/stdout BACKEND_IMAGE_SOURCE "$BACKEND_IMAGE_SOURCE"
   write_env_var /dev/stdout EDGE_RESOLVED "$EDGE_RESOLVED"
   write_env_var /dev/stdout FRONTEND_RESOLVED "$FRONTEND_RESOLVED"
   write_env_var /dev/stdout LOCAL_TEST_COMMAND "${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
@@ -217,6 +234,7 @@ cat > "$RUN_DIR/resolved.json" <<JSON
   "edge_version": $(json_quote "$EDGE_VERSION"),
   "frontend_version": $(json_quote "$FRONTEND_VERSION"),
   "backend_image_ref": $(json_quote "$BACKEND_IMAGE_REF"),
+  "backend_image_source": $(json_quote "$BACKEND_IMAGE_SOURCE"),
   "edge_resolved": $(json_quote "$EDGE_RESOLVED"),
   "frontend_resolved": $(json_quote "$FRONTEND_RESOLVED"),
   "compose_project_name": $(json_quote "$COMPOSE_PROJECT_NAME"),
@@ -243,6 +261,10 @@ cat > "$RUN_DIR/resolved.json" <<JSON
 }
 JSON
 
-log "Resolved Backend: $BACKEND_IMAGE_REF"
+if [ -n "$BACKEND_IMAGE_SOURCE" ]; then
+  log "Resolved Backend: $BACKEND_IMAGE_SOURCE -> $BACKEND_IMAGE_REF"
+else
+  log "Resolved Backend: $BACKEND_IMAGE_REF"
+fi
 log "Resolved Edge: $EDGE_RESOLVED"
 log "Resolved Frontend: $FRONTEND_RESOLVED"

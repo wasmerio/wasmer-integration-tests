@@ -37,7 +37,7 @@ const discoveryOutputPath = runDir
 const namespaceAllowlist = new Set(
   (
     process.env.LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST ??
-    "wasmer,php,python"
+    "wasmer,php,python,curl"
   )
     .split(",")
     .map((part) => part.trim())

@@ -383,7 +383,16 @@ export async function sshShellExec(
   allowNonZeroExitCode = false,
 ): Promise<SshExecResult> {
   if (process.env.EDGE_SSH_SERVER) {
-    return sshExec(conn, command, allowNonZeroExitCode);
+    try {
+      return await sshExec(conn, command, allowNonZeroExitCode);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("Unable to exec")
+      ) {
+        throw error;
+      }
+    }
   }
 
   const START = `__START_${Math.random().toString(36).slice(2)}__`;
@@ -426,17 +435,18 @@ export async function sshShellExec(
         stream.removeListener("data", onStdout);
         stream.stderr.removeListener("data", onStderr);
 
-        const startIdx = stdout.indexOf(START);
-        let endIdx = -1;
-        if (startIdx !== -1) {
-          endIdx = stdout.indexOf(END, startIdx);
-        }
+        const endIdx = stdout.indexOf(END);
+        const startIdx =
+          endIdx === -1
+            ? stdout.lastIndexOf(START)
+            : stdout.lastIndexOf(START, endIdx);
         let cmdOut = "";
         if (startIdx !== -1 && endIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length, endIdx);
         } else if (startIdx !== -1) {
           cmdOut = stdout.substring(startIdx + START.length);
         }
+        cmdOut = cmdOut.replace(/^\r?\n/, "");
 
         if (code === undefined) {
           reject(
