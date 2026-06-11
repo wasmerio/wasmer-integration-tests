@@ -28,7 +28,7 @@ jobs:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
       frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
-      test_command: pnpm exec jest tests/general/sql.test.ts --runInBand --verbose
+      test_command: pnpm exec jest --runInBand --verbose
     secrets:
       pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 

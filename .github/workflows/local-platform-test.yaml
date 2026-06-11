@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install Wasmer CLI
         uses: wasmerio/setup-wasmer@v2
@@ -39,6 +41,16 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
+
+      - name: Set up Python for wasmopticon tests
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv for wasmopticon tests
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
 
       - run: make setup
 
@@ -89,8 +101,8 @@ jobs:
           EDGE_VERSION: ${{ inputs.edge_version }}
           FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
-          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
-          WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
+          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
+          WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
           GH_TOKEN: ${{ secrets.pat }}
           LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
