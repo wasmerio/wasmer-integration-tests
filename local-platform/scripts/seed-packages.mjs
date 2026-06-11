@@ -650,15 +650,14 @@ async function downloadPackage(pkg) {
     return outputPath;
   }
 
-  log(
-    `Downloading ${pkg.resolvedName}@${pkg.resolvedVersion} from ${sourceRegistry}`,
-  );
   const tempPath = `${outputPath}.${crypto.randomUUID()}.tmp`;
+  log(
+    `Downloading ${pkg.resolvedName}@${pkg.resolvedVersion} from ${sourceRegistry} to ${tempPath}`,
+  );
   await runWasmer(
     [
       "package",
       "download",
-      "--quiet",
       `${pkg.resolvedName}@=${pkg.resolvedVersion}`,
       "-o",
       tempPath,
