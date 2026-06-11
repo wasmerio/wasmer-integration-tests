@@ -21,13 +21,11 @@ if ! is_ci; then
   BACKEND_VERSION="${BACKEND_VERSION:-resolve_prod}"
   EDGE_VERSION="${EDGE_VERSION:-resolve_prod}"
   FRONTEND_VERSION="${FRONTEND_VERSION:-resolve_prod}"
-  LOCAL_TEST_COMMAND="${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
 fi
 
 [ -n "${BACKEND_VERSION:-}" ] || fail "BACKEND_VERSION is required"
 [ -n "${EDGE_VERSION:-}" ] || fail "EDGE_VERSION is required"
 [ -n "${FRONTEND_VERSION:-}" ] || fail "FRONTEND_VERSION is required"
-LOCAL_TEST_COMMAND="${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
 set_default_ports
 check_required_ports_available
 
@@ -36,7 +34,7 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$LOCAL_PLATFORM_DIR/runs/${timestamp}-${short_sha}"
 COMPOSE_PROJECT_NAME="wit_${timestamp}_${short_sha}"
 COMPOSE_PROJECT_NAME="$(printf '%s' "$COMPOSE_PROJECT_NAME" | tr '[:upper:]-' '[:lower:]_')"
-export RUN_DIR COMPOSE_PROJECT_NAME BACKEND_VERSION EDGE_VERSION FRONTEND_VERSION LOCAL_TEST_COMMAND
+export RUN_DIR COMPOSE_PROJECT_NAME BACKEND_VERSION EDGE_VERSION FRONTEND_VERSION
 
 mkdir -p "$RUN_DIR/logs" "$RUN_DIR/diagnostics" "$RUN_DIR/edge" "$RUN_DIR/artifacts" "$LOCAL_PLATFORM_DIR"
 ln -sfn "runs/$(basename "$RUN_DIR")" "$LOCAL_PLATFORM_DIR/current"
@@ -45,26 +43,27 @@ touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 log "Run directory: $RUN_DIR"
 
 LOG_FOLLOW_PID=""
+UP_SUCCEEDED=0
 cleanup() {
   local exit_code=$?
   set +e
+  if [ "$exit_code" -eq 0 ] && [ "$UP_SUCCEEDED" -eq 1 ]; then
+    return 0
+  fi
   if [ -n "$LOG_FOLLOW_PID" ]; then
     kill "$LOG_FOLLOW_PID" >/dev/null 2>&1 || true
     wait "$LOG_FOLLOW_PID" >/dev/null 2>&1 || true
+    rm -f "$RUN_DIR/logs/compose.follow.pid"
   fi
   if [ -f "$RUN_DIR/resolved.env" ]; then
     "$SCRIPT_DIR/collect-logs.sh" || true
-    if [ "$exit_code" -ne 0 ] && is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}"; then
+    if is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}"; then
       log_warn "LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE is set; leaving Compose project $COMPOSE_PROJECT_NAME running for inspection"
     else
       LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN=1 "$SCRIPT_DIR/down.sh" || true
     fi
   fi
-  if [ "$exit_code" -eq 0 ]; then
-    log "local-test passed; logs retained at $RUN_DIR"
-  else
-    log "local-test failed with status $exit_code; run retained at $RUN_DIR"
-  fi
+  log "local-platform-up failed with status $exit_code; run retained at $RUN_DIR"
   exit "$exit_code"
 }
 trap cleanup EXIT
@@ -81,8 +80,10 @@ compose up -d \
   minio_persistent minio_persistent_init \
   clickhouse loki vector
 
-compose logs --no-color --timestamps --follow > "$RUN_DIR/logs/compose.follow.log" 2>&1 &
+nohup docker compose --project-name "$COMPOSE_PROJECT_NAME" --file "$COMPOSE_FILE" logs --no-color --timestamps --follow \
+  > "$RUN_DIR/logs/compose.follow.log" 2>&1 &
 LOG_FOLLOW_PID=$!
+printf '%s\n' "$LOG_FOLLOW_PID" > "$RUN_DIR/logs/compose.follow.pid"
 
 log "Running backend migrations"
 timeout "${LOCAL_PLATFORM_MIGRATE_TIMEOUT_SECONDS:-300}" \
@@ -129,16 +130,7 @@ else
   log "No FRONTEND_IMAGE_REF set; skipping frontend container"
 fi
 
-log "Running tests: $LOCAL_TEST_COMMAND"
-set +e
-(
-  set -euo pipefail
-  # shellcheck disable=SC1091
-  source "$RUN_DIR/test-env.sh"
-  cd "$REPO_DIR"
-  timeout "${LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS:-1200}" bash -lc "$LOCAL_TEST_COMMAND"
-) 2>&1 | tee "$RUN_DIR/logs/tests.log"
-test_status=${PIPESTATUS[0]}
-set -e
-
-exit "$test_status"
+UP_SUCCEEDED=1
+log "local platform is running; run directory: $RUN_DIR"
+log "Use: source $RUN_DIR/test-env.sh"
+log "Stop with: make local-platform-down"

@@ -7,13 +7,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib.sh"
 load_resolved_env
 
+require_cmd docker
 mkdir -p "$RUN_DIR/artifacts"
 
-maybe_login_ecr() {
+maybe_login_backend_registry() {
   local image_ref="$1"
   local registry="${image_ref%%/*}"
 
   case "$registry" in
+    ghcr.io)
+      local token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+      [ -n "$token" ] || return 0
+      log "Authenticating Docker to ghcr.io using GitHub token"
+      printf '%s' "$token" \
+        | docker login ghcr.io --username "${GITHUB_ACTOR:-github-actions}" --password-stdin >/dev/null
+      return 0
+      ;;
     *.dkr.ecr.*.amazonaws.com)
       ;;
     *)
@@ -111,6 +120,28 @@ fetch_to_file() {
   esac
 }
 
+load_backend_image_archive() {
+  local archive_path="$1"
+  local image_ref="$2"
+  local load_log="$RUN_DIR/logs/backend-image-load.log"
+
+  log "Loading Backend Docker image archive $archive_path as $image_ref"
+  local loaded_ref
+  loaded_ref="$(docker load --input "$archive_path" | tee "$load_log" \
+    | sed -n 's/^Loaded image: //p; s/^Loaded image ID: //p' \
+    | tail -n 1)"
+  [ -n "$loaded_ref" ] || fail "Docker image archive did not report a loaded image; see $load_log"
+  docker tag "$loaded_ref" "$image_ref"
+}
+
+if [ -n "${BACKEND_IMAGE_SOURCE:-}" ]; then
+  fetch_to_file "$BACKEND_IMAGE_SOURCE" "$RUN_DIR/artifacts/backend-image.tar" backend-image
+  load_backend_image_archive "$RUN_DIR/artifacts/backend-image.tar" "$BACKEND_IMAGE_REF"
+else
+  maybe_login_backend_registry "$BACKEND_IMAGE_REF" || true
+  docker pull "$BACKEND_IMAGE_REF"
+fi
+
 fetch_to_file "$EDGE_RESOLVED" "$RUN_DIR/artifacts/edge" edge
 chmod +x "$RUN_DIR/artifacts/edge"
 log "Edge binary ready: $RUN_DIR/artifacts/edge"
@@ -121,7 +152,3 @@ else
   printf '[]\n' > "$RUN_DIR/artifacts/relay-persisted-queries.json"
   log "No frontend Relay manifest resolved; wrote an empty manifest"
 fi
-
-require_cmd docker
-maybe_login_ecr "$BACKEND_IMAGE_REF" || true
-docker pull "$BACKEND_IMAGE_REF"

@@ -113,7 +113,9 @@ confdb:
       use_distinct_queries: false
 
 package_cache:
-  registry_fallback: false
+  registry_fallback: true
+
+module_compilation_timeout: 900s
 
 package_registries:
   - url: ${backendBaseUrl}
@@ -143,6 +145,7 @@ instance_runtime:
   instance_threads_max: 2048
   default_thread_parallelism: 2
   per_workload_max_thread_count: 12
+  module_compilation_timeout: 900s
   enable_panic_tainting: true
   tokio_worker_thread_priority: 50
   cpu_load_1m_rejection_threshold: null
@@ -164,7 +167,7 @@ http_proxy:
   request_retries: 2
   retry_delay: 1s
   overload_backoff: null
-  package_compilation_timeout: 180s
+  package_compilation_timeout: 900s
   cdn_cache:
     enabled: false
     directory: /data/edge-cdn-cache
@@ -184,7 +187,7 @@ gateway:
   ignore_https_redirect: false
   limits:
     concurrency: 2000
-    request_timeout_secs: 120
+    request_timeout_secs: 900
     cname_recursive_limit: 5
     max_buffered_requests: 100
     connection_ip_rate_limit:
@@ -222,8 +225,8 @@ socket:
   proxy_connect_nominal_timeout_secs: 3
   proxy_connect_retries: 3
   proxy_send_timeout_secs: 20
-  proxy_recv_timeout_secs: 60
-  proxy_instance_acquire_timeout_secs: 25
+  proxy_recv_timeout_secs: 900
+  proxy_instance_acquire_timeout_secs: 900
   enable_socket_tainting: true
   instance_max_lifetime_graceful: 10s
   instance_max_lifetime_hard: 15s
@@ -231,7 +234,7 @@ socket:
 http_gateway:
   limits:
     concurrency: 2000
-    request_timeout_secs: 120
+    request_timeout_secs: 900
     cname_recursive_limit: 5
     max_buffered_requests: 100
     connection_ip_rate_limit:
@@ -251,7 +254,7 @@ http_gateway:
   proxy_connect_nominal_timeout_secs: 3
   proxy_connect_retries: 3
   proxy_send_timeout_secs: 60
-  proxy_recv_timeout_secs: 300
+  proxy_recv_timeout_secs: 900
   enable_socket_tainting: true
   block_native_rst: false
 

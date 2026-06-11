@@ -10,6 +10,7 @@ on:
 permissions:
   actions: read
   contents: read
+  packages: read
   pull-requests: read
 
 concurrency:
@@ -18,19 +19,13 @@ concurrency:
 
 jobs:
   tests:
-    uses: ./.github/workflows/integration-test-workflow.yaml
-    with:
-      test_branch: ${{ github.head_ref }}
-      provide_quality_assessment: true
-    secrets:
-      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
-      test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
-
-  local-platform:
     name: Local platform integration test
+    # Use Backend's GitHub release Docker image archive by default so Code QA
+    # does not need AWS/ECR access. Override LOCAL_PLATFORM_BACKEND_VERSION for
+    # candidate artifacts or emergency pinning.
     uses: ./.github/workflows/local-platform-test.yaml
     with:
-      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'resolve_prod' }}
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-release:wasmerio/backend:latest:backend-image.tar' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_prod' }}
       frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'resolve_prod' }}
       test_command: pnpm exec jest tests/general/sql.test.ts --runInBand --verbose

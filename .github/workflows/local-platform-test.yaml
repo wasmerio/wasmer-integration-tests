@@ -15,10 +15,16 @@ on:
       test_command:
         type: string
         default: pnpm exec jest ./tests/general/
+    secrets:
+      pat:
+        required: false
+      READ_RUST_DEPENDENCIES_PAT:
+        required: false
 
 permissions:
   contents: read
   actions: read
+  packages: read
 
 jobs:
   test:
@@ -35,12 +41,13 @@ jobs:
       - name: Run local platform tests
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
+          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY || 'ghcr.io/wasmerio/backend' }}
           EDGE_VERSION: ${{ inputs.edge_version }}
           FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
           WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.pat || secrets.READ_RUST_DEPENDENCIES_PAT || github.token }}
         run: make local-test
 
       - name: Upload local platform logs
