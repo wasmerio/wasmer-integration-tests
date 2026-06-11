@@ -51,6 +51,31 @@ jobs:
           echo "  test_command=$LOCAL_TEST_COMMAND"
           echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
 
+      - name: Validate private artifact/release access token
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          FRONTEND_VERSION: ${{ inputs.frontend_version }}
+          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+        run: |
+          set -euo pipefail
+          needs_pat=0
+          case "$BACKEND_VERSION" in
+            github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+          esac
+          case "$EDGE_VERSION" in
+            resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+          esac
+          case "$FRONTEND_VERSION" in
+            github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+          esac
+
+          if [ "$needs_pat" = "1" ] && [ "$HAS_ARTIFACT_FETCH_PAT" != "true" ]; then
+            echo "::error::LOCAL_PLATFORM_ARTIFACT_FETCH_PAT is required for private wasmerio/backend artifacts or wasmerio/edge dev releases, but it was not passed to the workflow."
+            echo "Create repository/org secret LOCAL_PLATFORM_ARTIFACT_FETCH_PAT and make sure it is available to this repository/event."
+            exit 1
+          fi
+
       - name: Run local platform tests
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
@@ -60,7 +85,7 @@ jobs:
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "1800"
           WASMER_TEST_FETCH_TIMEOUT_MS: "60000"
-          GH_TOKEN: ${{ secrets.pat || github.token }}
+          GH_TOKEN: ${{ secrets.pat }}
           LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
 
