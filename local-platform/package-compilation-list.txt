@@ -1,0 +1,13 @@
+# Additional packages to precompile before local-platform tests run.
+#
+# The local platform automatically precompiles every exact package version that
+# package seeding resolved into the disposable local registry. Add one package
+# per line here for extra packages that are not part of package seeding yet but
+# should still be warmed in Edge's compiler cache before tests start.
+#
+# Formats:
+#   namespace/name
+#   namespace/name@1.2.3
+#   sha256:<package-hash>
+#
+# Blank lines and comments are ignored.

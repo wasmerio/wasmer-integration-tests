@@ -209,6 +209,11 @@ local registry after Backend is healthy and before Edge/tests start:
    and retries the publish.
 7. The seed plan and result are written to
    `.local-platform/current/diagnostics/package-seed.json`.
+8. Before Edge starts, `local-platform/scripts/ensure-compiled.sh` reads the
+   resolved seed plan plus `local-platform/package-compilation-list.txt` and runs
+   `edge local ensure-compiled --scan-filesystem` inside the Edge runtime
+   container. This warms the same `/data` compiler cache volume that the Edge
+   server uses during tests, avoiding first-request cold compilation timeouts.
 
 Manual additions:
 
@@ -241,6 +246,16 @@ export LOCAL_PLATFORM_PACKAGE_DIRECT_REF_NAMESPACE_ALLOWLIST=wasmer,myteam
 # Scan different roots or use a different manual list.
 export LOCAL_PLATFORM_PACKAGE_SCAN_DIRS=tests,wasmopticon,fixtures,src/app
 export LOCAL_PLATFORM_PACKAGE_SEED_FILE=local-platform/package-seed.txt
+
+# Disable precompilation only when debugging startup/compilation itself.
+export LOCAL_PLATFORM_ENSURE_COMPILED=0
+
+# Compile additional engines or limit per-compilation threads.
+export LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES=wasmer-cranelift
+export LOCAL_PLATFORM_ENSURE_COMPILED_THREADS=1
+
+# Add extra packages that are not part of package seeding yet.
+# See local-platform/package-compilation-list.txt.
 ```
 
 The source token is optional for public packages. Do not commit tokens in

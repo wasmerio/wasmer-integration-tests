@@ -130,6 +130,8 @@ node "$REPO_DIR/local-platform/scripts/persist-relay-queries.mjs" \
   "$RUN_DIR/artifacts/relay-persisted-queries.json" \
   "http://localhost:${BACKEND_HTTP_PORT}/graphql/persist"
 
+"$SCRIPT_DIR/ensure-compiled.sh"
+
 log "Starting Edge"
 compose up -d edge
 node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://127.0.0.1:${EDGE_HTTP_PORT}/" "${LOCAL_PLATFORM_EDGE_TIMEOUT_MS:-120000}"
