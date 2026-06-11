@@ -25,6 +25,9 @@ on:
       pat:
         required: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   actions: read
@@ -128,6 +131,21 @@ jobs:
           GH_TOKEN: ${{ secrets.pat }}
           LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
+
+      - name: Normalize local platform cache permissions
+        if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          for path in \
+            .local-platform/package-cache \
+            .local-platform/cache/edge/compiler_cache \
+            .local-platform/cache/edge/webc_cache
+          do
+            if [ -e "$path" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$path"
+              chmod -R u+rwX,go+rX "$path"
+            fi
+          done
 
       - name: Save local platform package and compiler caches
         if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'

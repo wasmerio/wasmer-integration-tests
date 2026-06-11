@@ -4,6 +4,9 @@ concurrency:
   group: ${{ github.ref }}-${{ inputs.registry }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read # access to check out code and install dependencies for python (wasmopticon tests)
   actions: read
