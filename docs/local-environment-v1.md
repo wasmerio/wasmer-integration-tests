@@ -355,10 +355,10 @@ FRONTEND_VERSION=<selector>
 | Edge     | Current active prod Edge release, resolved from production Edge/Node API or deployment metadata. | Downloaded Edge binary path.                      |
 | Frontend | Current prod Frontend deployment metadata.                                                       | Frontend runtime artifact/image + Relay manifest. |
 
-`EDGE_VERSION=resolve_dev` resolves the latest Edge GitHub release whose tag ends
-in `_dev1` (override with `EDGE_DEV_RELEASE_SUFFIX`) and downloads the matching
-release asset. CI can use this to track the latest Edge binary deployed to the dev
-environment without touching ECR or Kubernetes.
+`EDGE_VERSION=resolve_dev` resolves the latest `wasmerio/edge` GitHub release
+whose tag ends in `_dev1` (override with `EDGE_DEV_RELEASE_SUFFIX`) and downloads
+the matching release asset. CI can use this to track the latest Edge binary
+pushed to the dev environment without touching ECR or Kubernetes.
 
 Rules:
 

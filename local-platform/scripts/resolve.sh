@@ -137,10 +137,10 @@ resolve_edge_dev_github_release() {
   local suffix="${EDGE_DEV_RELEASE_SUFFIX:-_dev1}"
 
   if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
-    tag="$(gh release list --repo "$repo" --limit 100 --json tagName,publishedAt --jq "map(select(.tagName | endswith(\"$suffix\"))) | sort_by(.publishedAt) | last | .tagName // \"\"" 2>/dev/null || true)"
+    tag="$(gh release list --repo "$repo" --limit 200 --order desc --json tagName,publishedAt --jq "map(select(.tagName | endswith(\"$suffix\"))) | sort_by(.publishedAt) | last | .tagName // \"\"" 2>/dev/null || true)"
   fi
 
-  [ -n "$tag" ] || fail "EDGE_VERSION=resolve_dev requires EDGE_DEV_GITHUB_TAG or GitHub release access to the latest $repo release ending in $suffix"
+  [ -n "$tag" ] || fail "EDGE_VERSION=resolve_dev requires EDGE_DEV_GITHUB_TAG or GitHub release access to the latest $repo release ending in $suffix. Ensure LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on $repo."
   printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
 }
 

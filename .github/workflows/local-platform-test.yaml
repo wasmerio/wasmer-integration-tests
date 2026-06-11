@@ -36,6 +36,21 @@ jobs:
 
       - run: make setup
 
+      - name: Log local platform selection
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          FRONTEND_VERSION: ${{ inputs.frontend_version }}
+          LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+        run: |
+          echo "Local platform requested versions:"
+          echo "  backend_version=$BACKEND_VERSION"
+          echo "  edge_version=$EDGE_VERSION"
+          echo "  frontend_version=$FRONTEND_VERSION"
+          echo "  test_command=$LOCAL_TEST_COMMAND"
+          echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
+
       - name: Run local platform tests
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}

@@ -41,6 +41,12 @@ ln -sfn "runs/$(basename "$RUN_DIR")" "$LOCAL_PLATFORM_DIR/current"
 touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 
 log "Run directory: $RUN_DIR"
+log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION frontend=$FRONTEND_VERSION"
+if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
+  log "GitHub token is available for private artifact/release fetches"
+else
+  log_warn "No GitHub token is available; private artifact/release fetches may fail"
+fi
 
 LOG_FOLLOW_PID=""
 UP_SUCCEEDED=0
@@ -68,9 +74,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+log "Resolving concrete Backend/Edge/Frontend versions"
 "$SCRIPT_DIR/resolve.sh"
 # shellcheck disable=SC1091
 source "$RUN_DIR/resolved.env"
+log "Resolved versions: backend_image_ref=$BACKEND_IMAGE_REF backend_image_source=${BACKEND_IMAGE_SOURCE:-<registry-pull>} edge=$EDGE_RESOLVED frontend=$FRONTEND_RESOLVED"
+log "Fetching resolved artifacts and images"
 "$SCRIPT_DIR/fetch-artifacts.sh"
 
 log "Starting dependency services"

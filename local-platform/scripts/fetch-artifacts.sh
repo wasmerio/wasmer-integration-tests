@@ -152,17 +152,21 @@ load_backend_image_archive() {
 }
 
 if [ -n "${BACKEND_IMAGE_SOURCE:-}" ]; then
+  log "Fetching Backend image archive from $BACKEND_IMAGE_SOURCE"
   fetch_to_file "$BACKEND_IMAGE_SOURCE" "$RUN_DIR/artifacts/backend-image.tar" backend-image
   load_backend_image_archive "$RUN_DIR/artifacts/backend-image.tar" "$BACKEND_IMAGE_REF"
 else
+  log "Pulling Backend Docker image $BACKEND_IMAGE_REF"
   maybe_login_backend_registry "$BACKEND_IMAGE_REF" || true
   docker pull "$BACKEND_IMAGE_REF"
 fi
 
+log "Fetching Edge binary from $EDGE_RESOLVED"
 fetch_to_file "$EDGE_RESOLVED" "$RUN_DIR/artifacts/edge" edge
 chmod +x "$RUN_DIR/artifacts/edge"
 log "Edge binary ready: $RUN_DIR/artifacts/edge"
 
+log "Fetching Frontend Relay manifest from $FRONTEND_RESOLVED"
 if fetch_to_file "$FRONTEND_RESOLVED" "$RUN_DIR/artifacts/relay-persisted-queries.json" frontend-relay; then
   log "Relay persisted queries ready: $RUN_DIR/artifacts/relay-persisted-queries.json"
 else
