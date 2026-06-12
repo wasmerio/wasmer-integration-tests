@@ -1,37 +1,104 @@
-[sources.http_logs]
-type = "http_server"
+[sources.instance_logs]
+type = "http"
 address = "0.0.0.0:9089"
-encoding = "json"
 
-[transforms.instance_logs]
+[sources.instance_logs.decoding]
+codec = "native_json"
+
+[sources.instance_logs.framing]
+method = "newline_delimited"
+max_length = "1000"
+
+[transforms.instance_logs_legacy_loki]
 type = "remap"
-inputs = ["http_logs"]
+inputs = ["instance_logs"]
 source = '''
-# Edge sends payloads as {"log": {"message": "<json string>",
-# "app_id": "da_...", "app_version_id": "dav_..."}}. Backend/CLI log
-# queries expect Loki labels app/app_id/app_version_id and a top-level JSON
-# field named `message` containing the inner instance-log JSON.
+# Edge sends newline-delimited JSON payloads shaped like:
+#   {"log": {"message": "<json string>", "app_id": "da_...", ...}}
+#
+# The current backend image used by local-platform still queries Loki with a
+# two-stage JSON parse that expects a top-level `message` field containing the
+# inner instance-log JSON string.
 .app = "deploy-instances"
 .app_id = to_string!(.log.app_id)
 .app_version_id = to_string(.log.app_version_id) ?? ""
 .message = to_string!(.log.message)
 
 if exists(.log.app_id_numeric) {
-  .app_id_numeric = .log.app_id_numeric
+  .app_id_numeric = to_int(.log.app_id_numeric) ?? 0
 }
 if exists(.log.app_version_id_numeric) {
-  .app_version_id_numeric = .log.app_version_id_numeric
+  .app_version_id_numeric = to_int(.log.app_version_id_numeric) ?? 0
 }
+
+del(.log)
+del(.path)
+del(.source_type)
+'''
+
+[transforms.instance_logs_clickhouse]
+type = "remap"
+inputs = ["instance_logs"]
+source = '''
+# Normalize the current Edge payload into rows that match ClickHouse app_logs.
+del(.path)
+del(.source_type)
+
+parsed, err = parse_json(.log.message)
+if err != null {
+  log("dropping malformed instance log: log.message is not valid JSON", level: "error", rate_limit_secs: 10)
+  abort
+}
+
+.timestamp = parsed.timestamp
+.instance_id = to_string(parsed.instance_id) ?? "00000000-0000-0000-0000-000000000000"
+stream = to_int(parsed.stream) ?? 0
+if stream == 1 {
+  .stream = "Stdout"
+} else if stream == 2 {
+  .stream = "Stderr"
+} else if stream == 3 {
+  .stream = "Runtime"
+} else {
+  .stream = "Unknown"
+}
+.message = to_string(parsed.message) ?? ""
+.job_uid = to_string(parsed.job_uid) ?? "00000000-0000-0000-0000-000000000000"
+if .job_uid == "" {
+  .job_uid = "00000000-0000-0000-0000-000000000000"
+}
+
+.app_id = to_int(.log.app_id_numeric) ?? 0
+.app_version_id = to_int(.log.app_version_id_numeric) ?? 0
+.app_id_external = to_string(.log.app_id) ?? ""
+.app_version_id_external = to_string(.log.app_version_id) ?? ""
 
 del(.log)
 '''
 
-[sinks.loki]
+[sinks.instance_logs_to_loki]
 type = "loki"
-inputs = ["instance_logs"]
+inputs = ["instance_logs_legacy_loki"]
 endpoint = "http://loki:3100"
 encoding.codec = "json"
 labels.app = "{{ app }}"
 labels.app_id = "{{ app_id }}"
 labels.app_version_id = "{{ app_version_id }}"
 labels.source = "local-platform"
+
+[sinks.instance_logs_to_loki.healthcheck]
+enabled = false
+
+[sinks.instance_logs_to_clickhouse]
+type = "clickhouse"
+inputs = ["instance_logs_clickhouse"]
+endpoint = "http://clickhouse:8123"
+database = "edge_metrics_local"
+table = "app_logs"
+format = "json_each_row"
+skip_unknown_fields = true
+date_time_best_effort = true
+compression = "gzip"
+
+[sinks.instance_logs_to_clickhouse.healthcheck]
+enabled = false

@@ -241,6 +241,7 @@ services:
       SM_BE_PRIMARY_APP_DOMAIN: localhost
       LOKI_URI: http://loki:3100
       METRICS_CLICKHOUSE_URL: http://default:root@clickhouse:8123/edge_metrics_local
+      DOCKER_BUILDKIT: "1"
       RUST_LOG: info
       SECRET_KEY: local-dev-secret
     extra_hosts:
@@ -255,6 +256,7 @@ services:
       # the daemon, so the project directory does not need to exist on the host.
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DOCKER_CLI_PATH:-/usr/bin/docker}:/usr/bin/docker:ro
+      - ${DOCKER_BUILDX_PATH}:/usr/libexec/docker/cli-plugins/docker-buildx:ro
     depends_on:
       postgres:
         condition: service_healthy
