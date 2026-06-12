@@ -66,35 +66,9 @@ if .job_uid == "" {
 del(.log)
 '''
 
-[transforms.instance_logs_for_clickhouse]
-type = "remap"
-inputs = ["instance_logs_cleaned"]
-source = '''
-# ClickHouse should keep the normalized message body directly for analytics.
-. = .
-'''
-
-[transforms.instance_logs_for_loki]
-type = "remap"
-inputs = ["instance_logs_cleaned"]
-source = '''
-# Backend's Loki log query currently expects each Loki line to be an outer JSON
-# object whose `message` field contains another JSON object with the original
-# stream metadata. Mirror that production shape here so `wasmer app logs` and
-# StackMachine SDK log polling can parse stdout/stderr correctly.
-inner = {
-  "message": .message,
-  "stream": .stream,
-  "timestamp": .timestamp,
-  "instance_id": .instance_id,
-  "job_uid": .job_uid,
-}
-.message = encode_json(inner)
-'''
-
 [sinks.instance_logs_to_clickhouse]
 type = "clickhouse"
-inputs = ["instance_logs_for_clickhouse"]
+inputs = ["instance_logs_cleaned"]
 endpoint = "http://clickhouse:8123"
 database = "edge_metrics_local"
 table = "app_logs"
@@ -108,7 +82,7 @@ enabled = false
 
 [sinks.instance_logs_to_loki]
 type = "loki"
-inputs = ["instance_logs_for_loki"]
+inputs = ["instance_logs_cleaned"]
 endpoint = "http://loki:3100"
 
 [sinks.instance_logs_to_loki.encoding]
