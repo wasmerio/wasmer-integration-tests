@@ -172,7 +172,12 @@ set +e
   # shellcheck disable=SC1091
   source "$RUN_DIR/test-env.sh"
   cd "$REPO_DIR"
-  timeout "${LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS:-1200}" bash -lc "$LOCAL_TEST_COMMAND"
+  # Mirror GitHub Actions bash run-step semantics so multi-line suite commands
+  # fail on the first failing command instead of returning the exit status of
+  # only the last line.
+  timeout "${LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS:-1200}" \
+    bash -lc "set -euo pipefail
+$LOCAL_TEST_COMMAND"
 ) 2>&1 | tee "$RUN_DIR/logs/tests.log"
 test_status=${PIPESTATUS[0]}
 set -e
