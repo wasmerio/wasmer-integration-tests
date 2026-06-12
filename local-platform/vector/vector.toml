@@ -89,7 +89,7 @@ inner = {
   "instance_id": .instance_id,
   "job_uid": .job_uid,
 }
-.message = encode_json(inner) ?? "{}"
+.message = encode_json(inner)
 '''
 
 [sinks.instance_logs_to_clickhouse]
