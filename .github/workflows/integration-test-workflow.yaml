@@ -104,6 +104,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python_version }}
+          enable-cache: false
       - name: Setup and activate virtual environment
         if: ${{ matrix.requires_python == true }}
         run: |
