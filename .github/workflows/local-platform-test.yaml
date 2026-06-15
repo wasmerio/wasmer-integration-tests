@@ -65,6 +65,9 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Ensure uv cache dir exists
+        run: mkdir -p "${UV_CACHE_DIR:?}"
+
       - run: make setup
 
       - name: Restore local platform package and compiler caches
