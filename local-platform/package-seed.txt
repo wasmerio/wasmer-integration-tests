@@ -11,8 +11,9 @@
 #   namespace/name@^1.2.0   # semver range
 #   namespace/name 1.*      # whitespace form, useful for constraints with @
 #
-# By default only wasmer/*, php/*, python/*, and curl/* package names are accepted.
-# Override LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST to add more namespaces.
+# Any namespace/name package reference is accepted here as long as it is a
+# syntactically valid package name. Transitive dependencies resolved from the
+# source registry are also mirrored without namespace filtering.
 
 wasmer/s3-server
 wasmer/cli

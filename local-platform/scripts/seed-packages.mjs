@@ -38,15 +38,6 @@ const wasmerDownloadLogPath = runDir
   ? path.join(runDir, "logs", "wasmer-package-download.log")
   : null;
 let latestDiagnostics = null;
-const namespaceAllowlist = new Set(
-  (
-    process.env.LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST ??
-    "wasmer,php,python,curl"
-  )
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean),
-);
 const directRefNamespaceAllowlist = new Set(
   (
     process.env.LOCAL_PLATFORM_PACKAGE_DIRECT_REF_NAMESPACE_ALLOWLIST ??
@@ -108,11 +99,10 @@ async function writeDiagnostics(extra = {}) {
   );
 }
 
-function isPackageName(value) {
+function isValidPackageName(value) {
   const parts = value.split("/");
   return (
     parts.length === 2 &&
-    namespaceAllowlist.has(parts[0]) &&
     /^[a-z0-9_.-]+$/i.test(parts[0]) &&
     /^[a-z0-9_.-]+$/i.test(parts[1])
   );
@@ -147,7 +137,7 @@ function parsePackageSpec(raw) {
 }
 
 function addRequirement(requirements, name, constraint, source) {
-  if (!isPackageName(name)) {
+  if (!isValidPackageName(name)) {
     return;
   }
 
@@ -436,13 +426,14 @@ async function resolveAllRequirements(initialRequirements) {
     resolvedByExact.set(exactKey, resolved);
 
     for (const dependency of resolved.dependencies) {
-      if (isPackageName(dependency.name)) {
-        queue.push({
-          name: dependency.name,
-          constraint: dependency.constraint,
-          sources: [`dependency of ${exactKey}`],
-        });
+      if (!isValidPackageName(dependency.name)) {
+        continue;
       }
+      queue.push({
+        name: dependency.name,
+        constraint: dependency.constraint,
+        sources: [`dependency of ${exactKey}`],
+      });
     }
   }
 
@@ -807,7 +798,6 @@ async function main() {
   latestDiagnostics = {
     sourceRegistry,
     targetRegistry,
-    namespaceAllowlist: [...namespaceAllowlist],
     directRefNamespaceAllowlist: [...directRefNamespaceAllowlist],
     scanDirs,
     seedFile,

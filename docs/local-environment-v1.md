@@ -236,11 +236,11 @@ export LOCAL_PLATFORM_SEED_PACKAGES=0
 export LOCAL_PLATFORM_PACKAGE_SOURCE_REGISTRY=https://registry.wasmer.io/graphql
 export LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN=...
 
-# Add namespaces beyond the default wasmer,php,python dependency allowlist.
-export LOCAL_PLATFORM_PACKAGE_NAMESPACE_ALLOWLIST=wasmer,php,python,myteam
-
-# Direct string refs are more conservative to avoid matching fixture paths;
-# by default only wasmer/* refs like `wasmer/bash` are auto-added this way.
+# Direct string refs are more conservative to avoid matching fixture paths.
+# Explicit manifest dependencies, manual seed entries, and resolved transitive
+# dependencies are mirrored for any valid namespace/name package reference.
+# By default only wasmer/* refs like `wasmer/bash` are auto-added from generic
+# string literal scanning.
 export LOCAL_PLATFORM_PACKAGE_DIRECT_REF_NAMESPACE_ALLOWLIST=wasmer,myteam
 
 # Scan different roots or use a different manual list.
