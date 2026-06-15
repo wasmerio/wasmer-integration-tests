@@ -16,24 +16,32 @@ source = '''
 # Match the production Vector pipeline semantics used by Edge app logs, while
 # adapting to local-platform's containerized setup:
 # - Vector listens on 0.0.0.0 instead of 127.0.0.1
-# - Edge sends the current payload shape from runtime/src/logging/vector.rs:
-#     {"log": {"message": "<json string>", "app_id": "da_...", ...}}
+# - Edge currently POSTs flattened JSON fields to the HTTP source, e.g.:
+#     {"message": "<json string>", "app_id": "da_...", ...}
+# - Keep backward compatibility with the older nested `.log` envelope too.
 del(.path)
 del(.source_type)
 
-if !exists(.log) || !is_object(.log) {
-  log("dropping malformed instance log: missing log envelope", level: "error", rate_limit_secs: 10)
+envelope = {}
+if exists(.log) && is_object(.log) {
+  envelope = .log
+} else {
+  envelope = .
+}
+
+raw_payload = envelope.message
+if raw_payload == null {
+  log("dropping malformed instance log: missing message payload", level: "error", rate_limit_secs: 10)
   abort
 }
 
-raw_payload = .log.message
 parsed = {}
 if is_object(raw_payload) {
   parsed = raw_payload
 } else {
   parsed_json, err = parse_json(to_string(raw_payload) ?? "")
   if err != null || !is_object(parsed_json) {
-    log("dropping malformed instance log: log.message is not valid JSON", level: "error", rate_limit_secs: 10)
+    log("dropping malformed instance log: message is not valid JSON", level: "error", rate_limit_secs: 10)
     abort
   }
   parsed = parsed_json
@@ -58,10 +66,10 @@ if .job_uid == "" {
   .job_uid = "00000000-0000-0000-0000-000000000000"
 }
 
-.app_id_external = to_string(.log.app_id) ?? ""
-.app_version_id_external = to_string(.log.app_version_id) ?? ""
-.app_id = to_int(.log.app_id_numeric) ?? 0
-.app_version_id = to_int(.log.app_version_id_numeric) ?? 0
+.app_id_external = to_string(envelope.app_id) ?? ""
+.app_version_id_external = to_string(envelope.app_version_id) ?? ""
+.app_id = to_int(envelope.app_id_numeric) ?? 0
+.app_version_id = to_int(envelope.app_version_id_numeric) ?? 0
 
 del(.log)
 '''
@@ -69,7 +77,7 @@ del(.log)
 [sinks.instance_logs_to_clickhouse]
 type = "clickhouse"
 inputs = ["instance_logs_cleaned"]
-endpoint = "http://clickhouse:8123"
+endpoint = "http://default:root@clickhouse:8123"
 database = "edge_metrics_local"
 table = "app_logs"
 format = "json_each_row"
@@ -80,9 +88,24 @@ compression = "gzip"
 [sinks.instance_logs_to_clickhouse.healthcheck]
 enabled = false
 
+[transforms.instance_logs_for_loki]
+type = "remap"
+inputs = ["instance_logs_cleaned"]
+source = '''
+# Backend's Loki reader expects each stored line to be JSON with a `message`
+# field whose value is itself a JSON string containing the structured log.
+.message = encode_json({
+  "timestamp": .timestamp,
+  "stream": .stream,
+  "message": .message,
+  "instance_id": .instance_id,
+  "job_uid": .job_uid,
+})
+'''
+
 [sinks.instance_logs_to_loki]
 type = "loki"
-inputs = ["instance_logs_cleaned"]
+inputs = ["instance_logs_for_loki"]
 endpoint = "http://loki:3100"
 
 [sinks.instance_logs_to_loki.encoding]

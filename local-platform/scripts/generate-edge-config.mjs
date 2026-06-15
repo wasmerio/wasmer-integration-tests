@@ -310,6 +310,11 @@ workloads:
       env_vars:
         - name: ENCRYPTED_TEST
           value: "testvalue123"
+    logging:
+      enabled: true
+      capture_stdout: true
+      capture_stderr: true
+      capture_trap: true
 
 volumes:
   local:

@@ -9,6 +9,159 @@ source "$SCRIPT_DIR/../lib.sh"
 require_cmd docker
 require_cmd node
 
+start_compose_log_follow() {
+  local pid_file="$RUN_DIR/logs/compose.follow.pid"
+  local existing_pid=""
+  if [ -f "$pid_file" ]; then
+    existing_pid="$(cat "$pid_file" 2>/dev/null || true)"
+  fi
+
+  if process_is_running "$existing_pid"; then
+    LOG_FOLLOW_PID="$existing_pid"
+    return 0
+  fi
+
+  nohup docker compose --project-name "$COMPOSE_PROJECT_NAME" --file "$COMPOSE_FILE" logs --no-color --timestamps --follow \
+    > "$RUN_DIR/logs/compose.follow.log" 2>&1 &
+  LOG_FOLLOW_PID=$!
+  printf '%s\n' "$LOG_FOLLOW_PID" > "$pid_file"
+}
+
+generated_test_env_var() {
+  local var_name="$1"
+  [ -f "$RUN_DIR/test-env.sh" ] || return 1
+  bash -lc "set -a; source \"$RUN_DIR/test-env.sh\"; set +a; printf '%s' \"\${$var_name:-}\""
+}
+
+local_admin_username() {
+  local whoami_output username
+  whoami_output="$(bash -lc "set -a; source \"$RUN_DIR/test-env.sh\"; set +a; wasmer whoami" 2>/dev/null || true)"
+  username="$(printf '%s' "$whoami_output" | sed -n 's/^Logged into registry .* as user \([^[:space:]]\+\)$/\1/p' | head -n1)"
+  if [ -n "$username" ]; then
+    printf '%s' "$username"
+    return 0
+  fi
+
+  printf 'local-dev'
+}
+
+print_access_summary() {
+  local frontend_url="disabled"
+  local admin_username admin_token
+  if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
+    frontend_url="http://localhost:${FRONTEND_HTTP_PORT}"
+  fi
+  admin_username="$(local_admin_username)"
+  admin_token="$(generated_test_env_var WASMER_TOKEN || true)"
+
+  local reset="" dim="" cyan="" green="" yellow="" bold=""
+  local rule="────────────────────────────────────────────────────────────────────────────"
+  if log_use_color; then
+    reset="$ANSI_RESET"
+    dim="$ANSI_DIM_GRAY"
+    cyan="$ANSI_CYAN"
+    green="$ANSI_GREEN"
+    yellow="$ANSI_YELLOW"
+    bold=$'\033[1m'
+  fi
+
+  log_clear
+  cat >&2 <<EOF
+
+${bold}${cyan}Local platform is running${reset}
+${cyan}${rule}${reset}
+
+${cyan}┌${rule}${reset}
+${cyan}│${reset} ${bold}Run directory${reset}
+${cyan}│${reset} ${RUN_DIR}
+${cyan}│${reset} Current env: ${dim}source ${RUN_DIR}/test-env.sh${reset}
+${cyan}└${rule}${reset}
+
+${cyan}┌${rule}${reset}
+${cyan}│${reset} ${bold}How to use it${reset}
+${cyan}│${reset} ${dim}Load local env (sets WASMER_REGISTRY, WASMER_TOKEN, EDGE_SERVER, etc.)${reset}
+${cyan}│${reset}   ${green}source ${RUN_DIR}/test-env.sh${reset}
+${cyan}│${reset} ${dim}Run a targeted local test${reset}
+${cyan}│${reset}   ${green}pnpm exec jest tests/validation/log.test.ts --runInBand${reset}
+${cyan}│${reset} ${dim}Inspect apps / auth${reset}
+${cyan}│${reset}   ${green}wasmer app list${reset}
+${cyan}│${reset}   ${green}wasmer whoami${reset}
+${cyan}│${reset} ${dim}Local admin${reset} user=${yellow}${admin_username}${reset} token=${yellow}${admin_token}${reset}
+${cyan}│${reset} ${dim}Key env${reset} WASMER_REGISTRY=${green}http://localhost:${BACKEND_HTTP_PORT}/graphql${reset} EDGE_SERVER=${green}http://127.0.0.1:${EDGE_HTTP_PORT}${reset}
+${cyan}│${reset} ${dim}Stop everything${reset}
+${cyan}│${reset}   ${yellow}make local-platform-down${reset}
+${cyan}└${rule}${reset}
+
+${cyan}┌${rule}${reset}
+${cyan}│${reset} ${bold}Primary endpoints${reset}
+${cyan}│${reset} ${dim}Backend GraphQL / registry${reset} ${green}http://localhost:${BACKEND_HTTP_PORT}/graphql${reset}
+${cyan}│${reset} ${dim}Frontend                  ${reset} ${green}${frontend_url}${reset}
+${cyan}│${reset} ${dim}Edge HTTP                 ${reset} ${green}http://127.0.0.1:${EDGE_HTTP_PORT}${reset}
+${cyan}│${reset} ${dim}Edge HTTPS                ${reset} ${green}https://127.0.0.1:${EDGE_HTTPS_PORT}${reset}
+${cyan}│${reset} ${dim}Edge SSH                  ${reset} ${green}ssh://127.0.0.1:${EDGE_SSH_PORT}${reset}
+${cyan}│${reset} ${dim}Edge DNS                  ${reset} ${green}127.0.0.1:${EDGE_DNS_PORT}${reset}
+${cyan}└${rule}${reset}
+
+${cyan}┌${rule}${reset}
+${cyan}│${reset} ${bold}Observability and services${reset}
+${cyan}│${reset} ${dim}Compose logs${reset}   ${RUN_DIR}/logs/compose.follow.log
+${cyan}│${reset} ${dim}Follow logs${reset}   ${yellow}make local-platform-logs${reset}
+${cyan}│${reset} ${dim}Loki${reset}           ${green}http://localhost:${LOKI_PORT}${reset}
+${cyan}│${reset} ${dim}Vector${reset}         ${green}http://127.0.0.1:${VECTOR_HTTP_PORT}${reset}
+${cyan}│${reset} ${dim}ClickHouse${reset}     ${green}http://localhost:${CLICKHOUSE_HTTP_PORT}${reset} ${dim}(db=${yellow}edge_metrics_local${reset}${dim} user=${yellow}default${reset}${dim} password=${yellow}root${reset}${dim})${reset}
+${cyan}│${reset} ${dim}Postgres${reset}       localhost:${POSTGRES_PORT} ${dim}(db=${yellow}wapm${reset}${dim} user=${yellow}postgres${reset}${dim} password=${yellow}postgres${reset}${dim})${reset}
+${cyan}│${reset} ${dim}Redis${reset}          localhost:${REDIS_PORT}
+${cyan}│${reset} ${dim}MySQL app DB${reset}   localhost:${MYSQL_APP_DB_1_PORT} ${dim}(user=${yellow}root${reset}${dim} password=${yellow}root${reset}${dim})${reset}
+${cyan}└${rule}${reset}
+
+EOF
+}
+
+reuse_existing_run_if_running() {
+  local existing_run_dir
+  existing_run_dir="$(current_run_dir || true)"
+  [ -n "$existing_run_dir" ] || return 1
+  [ -f "$existing_run_dir/resolved.env" ] || return 1
+
+  RUN_DIR="$existing_run_dir"
+  export RUN_DIR
+  # shellcheck disable=SC1090
+  source "$RUN_DIR/resolved.env"
+
+  if ! compose_project_has_running_containers; then
+    return 1
+  fi
+
+  mkdir -p "$RUN_DIR/logs"
+  log "Reusing existing local platform run: $RUN_DIR"
+
+  if compose_service_is_running backend && compose_service_is_running edge; then
+    start_compose_log_follow
+    print_access_summary
+    return 0
+  fi
+
+  log "Found a partially running Compose project; ensuring services are up"
+  compose up -d \
+    postgres redis \
+    mysql_app_db_1 mysql_app_db_2 \
+    minio_persistent minio_persistent_init \
+    clickhouse loki vector
+  compose up -d backend
+  node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://localhost:${BACKEND_HTTP_PORT}/graphql" "${LOCAL_PLATFORM_BACKEND_TIMEOUT_MS:-120000}"
+  compose up -d edge
+  node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://127.0.0.1:${EDGE_HTTP_PORT}/" "${LOCAL_PLATFORM_EDGE_TIMEOUT_MS:-120000}"
+
+  if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
+    compose --profile frontend up -d frontend
+  fi
+
+  start_compose_log_follow
+
+  print_access_summary
+  return 0
+}
+
 if [ -f "$REPO_DIR/local.env" ]; then
   log "Loading local.env"
   set -a
@@ -28,6 +181,11 @@ fi
 [ -n "${FRONTEND_VERSION:-}" ] || fail "FRONTEND_VERSION is required"
 set_default_ports
 set_default_cache_dirs
+
+if reuse_existing_run_if_running; then
+  exit 0
+fi
+
 check_required_ports_available
 
 short_sha="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || printf local)"
@@ -100,10 +258,7 @@ compose up -d \
   minio_persistent minio_persistent_init \
   clickhouse loki vector
 
-nohup docker compose --project-name "$COMPOSE_PROJECT_NAME" --file "$COMPOSE_FILE" logs --no-color --timestamps --follow \
-  > "$RUN_DIR/logs/compose.follow.log" 2>&1 &
-LOG_FOLLOW_PID=$!
-printf '%s\n' "$LOG_FOLLOW_PID" > "$RUN_DIR/logs/compose.follow.pid"
+start_compose_log_follow
 
 log "Running backend migrations"
 timeout "${LOCAL_PLATFORM_MIGRATE_TIMEOUT_SECONDS:-300}" \
@@ -153,6 +308,4 @@ else
 fi
 
 UP_SUCCEEDED=1
-log "local platform is running; run directory: $RUN_DIR"
-log "Use: source $RUN_DIR/test-env.sh"
-log "Stop with: make local-platform-down"
+print_access_summary

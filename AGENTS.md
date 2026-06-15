@@ -5,10 +5,21 @@ Overview on contribution requirements & guidelines
 - Prereq: Node 22+, pnpm. First run: make setup
 - Format: make fmt (check only: make fmt-check)
 - Lint + typecheck: make check (runs: npx tsc --noEmit and eslint)
-- Test all: make test or pnpm test
+- Test all against the default remote/dev environment: make test or pnpm test
 - Run a single file: npx jest tests/path/to/file.test.ts
 - Run tests by name: npx jest -t "partial test name"
 - Increase logging: VERBOSE=true npx jest … (command/env output is truncated unless VERBOSE=true)
+
+### Local platform test flow
+
+- Full disposable local stack + tests: make local-test
+- Target a specific local test/suite: `LOCAL_TEST_COMMAND='pnpm exec jest tests/validation/log.test.ts --runInBand' make local-test`
+- Bring the local stack up without running tests: make local-platform-up
+- Then load the generated env and run targeted tests manually:
+  - `source .local-platform/current/test-env.sh`
+  - `pnpm exec jest tests/validation/log.test.ts --runInBand`
+- Stop the local stack: make local-platform-down
+- Local platform defaults come from `local.env` if present, otherwise `resolve_prod`; see `local.env.example`
 
 ## Environment for integration tests
 

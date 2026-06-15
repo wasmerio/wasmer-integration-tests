@@ -214,6 +214,33 @@ write_env_var() {
   printf 'export %s=%q\n' "$name" "$value" >> "$file"
 }
 
+current_run_dir() {
+  if [ -L "$LOCAL_PLATFORM_DIR/current" ] || [ -d "$LOCAL_PLATFORM_DIR/current" ]; then
+    cd "$LOCAL_PLATFORM_DIR/current" && pwd
+  fi
+}
+
+compose_project_has_running_containers() {
+  [ -n "${COMPOSE_PROJECT_NAME:-}" ] || fail "COMPOSE_PROJECT_NAME is required"
+  docker ps \
+    --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" \
+    --format '{{.Names}}' | grep -q .
+}
+
+compose_service_is_running() {
+  local service="$1"
+  [ -n "${COMPOSE_PROJECT_NAME:-}" ] || fail "COMPOSE_PROJECT_NAME is required"
+  docker ps \
+    --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" \
+    --filter "label=com.docker.compose.service=$service" \
+    --format '{{.Names}}' | grep -q .
+}
+
+process_is_running() {
+  local pid="$1"
+  [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1
+}
+
 load_resolved_env() {
   if [ -z "${RUN_DIR:-}" ]; then
     if [ -L "$LOCAL_PLATFORM_DIR/current" ] || [ -d "$LOCAL_PLATFORM_DIR/current" ]; then
