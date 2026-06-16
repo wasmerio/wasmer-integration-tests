@@ -231,34 +231,6 @@ resolve_edge() {
   esac
 }
 
-resolve_frontend() {
-  local selector="$1"
-  case "$selector" in
-    resolve_prod)
-      if [ -n "${FRONTEND_RELAY_QUERIES_PATH:-}" ]; then
-        printf 'path:%s' "$FRONTEND_RELAY_QUERIES_PATH"
-      elif [ -n "${FRONTEND_RELAY_QUERIES_URL:-}" ]; then
-        printf 'url:%s' "$FRONTEND_RELAY_QUERIES_URL"
-      else
-        printf 'none:resolve_prod'
-      fi
-      ;;
-    artifact:*|github-artifact:*|path:*|url:*|none:*)
-      printf '%s' "$selector"
-      ;;
-    v*)
-      if [ -n "${FRONTEND_RELAY_BASE_URL:-}" ]; then
-        printf 'url:%s/%s/relay-persisted-queries.json' "${FRONTEND_RELAY_BASE_URL%/}" "$selector"
-      else
-        printf 'none:%s' "$selector"
-      fi
-      ;;
-    *)
-      fail "Unsupported FRONTEND_VERSION selector: $selector"
-      ;;
-  esac
-}
-
 BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_VERSION")"
 BACKEND_IMAGE_SOURCE=""
 case "$BACKEND_VERSION" in
@@ -267,7 +239,6 @@ case "$BACKEND_VERSION" in
     ;;
 esac
 EDGE_RESOLVED="$(resolve_edge "$EDGE_VERSION")"
-FRONTEND_RESOLVED="$(resolve_frontend "$FRONTEND_VERSION")"
 DOCKER_CLI_PATH="${LOCAL_PLATFORM_DOCKER_CLI_PATH:-$(command -v docker)}"
 [ -x "$DOCKER_CLI_PATH" ] || fail "Docker CLI is not executable: $DOCKER_CLI_PATH"
 DOCKER_BUILDX_PATH="${LOCAL_PLATFORM_DOCKER_BUILDX_PATH:-}"
@@ -290,17 +261,14 @@ fi
 {
   write_env_var /dev/stdout BACKEND_VERSION "$BACKEND_VERSION"
   write_env_var /dev/stdout EDGE_VERSION "$EDGE_VERSION"
-  write_env_var /dev/stdout FRONTEND_VERSION "$FRONTEND_VERSION"
   write_env_var /dev/stdout BACKEND_IMAGE_REF "$BACKEND_IMAGE_REF"
   write_env_var /dev/stdout BACKEND_IMAGE_SOURCE "$BACKEND_IMAGE_SOURCE"
   write_env_var /dev/stdout EDGE_RESOLVED "$EDGE_RESOLVED"
-  write_env_var /dev/stdout FRONTEND_RESOLVED "$FRONTEND_RESOLVED"
   write_env_var /dev/stdout LOCAL_TEST_COMMAND "${LOCAL_TEST_COMMAND:-$DEFAULT_TEST_COMMAND}"
   write_env_var /dev/stdout COMPOSE_PROJECT_NAME "$COMPOSE_PROJECT_NAME"
   write_env_var /dev/stdout DOCKER_CLI_PATH "$DOCKER_CLI_PATH"
   write_env_var /dev/stdout DOCKER_BUILDX_PATH "$DOCKER_BUILDX_PATH"
   write_env_var /dev/stdout BACKEND_HTTP_PORT "$BACKEND_HTTP_PORT"
-  write_env_var /dev/stdout FRONTEND_HTTP_PORT "$FRONTEND_HTTP_PORT"
   write_env_var /dev/stdout EDGE_HTTP_PORT "$EDGE_HTTP_PORT"
   write_env_var /dev/stdout EDGE_HTTPS_PORT "$EDGE_HTTPS_PORT"
   write_env_var /dev/stdout EDGE_NODE_API_PORT "$EDGE_NODE_API_PORT"
@@ -323,17 +291,14 @@ cat > "$RUN_DIR/resolved.json" <<JSON
 {
   "backend_version": $(json_quote "$BACKEND_VERSION"),
   "edge_version": $(json_quote "$EDGE_VERSION"),
-  "frontend_version": $(json_quote "$FRONTEND_VERSION"),
   "backend_image_ref": $(json_quote "$BACKEND_IMAGE_REF"),
   "backend_image_source": $(json_quote "$BACKEND_IMAGE_SOURCE"),
   "edge_resolved": $(json_quote "$EDGE_RESOLVED"),
-  "frontend_resolved": $(json_quote "$FRONTEND_RESOLVED"),
   "compose_project_name": $(json_quote "$COMPOSE_PROJECT_NAME"),
   "docker_cli_path": $(json_quote "$DOCKER_CLI_PATH"),
   "docker_buildx_path": $(json_quote "$DOCKER_BUILDX_PATH"),
   "ports": {
     "backend_http": $(json_quote "$BACKEND_HTTP_PORT"),
-    "frontend_http": $(json_quote "$FRONTEND_HTTP_PORT"),
     "edge_http": $(json_quote "$EDGE_HTTP_PORT"),
     "edge_https": $(json_quote "$EDGE_HTTPS_PORT"),
     "edge_node_api": $(json_quote "$EDGE_NODE_API_PORT"),
@@ -360,4 +325,3 @@ else
   log "Resolved Backend: $BACKEND_IMAGE_REF"
 fi
 log "Resolved Edge: $EDGE_RESOLVED"
-log "Resolved Frontend: $FRONTEND_RESOLVED"

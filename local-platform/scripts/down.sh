@@ -14,6 +14,7 @@ if [ -z "${RUN_DIR:-}" ]; then
   fi
 fi
 
+set_default_cache_dirs
 load_resolved_env
 if ! is_truthy "${LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN:-}"; then
   "$SCRIPT_DIR/collect-logs.sh" || true

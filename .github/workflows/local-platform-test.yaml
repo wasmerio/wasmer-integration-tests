@@ -9,9 +9,6 @@ on:
       edge_version:
         type: string
         required: true
-      frontend_version:
-        type: string
-        required: true
       test_command:
         type: string
         default: pnpm exec jest ./tests/general/
@@ -87,7 +84,6 @@ jobs:
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_PREPARE_ONLY: ${{ inputs.prepare_only }}
           LOCAL_PLATFORM_SUITE_ID: ${{ inputs.suite_id }}
@@ -96,7 +92,6 @@ jobs:
           echo "Local platform requested versions:"
           echo "  backend_version=$BACKEND_VERSION"
           echo "  edge_version=$EDGE_VERSION"
-          echo "  frontend_version=$FRONTEND_VERSION"
           echo "  suite_id=$LOCAL_PLATFORM_SUITE_ID"
           echo "  prepare_only=$LOCAL_PLATFORM_PREPARE_ONLY"
           echo "  test_command=$LOCAL_TEST_COMMAND"
@@ -106,7 +101,6 @@ jobs:
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          FRONTEND_VERSION: ${{ inputs.frontend_version }}
           HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
         run: |
           set -euo pipefail
@@ -116,9 +110,6 @@ jobs:
           esac
           case "$EDGE_VERSION" in
             resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
-          esac
-          case "$FRONTEND_VERSION" in
-            github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
           esac
 
           if [ "$needs_pat" = "1" ] && [ "$HAS_ARTIFACT_FETCH_PAT" != "true" ]; then
@@ -133,7 +124,6 @@ jobs:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY  }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
           GH_TOKEN: ${{ secrets.pat }}
@@ -146,7 +136,6 @@ jobs:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          FRONTEND_VERSION: ${{ inputs.frontend_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"

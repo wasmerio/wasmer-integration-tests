@@ -32,7 +32,7 @@ timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
     -e SM_BE_MSGBUS=redis://redis:6379/1 \
     -e 'SM_BE_DATASTORE_PRIVATE_URI=s3://minioadmin:minioadmin@minio-persistent:9000/backend-datastore-private?style=path&region=us-east-1' \
     -e "SM_BE_PUBLIC_URL=http://localhost:${BACKEND_HTTP_PORT}" \
-    -e "SM_BE_FRONTEND_URL=http://localhost:${FRONTEND_HTTP_PORT}" \
+    -e "SM_BE_FRONTEND_URL=http://localhost:${BACKEND_HTTP_PORT}" \
     -e SM_BE_PRIMARY_APP_DOMAIN=localhost \
     -e LOKI_URI=http://loki:3100 \
     -e METRICS_CLICKHOUSE_URL=http://default:root@clickhouse:8123/edge_metrics_local \
@@ -121,6 +121,11 @@ NODE
   printf 'export EDGE_SERVER="http://127.0.0.1:%s"\n' "$EDGE_HTTP_PORT"
   printf 'export EDGE_SSH_SERVER="ssh://127.0.0.1:%s"\n' "$EDGE_SSH_PORT"
   printf 'export EDGE_DNS_SERVER="127.0.0.1:%s"\n' "$EDGE_DNS_PORT"
+  printf 'export CLICKHOUSE_HTTP_PORT="%s"\n' "$CLICKHOUSE_HTTP_PORT"
+  printf 'export LOCAL_PLATFORM_CLICKHOUSE_URL="http://localhost:%s"\n' "$CLICKHOUSE_HTTP_PORT"
+  printf 'export LOCAL_PLATFORM_CLICKHOUSE_DATABASE="edge_metrics_local"\n'
+  printf 'export LOCAL_PLATFORM_CLICKHOUSE_USERNAME="default"\n'
+  printf 'export LOCAL_PLATFORM_CLICKHOUSE_PASSWORD="root"\n'
   printf 'export LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER="1"\n'
 } >> "$RUN_DIR/test-env.sh"
 

@@ -166,10 +166,5 @@ fetch_to_file "$EDGE_RESOLVED" "$RUN_DIR/artifacts/edge" edge
 chmod +x "$RUN_DIR/artifacts/edge"
 log "Edge binary ready: $RUN_DIR/artifacts/edge"
 
-log "Fetching Frontend Relay manifest from $FRONTEND_RESOLVED"
-if fetch_to_file "$FRONTEND_RESOLVED" "$RUN_DIR/artifacts/relay-persisted-queries.json" frontend-relay; then
-  log "Relay persisted queries ready: $RUN_DIR/artifacts/relay-persisted-queries.json"
-else
-  printf '[]\n' > "$RUN_DIR/artifacts/relay-persisted-queries.json"
-  log "No frontend Relay manifest resolved; wrote an empty manifest"
-fi
+printf '[]\n' > "$RUN_DIR/artifacts/relay-persisted-queries.json"
+log "Wrote empty Relay persisted query manifest: $RUN_DIR/artifacts/relay-persisted-queries.json"

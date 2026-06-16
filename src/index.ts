@@ -22,7 +22,7 @@ export {
   SECOND,
   writeAppDefinition,
 } from "./app/construct";
-export { LogSniff } from "./log";
+export { getAllLogs, LogSniff } from "./log";
 export type { AppInfo } from "./backend";
 export { buildPhpApp, buildPythonApp } from "./app/construct";
 export {

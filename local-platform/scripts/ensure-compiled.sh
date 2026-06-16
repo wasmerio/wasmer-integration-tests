@@ -91,7 +91,7 @@ for raw_engine in "${package_compilation_engines[@]}"; do
 
   timeout "${LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS:-1800}" \
     docker compose --project-name "$COMPOSE_PROJECT_NAME" --file "$COMPOSE_FILE" \
-      run --rm --no-deps --entrypoint /bin/sh edge \
+      run --rm --no-deps -T --entrypoint /bin/sh edge \
       -lc 'socat TCP-LISTEN:18000,bind=127.0.0.1,fork,reuseaddr TCP:backend:8000 & exec "$@"' \
       sh /usr/local/bin/edge \
       local ensure-compiled \

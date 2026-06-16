@@ -47,7 +47,6 @@ jobs:
     with:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
-      frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
       prepare_only: true
       suite_id: cache-warmup
       job_name: Prepare local platform test environment cache
@@ -69,7 +68,6 @@ jobs:
     with:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
-      frontend_version: ${{ vars.LOCAL_PLATFORM_FRONTEND_VERSION || 'none:skipped' }}
       test_command: ${{ matrix.test_command }}
       suite_id: ${{ matrix.id }}
       job_name: Run ${{ matrix.display_id || matrix.id }} tests

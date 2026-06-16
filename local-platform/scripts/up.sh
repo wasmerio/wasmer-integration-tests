@@ -33,6 +33,13 @@ generated_test_env_var() {
   bash -lc "set -a; source \"$RUN_DIR/test-env.sh\"; set +a; printf '%s' \"\${$var_name:-}\""
 }
 
+resolved_env_var() {
+  local env_file="$1"
+  local var_name="$2"
+  [ -f "$env_file" ] || return 1
+  bash -lc "set -a; source \"$env_file\"; set +a; printf '%s' \"\${$var_name:-}\""
+}
+
 local_admin_username() {
   local whoami_output username
   whoami_output="$(bash -lc "set -a; source \"$RUN_DIR/test-env.sh\"; set +a; wasmer whoami" 2>/dev/null || true)"
@@ -46,11 +53,7 @@ local_admin_username() {
 }
 
 print_access_summary() {
-  local frontend_url="disabled"
   local admin_username admin_token
-  if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
-    frontend_url="http://localhost:${FRONTEND_HTTP_PORT}"
-  fi
   admin_username="$(local_admin_username)"
   admin_token="$(generated_test_env_var WASMER_TOKEN || true)"
 
@@ -95,7 +98,6 @@ ${cyan}└${rule}${reset}
 ${cyan}┌${rule}${reset}
 ${cyan}│${reset} ${bold}Primary endpoints${reset}
 ${cyan}│${reset} ${dim}Backend GraphQL / registry${reset} ${green}http://localhost:${BACKEND_HTTP_PORT}/graphql${reset}
-${cyan}│${reset} ${dim}Frontend                  ${reset} ${green}${frontend_url}${reset}
 ${cyan}│${reset} ${dim}Edge HTTP                 ${reset} ${green}http://127.0.0.1:${EDGE_HTTP_PORT}${reset}
 ${cyan}│${reset} ${dim}Edge HTTPS                ${reset} ${green}https://127.0.0.1:${EDGE_HTTPS_PORT}${reset}
 ${cyan}│${reset} ${dim}Edge SSH                  ${reset} ${green}ssh://127.0.0.1:${EDGE_SSH_PORT}${reset}
@@ -118,10 +120,26 @@ EOF
 }
 
 reuse_existing_run_if_running() {
-  local existing_run_dir
+  local existing_run_dir existing_resolved_env existing_backend_version existing_edge_version
   existing_run_dir="$(current_run_dir || true)"
   [ -n "$existing_run_dir" ] || return 1
-  [ -f "$existing_run_dir/resolved.env" ] || return 1
+  existing_resolved_env="$existing_run_dir/resolved.env"
+  [ -f "$existing_resolved_env" ] || return 1
+
+  existing_backend_version="$(resolved_env_var "$existing_resolved_env" BACKEND_VERSION || true)"
+  existing_edge_version="$(resolved_env_var "$existing_resolved_env" EDGE_VERSION || true)"
+
+  if [ "$existing_backend_version" != "$BACKEND_VERSION" ] || [ "$existing_edge_version" != "$EDGE_VERSION" ]; then
+    log "Stopping existing local platform run because the requested selectors changed"
+    log "Existing selectors: backend=$existing_backend_version edge=$existing_edge_version"
+    log "Requested selectors: backend=$BACKEND_VERSION edge=$EDGE_VERSION"
+    RUN_DIR="$existing_run_dir"
+    export RUN_DIR
+    # shellcheck disable=SC1090
+    source "$existing_resolved_env"
+    LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN=1 "$SCRIPT_DIR/down.sh"
+    return 1
+  fi
 
   RUN_DIR="$existing_run_dir"
   export RUN_DIR
@@ -152,10 +170,6 @@ reuse_existing_run_if_running() {
   compose up -d edge
   node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://127.0.0.1:${EDGE_HTTP_PORT}/" "${LOCAL_PLATFORM_EDGE_TIMEOUT_MS:-120000}"
 
-  if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
-    compose --profile frontend up -d frontend
-  fi
-
   start_compose_log_follow
 
   print_access_summary
@@ -173,12 +187,10 @@ fi
 if ! is_ci; then
   BACKEND_VERSION="${BACKEND_VERSION:-resolve_prod}"
   EDGE_VERSION="${EDGE_VERSION:-resolve_prod}"
-  FRONTEND_VERSION="${FRONTEND_VERSION:-resolve_prod}"
 fi
 
 [ -n "${BACKEND_VERSION:-}" ] || fail "BACKEND_VERSION is required"
 [ -n "${EDGE_VERSION:-}" ] || fail "EDGE_VERSION is required"
-[ -n "${FRONTEND_VERSION:-}" ] || fail "FRONTEND_VERSION is required"
 set_default_ports
 set_default_cache_dirs
 
@@ -193,7 +205,7 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$LOCAL_PLATFORM_DIR/runs/${timestamp}-${short_sha}"
 COMPOSE_PROJECT_NAME="wit_${timestamp}_${short_sha}"
 COMPOSE_PROJECT_NAME="$(printf '%s' "$COMPOSE_PROJECT_NAME" | tr '[:upper:]-' '[:lower:]_')"
-export RUN_DIR COMPOSE_PROJECT_NAME BACKEND_VERSION EDGE_VERSION FRONTEND_VERSION
+export RUN_DIR COMPOSE_PROJECT_NAME BACKEND_VERSION EDGE_VERSION
 
 mkdir -p \
   "$RUN_DIR/logs" \
@@ -208,7 +220,7 @@ ln -sfn "runs/$(basename "$RUN_DIR")" "$LOCAL_PLATFORM_DIR/current"
 touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 
 log "Run directory: $RUN_DIR"
-log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION frontend=$FRONTEND_VERSION"
+log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION"
 if is_truthy "${LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT:-}"; then
   log "Custom artifact fetch PAT is present for private artifact/release fetches"
 elif [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
@@ -243,11 +255,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-log "Resolving concrete Backend/Edge/Frontend versions"
+log "Resolving concrete Backend/Edge versions"
 "$SCRIPT_DIR/resolve.sh"
 # shellcheck disable=SC1091
 source "$RUN_DIR/resolved.env"
-log "Resolved versions: backend_image_ref=$BACKEND_IMAGE_REF backend_image_source=${BACKEND_IMAGE_SOURCE:-<registry-pull>} edge=$EDGE_RESOLVED frontend=$FRONTEND_RESOLVED"
+log "Resolved versions: backend_image_ref=$BACKEND_IMAGE_REF backend_image_source=${BACKEND_IMAGE_SOURCE:-<registry-pull>} edge=$EDGE_RESOLVED"
 log "Fetching resolved artifacts and images"
 "$SCRIPT_DIR/fetch-artifacts.sh"
 
@@ -299,13 +311,6 @@ node "$REPO_DIR/local-platform/scripts/persist-relay-queries.mjs" \
 log "Starting Edge"
 compose up -d edge
 node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://127.0.0.1:${EDGE_HTTP_PORT}/" "${LOCAL_PLATFORM_EDGE_TIMEOUT_MS:-120000}"
-
-if [ -n "${FRONTEND_IMAGE_REF:-}" ]; then
-  log "Starting frontend image $FRONTEND_IMAGE_REF"
-  compose --profile frontend up -d frontend
-else
-  log "No FRONTEND_IMAGE_REF set; skipping frontend container"
-fi
 
 UP_SUCCEEDED=1
 print_access_summary

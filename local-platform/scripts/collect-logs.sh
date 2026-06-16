@@ -12,7 +12,6 @@ mkdir -p "$RUN_DIR/logs" "$RUN_DIR/diagnostics"
 services=(
   backend
   edge
-  frontend
   postgres
   redis
   mysql_app_db_1
