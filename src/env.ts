@@ -73,18 +73,22 @@ function sanitizeForLogs(value: unknown, depth = 0): unknown {
   return value;
 }
 
-function formatUnknownError(value: unknown): string {
+function safeStringify(value: unknown, pretty = false): string {
+  try {
+    return JSON.stringify(sanitizeForLogs(value), null, pretty ? 2 : undefined);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
+function formatThrownError(value: unknown): string {
   if (value instanceof Error) {
     return value.stack ?? `${value.name}: ${value.message}`;
   }
   if (typeof value === "string") {
     return value;
   }
-  try {
-    return JSON.stringify(sanitizeForLogs(value), null, 2);
-  } catch {
-    return String(value);
-  }
+  return safeStringify(value, true);
 }
 
 interface StackMachineDeployErrorContext {
@@ -115,16 +119,14 @@ function createStackMachineDeployError(
   if (context.dashboardUrl) {
     lines.push(`App dashboard: ${context.dashboardUrl}`);
   }
-  lines.push(
-    `Deploy input: ${JSON.stringify(sanitizeForLogs(context.input), null, 2)}`,
-  );
-  lines.push("Underlying error:", formatUnknownError(error));
+  lines.push(`Deploy input: ${safeStringify(context.input, true)}`);
+  lines.push("Underlying error:", formatThrownError(error));
   if (context.progress.length > 0) {
     lines.push(
       "Recent deployment progress:",
       ...context.progress
         .slice(-20)
-        .map((entry) => `  ${JSON.stringify(sanitizeForLogs(entry))}`),
+        .map((entry) => `  ${safeStringify(entry)}`),
     );
   } else {
     lines.push(
