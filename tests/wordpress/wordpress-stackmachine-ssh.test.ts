@@ -1,4 +1,5 @@
 import { Client } from "ssh2";
+import type { DeployApp } from "stackmachine";
 
 import { randomAppName, TestEnv } from "../../src";
 import { currentJestTestFailed } from "../../src/env";
@@ -21,13 +22,6 @@ type RunWpCommand = (
   command: string,
   allowNonZeroExitCode?: boolean,
 ) => Promise<SshExecResult>;
-
-interface DeployAppLike {
-  id: string;
-  name: string;
-  url: string;
-  adminUrl?: string;
-}
 
 interface WpCliTestOptions {
   allowNonZeroExitCode?: boolean;
@@ -137,9 +131,9 @@ async function runStep(
 async function deployStackMachineWordpress(
   env: TestEnv,
   client: StackMachineClient,
-): Promise<DeployAppLike> {
+): Promise<DeployApp> {
   const appName = randomAppName();
-  const build = await client.deployApp({
+  const appVersion = await env.deployStackMachineApp(client, {
     appName,
     owner: env.namespace,
     repoUrl: "https://github.com/wordpress/wordpress",
@@ -155,9 +149,7 @@ async function deployStackMachineWordpress(
       },
     },
   });
-
-  const appVersion = await build.finish();
-  const app = appVersion.app as DeployAppLike;
+  const app = appVersion.app;
   await env.recordDeployedApp({
     appId: app.id,
     appName: app.name,
@@ -168,7 +160,7 @@ async function deployStackMachineWordpress(
 }
 
 let env: TestEnv;
-let app: DeployAppLike;
+let app: DeployApp;
 let conn: Client | undefined;
 let runWp: RunWpCommand;
 let preserveApps = false;

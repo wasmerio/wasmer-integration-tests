@@ -8,7 +8,12 @@ import * as toml from "@iarna/toml";
 import { promises as dns } from "dns";
 
 import { spawn, SpawnOptions } from "child_process";
-import { StackMachine } from "stackmachine";
+import {
+  StackMachine,
+  type DeployAppVersion,
+  type DeploymentCreateInput,
+  type DeploymentProgress,
+} from "stackmachine";
 import WebSocket from "ws";
 
 import { AppInfo, BackendClient } from "./backend";
@@ -27,34 +32,6 @@ import {
 import { AppGet } from "./app/appGet";
 import { HEADER_APP_VERSION_ID, HEADER_WASMER_REQUEST_ID } from "./edge";
 
-export interface StackMachineBuild {
-  readonly buildId?: string;
-  finish(): Promise<{ id: string; app: unknown }>;
-  subscribeToProgress(callback: (data: unknown) => void): void;
-}
-
-export interface StackMachineSdk {
-  getApp(
-    input: { id: string } | { owner?: string; name: string },
-  ): Promise<unknown>;
-  deleteApp(input: { id: string }): Promise<void>;
-  uploadFile(
-    file: Blob,
-    setUploadFilesProgress?: (progress: number) => void,
-  ): Promise<string>;
-  deployApp(input: Record<string, unknown>): Promise<StackMachineBuild>;
-}
-
-interface StackMachineErrorContext {
-  operation: string;
-  registry: string;
-  namespace: string;
-  buildId?: string;
-  dashboardUrl?: string;
-  input?: Record<string, unknown>;
-  progress?: unknown[];
-}
-
 // The published StackMachine SDK currently builds its GraphQL subscription
 // client without forwarding `webSocketImpl` to `graphql-ws`. In browser-like
 // runtimes and modern Node versions, `graphql-ws` can use the existing global
@@ -70,88 +47,6 @@ function isObjectLike(value: unknown): value is object {
   return (
     (typeof value === "object" && value !== null) || typeof value === "function"
   );
-}
-
-function readUnknownProperty(value: unknown, property: string): unknown {
-  if (!isObjectLike(value) || !(property in value)) {
-    return undefined;
-  }
-
-  try {
-    return (value as Record<string, unknown>)[property];
-  } catch {
-    return undefined;
-  }
-}
-
-function readStringProperty(
-  value: unknown,
-  property: string,
-): string | undefined {
-  const propertyValue = readUnknownProperty(value, property);
-  return typeof propertyValue === "string" ? propertyValue : undefined;
-}
-
-function readNumberProperty(
-  value: unknown,
-  property: string,
-): number | undefined {
-  const propertyValue = readUnknownProperty(value, property);
-  return typeof propertyValue === "number" ? propertyValue : undefined;
-}
-
-function formatUnknownError(value: unknown): string {
-  if (value instanceof Error) {
-    return value.stack ?? `${value.name}: ${value.message}`;
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  if (!isObjectLike(value)) {
-    return String(value);
-  }
-
-  const details: string[] = [];
-  const constructorName = readStringProperty(
-    readUnknownProperty(value, "constructor"),
-    "name",
-  );
-  if (constructorName && constructorName !== "Object") {
-    details.push(constructorName);
-  }
-
-  for (const property of [
-    "name",
-    "message",
-    "code",
-    "errno",
-    "syscall",
-    "address",
-    "port",
-    "stack",
-  ]) {
-    const propertyValue = readUnknownProperty(value, property);
-    if (
-      (typeof propertyValue === "string" && propertyValue.length > 0) ||
-      typeof propertyValue === "number"
-    ) {
-      details.push(`${property}=${propertyValue}`);
-    }
-  }
-
-  const entries = Object.entries(value);
-  if (entries.length > 0) {
-    try {
-      details.push(JSON.stringify(sanitizeForLogs(value), null, 2));
-    } catch {
-      // Ignore JSON serialization failures; the constructor/properties above are
-      // usually more useful for ErrorEvent objects anyway.
-    }
-  }
-
-  return details.length > 0
-    ? details.join("\n")
-    : Object.prototype.toString.call(value);
 }
 
 const SECRET_KEY_PATTERN = /(authorization|password|secret|token|api[_-]?key)/i;
@@ -178,235 +73,65 @@ function sanitizeForLogs(value: unknown, depth = 0): unknown {
   return value;
 }
 
-function describeWebSocketTarget(target: unknown): string | null {
-  if (!isObjectLike(target)) {
-    return null;
+function formatUnknownError(value: unknown): string {
+  if (value instanceof Error) {
+    return value.stack ?? `${value.name}: ${value.message}`;
   }
-
-  const details: string[] = [];
-  const url = readStringProperty(target, "url");
-  if (url) {
-    details.push(`url=${url}`);
+  if (typeof value === "string") {
+    return value;
   }
-
-  const readyState = readNumberProperty(target, "readyState");
-  if (readyState !== undefined) {
-    const readyStateNames = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
-    details.push(
-      `readyState=${readyStateNames[readyState] ?? "UNKNOWN"}(${readyState})`,
-    );
+  try {
+    return JSON.stringify(sanitizeForLogs(value), null, 2);
+  } catch {
+    return String(value);
   }
-
-  const protocol = readStringProperty(target, "protocol");
-  if (protocol) {
-    details.push(`protocol=${protocol}`);
-  }
-
-  const closeCode = readNumberProperty(target, "_closeCode");
-  if (closeCode !== undefined) {
-    details.push(`closeCode=${closeCode}`);
-  }
-
-  const closeMessage = readUnknownProperty(target, "_closeMessage");
-  if (Buffer.isBuffer(closeMessage) && closeMessage.length > 0) {
-    details.push(`closeMessage=${closeMessage.toString("utf-8")}`);
-  }
-
-  return details.length > 0 ? details.join(", ") : null;
 }
 
-function describeErrorEvent(value: unknown): string[] {
-  const details: string[] = [];
-  const constructorName = readStringProperty(
-    readUnknownProperty(value, "constructor"),
-    "name",
-  );
-  if (constructorName) {
-    details.push(`eventClass=${constructorName}`);
-  }
-
-  const type = readStringProperty(value, "type");
-  if (type) {
-    details.push(`eventType=${type}`);
-  }
-
-  const message = readStringProperty(value, "message");
-  if (message) {
-    details.push(`eventMessage=${message}`);
-  }
-
-  const targetDescription = describeWebSocketTarget(
-    readUnknownProperty(value, "target") ??
-      readUnknownProperty(value, "currentTarget"),
-  );
-  if (targetDescription) {
-    details.push(`webSocket={${targetDescription}}`);
-  }
-
-  const nestedError = readUnknownProperty(value, "error");
-  if (nestedError) {
-    details.push(`eventError=${formatUnknownError(nestedError)}`);
-  }
-
-  return details;
+interface StackMachineDeployErrorContext {
+  registry: string;
+  namespace: string;
+  buildId?: string;
+  dashboardUrl?: string;
+  input: DeploymentCreateInput;
+  progress: DeploymentProgress[];
 }
 
-function createStackMachineSdkError(
+// The 0.3.x SDK throws typed errors, but they omit the test-specific context
+// that makes a failed deploy debuggable: which registry/namespace, the app
+// dashboard link, the (secret-sanitized) deploy input, and the tail of build
+// progress events. Re-attach that context while preserving the original cause.
+function createStackMachineDeployError(
   error: unknown,
-  context: StackMachineErrorContext,
+  context: StackMachineDeployErrorContext,
 ): Error {
   const lines = [
-    `StackMachine SDK ${context.operation} failed.`,
+    "StackMachine deploy failed.",
     `Registry: ${context.registry}`,
     `Namespace: ${context.namespace}`,
   ];
-
   if (context.buildId) {
     lines.push(`Autobuild ID: ${context.buildId}`);
   }
   if (context.dashboardUrl) {
     lines.push(`App dashboard: ${context.dashboardUrl}`);
   }
-
-  if (context.input) {
-    lines.push(
-      `Deploy input: ${JSON.stringify(sanitizeForLogs(context.input), null, 2)}`,
-    );
-  }
-
-  const eventDetails = describeErrorEvent(error);
-  if (eventDetails.length > 0) {
-    lines.push(
-      "Error event details:",
-      ...eventDetails.map((line) => `  - ${line}`),
-    );
-  }
-
+  lines.push(
+    `Deploy input: ${JSON.stringify(sanitizeForLogs(context.input), null, 2)}`,
+  );
   lines.push("Underlying error:", formatUnknownError(error));
-
-  if (eventDetails.some((line) => line.includes("readyState=CLOSED"))) {
-    lines.push(
-      "Interpretation: the StackMachine SDK lost its GraphQL WebSocket subscription before receiving a terminal COMPLETE/FAILED build event. The deployment may still be running or may have completed; check the autobuild/app in the dashboard or rerun with VERBOSE=true for raw SDK logs.",
-    );
-  }
-
-  if (context.progress && context.progress.length > 0) {
-    const progressTail = context.progress
-      .slice(-20)
-      .map((entry) => JSON.stringify(sanitizeForLogs(entry)));
+  if (context.progress.length > 0) {
     lines.push(
       "Recent deployment progress:",
-      ...progressTail.map((line) => `  ${line}`),
+      ...context.progress
+        .slice(-20)
+        .map((entry) => `  ${JSON.stringify(sanitizeForLogs(entry))}`),
     );
-  } else if (context.operation.includes("finish")) {
+  } else {
     lines.push(
       "No deployment progress events were received before the failure.",
     );
   }
-
   return new Error(lines.join("\n"), { cause: error });
-}
-
-function wrapStackMachineBuild(
-  build: StackMachineBuild,
-  context: Omit<StackMachineErrorContext, "operation" | "progress">,
-): StackMachineBuild {
-  const buildContext = {
-    ...context,
-    buildId: readStringProperty(build, "buildId"),
-  };
-  const progress: unknown[] = [];
-  const rememberProgress = (data: unknown): void => {
-    progress.push(data);
-    if (progress.length > 100) {
-      progress.shift();
-    }
-  };
-
-  try {
-    build.subscribeToProgress(rememberProgress);
-  } catch (error) {
-    throw createStackMachineSdkError(error, {
-      ...buildContext,
-      operation: "deployApp().subscribeToProgress()",
-      progress,
-    });
-  }
-
-  return new Proxy(build, {
-    get(target, property, receiver) {
-      if (property === "finish") {
-        return async (): Promise<{ id: string; app: unknown }> => {
-          try {
-            return await target.finish();
-          } catch (error) {
-            throw createStackMachineSdkError(error, {
-              ...buildContext,
-              operation: "deployApp().finish()",
-              progress,
-            });
-          }
-        };
-      }
-
-      if (property === "subscribeToProgress") {
-        return (callback: (data: unknown) => void): void => {
-          for (const entry of progress) {
-            callback(entry);
-          }
-          target.subscribeToProgress((data: unknown) => {
-            rememberProgress(data);
-            callback(data);
-          });
-        };
-      }
-
-      return Reflect.get(target, property, receiver);
-    },
-  }) as StackMachineBuild;
-}
-
-function wrapStackMachineSdk(
-  client: StackMachineSdk,
-  context: Pick<StackMachineErrorContext, "registry" | "namespace"> & {
-    appDashboardUrlFromName(appName: string): string;
-  },
-): StackMachineSdk {
-  const deployApp = client.deployApp.bind(client);
-
-  return new Proxy(client, {
-    get(target, property, receiver) {
-      if (property === "deployApp") {
-        return async (
-          input: Record<string, unknown>,
-        ): Promise<StackMachineBuild> => {
-          const appName = readStringProperty(input, "appName");
-          const errorContext = {
-            registry: context.registry,
-            namespace: context.namespace,
-            dashboardUrl: appName
-              ? context.appDashboardUrlFromName(appName)
-              : undefined,
-            input,
-          };
-
-          let build: StackMachineBuild;
-          try {
-            build = await deployApp(input);
-          } catch (error) {
-            throw createStackMachineSdkError(error, {
-              ...errorContext,
-              operation: "deployApp()",
-            });
-          }
-
-          return wrapStackMachineBuild(build, errorContext);
-        };
-      }
-
-      return Reflect.get(target, property, receiver);
-    },
-  }) as StackMachineSdk;
 }
 
 export const ENV_VAR_REGISTRY: string = "WASMER_REGISTRY";
@@ -1200,18 +925,48 @@ export class TestEnv {
     return match[1];
   }
 
-  async stackmachineSdk(): Promise<StackMachineSdk> {
+  async stackmachineSdk(): Promise<StackMachine> {
     ensureNodeWebSocket();
-    const client = (await StackMachine.init({
+    return await StackMachine.init({
       apiUrl: this.registry,
       token: this.token,
-    })) as StackMachineSdk;
-    return wrapStackMachineSdk(client, {
-      registry: this.registry,
-      namespace: this.namespace,
-      appDashboardUrlFromName: (appName: string) =>
-        this.appDashboardUrlFromName(appName),
     });
+  }
+
+  // Deploy an app through the StackMachine SDK, enriching any failure with the
+  // registry/namespace, app dashboard URL, secret-sanitized input, and the tail
+  // of build-progress events.
+  async deployStackMachineApp(
+    client: StackMachine,
+    input: DeploymentCreateInput,
+  ): Promise<DeployAppVersion> {
+    const progress: DeploymentProgress[] = [];
+    const dashboardUrl = input.appName
+      ? this.appDashboardUrlFromName(input.appName)
+      : undefined;
+    let buildId: string | undefined;
+
+    try {
+      const deployment = await client.deployments.create(input);
+      buildId = deployment.buildId;
+      return await deployment.wait({
+        onProgress: (entry) => {
+          progress.push(entry);
+          if (progress.length > 100) {
+            progress.shift();
+          }
+        },
+      });
+    } catch (error) {
+      throw createStackMachineDeployError(error, {
+        registry: this.registry,
+        namespace: this.namespace,
+        buildId,
+        dashboardUrl,
+        input,
+        progress,
+      });
+    }
   }
 
   async *graphqlSubscription(

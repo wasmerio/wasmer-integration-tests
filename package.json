@@ -24,7 +24,7 @@
     "js-yaml": "^4.1.1",
     "ssh2": "^1.17.0",
     "ssh2-sftp-client": "^12.1.1",
-    "stackmachine": "0.1.8",
+    "stackmachine": "0.3.0",
     "tcp-port-used": "^1.0.2",
     "ws": "^8.20.1",
     "zod": "^3.25.76"
