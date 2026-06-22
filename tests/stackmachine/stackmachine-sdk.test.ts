@@ -4,8 +4,15 @@ import {
   type DeployApp,
   type DeploymentCreateInput,
   type Log,
+  type SearchPackageVersion,
 } from "stackmachine";
-import { AppInfo, randomAppName, sleep, TestEnv } from "../../src";
+import {
+  AppInfo,
+  buildTempDir,
+  randomAppName,
+  sleep,
+  TestEnv,
+} from "../../src";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 
 jest.setTimeout(600_000);
@@ -203,6 +210,73 @@ async function waitForDomainPresent(
     await sleep(2_000);
   }
   throw new Error(`Timed out waiting for domain '${aliasId}' to be attached`);
+}
+
+// Publish a fresh, uniquely-named package to the test namespace so search has
+// something deterministic to find. Returns the bare package name (without the
+// owner).
+async function publishUniquePackage(env: TestEnv): Promise<string> {
+  const name = `sdk-search-${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  const fullName = `${env.namespace}/${name}`;
+  const pkgDir = await buildTempDir({
+    "wasmer.toml": `
+[package]
+name = "${fullName}"
+version = "0.1.0"
+
+[dependencies]
+"wasmer/static-web-server" = "1"
+
+[fs]
+"/public" = "public"
+
+[[command]]
+name = "script"
+module = "wasmer/static-web-server:webserver"
+runner = "https://webc.org/runner/wasi"
+`,
+    public: {
+      "index.html": name,
+    },
+  });
+  await env.runWasmerCommand({ args: ["publish"], cwd: pkgDir });
+  return name;
+}
+
+// Search indexing is asynchronous after publish, so poll until the package
+// shows up (or time out with the most recent results for debugging).
+async function waitForPackageInSearch(
+  client: StackMachineClient,
+  env: TestEnv,
+  packageName: string,
+  timeoutMs = 120_000,
+): Promise<SearchPackageVersion> {
+  const start = Date.now();
+  let lastSeen: string[] = [];
+  while (Date.now() - start < timeoutMs) {
+    const page = await client.packages.search({
+      query: packageName,
+      filter: { owner: env.namespace },
+    });
+    const match = page.data.find(
+      (result) =>
+        result.package.namespace === env.namespace &&
+        result.package.packageName === packageName,
+    );
+    if (match) {
+      return match;
+    }
+    lastSeen = page.data.map(
+      (result) => `${result.package.namespace}/${result.package.packageName}`,
+    );
+    await sleep(5_000);
+  }
+  throw new Error(
+    [
+      `Timed out waiting for package '${env.namespace}/${packageName}' to appear in search.`,
+      `Last results: ${lastSeen.join(", ") || "(none)"}`,
+    ].join("\n"),
+  );
 }
 
 describe("stackmachine sdk", () => {
@@ -446,5 +520,39 @@ describe("stackmachine sdk", () => {
       noAssertSuccess: true,
     });
     expect([200, 302]).toContain(response.status);
+  });
+
+  test("searchPackagesByOwner example", async () => {
+    const env = TestEnv.fromEnv();
+    const client = await env.stackmachineSdk();
+
+    const name = await publishUniquePackage(env);
+
+    const result = await waitForPackageInSearch(client, env, name);
+    expect(result.package.namespace).toBe(env.namespace);
+    expect(result.package.packageName).toBe(name);
+    expect(result.version).toBe("0.1.0");
+    expect(result.createdAt).toBeInstanceOf(Date);
+    expect(result.package.lastVersion?.version).toBe("0.1.0");
+
+    const ownerScoped = await client.packages.search({
+      filter: { owner: env.namespace },
+      limit: 50,
+    });
+    // a package for that owner must exist
+    expect(ownerScoped.data.length).toBeGreaterThan(0);
+    // and all returned packages must belong to the queried owner
+    for (const entry of ownerScoped.data) {
+      expect(entry.package.namespace).toBe(env.namespace);
+    }
+
+    const otherOwner = await client.packages.search({
+      query: name,
+      filter: { owner: "wasmer" },
+    });
+    // the package should *not* be returned when filtering for a different owner
+    expect(
+      otherOwner.data.some((entry) => entry.package.packageName === name),
+    ).toBe(false);
   });
 });
