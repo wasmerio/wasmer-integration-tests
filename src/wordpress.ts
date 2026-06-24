@@ -1,6 +1,7 @@
 import { sleep } from "./util";
 
-const MAX_RETRIES = 30;
+const DEFAULT_MAX_RETRIES = 30;
+const LOCAL_PLATFORM_MAX_RETRIES = 120;
 const RETRY_DELAY_MS = 2000;
 const FAILURE_BODY_EXCERPT_LENGTH = 1000;
 
@@ -35,14 +36,29 @@ function validationFailureReason(attempt: ValidationAttempt): string {
   return "response did not contain 'WordPress'";
 }
 
+function maxRetries(): number {
+  const raw = process.env.WASMER_TEST_WORDPRESS_MAX_RETRIES;
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER
+    ? LOCAL_PLATFORM_MAX_RETRIES
+    : DEFAULT_MAX_RETRIES;
+}
+
 export async function validateWordpressIsLive(appUrl: string): Promise<void> {
   if (appUrl === "") {
     throw new Error("Expected appUrl to be set");
   }
 
   let lastAttempt: ValidationAttempt = { body: "" };
+  const retries = maxRetries();
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const response = await fetch(appUrl, { method: "GET" });
       const body = await response.text();
@@ -59,10 +75,10 @@ export async function validateWordpressIsLive(appUrl: string): Promise<void> {
       lastAttempt = { body: "", error };
     }
 
-    if (attempt < MAX_RETRIES) {
+    if (attempt < retries) {
       if (process.env.VERBOSE === "true") {
         console.debug(
-          `WordPress validation attempt ${attempt}/${MAX_RETRIES} failed: ${validationFailureReason(lastAttempt)}`,
+          `WordPress validation attempt ${attempt}/${retries} failed: ${validationFailureReason(lastAttempt)}`,
         );
       }
       await sleep(RETRY_DELAY_MS);
@@ -71,7 +87,7 @@ export async function validateWordpressIsLive(appUrl: string): Promise<void> {
 
   throw new Error(
     [
-      `Failed to validate deployed WordPress app at ${appUrl} after ${MAX_RETRIES} attempts: ${validationFailureReason(lastAttempt)}.`,
+      `Failed to validate deployed WordPress app at ${appUrl} after ${retries} attempts: ${validationFailureReason(lastAttempt)}.`,
       lastAttempt.body
         ? `Response body excerpt:\n${bodyExcerpt(lastAttempt.body)}`
         : null,

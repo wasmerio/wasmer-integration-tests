@@ -12,3 +12,10 @@ flake.nix
 flake.lock
 Makefile
 pnpm-lock.yaml
+local.env.example
+local-platform/**/*.sh
+local-platform/**/Dockerfile
+local-platform/**/*.toml
+local-platform/**/*.sql
+local-platform/package-seed.txt
+local-platform/package-compilation-list.txt

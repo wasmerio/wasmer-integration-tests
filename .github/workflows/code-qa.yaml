@@ -7,9 +7,13 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   actions: read
   contents: read
+  packages: read
   pull-requests: read
 
 concurrency:
@@ -17,14 +21,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    uses: ./.github/workflows/integration-test-workflow.yaml
+  test-suite-matrix:
+    name: Load integration test suite matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.suites.outputs.matrix }}
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Read shared test suite manifest
+        id: suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -c '{include: .}' .github/integration-test-suites.json)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  local-platform-cache:
+    name: Prepare local platform test environment cache
+    # Prepare the local platform test environment once before the suite matrix
+    # fans out. This warms package downloads and Edge compiler/webc caches so
+    # every suite does not race to compile the same packages on a cold cache.
+    uses: ./.github/workflows/local-platform-test.yaml
     with:
-      test_branch: ${{ github.head_ref }}
-      provide_quality_assessment: true
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
+      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
+      prepare_only: true
+      suite_id: cache-warmup
+      job_name: Prepare local platform test environment cache
     secrets:
-      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
-      test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
+      pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
+
+  tests:
+    name: Local platform integration test / ${{ matrix.display_id || matrix.id }}
+    needs:
+      - test-suite-matrix
+      - local-platform-cache
+    # Use CI-produced artifacts by default so Code QA does not need AWS/ECR
+    # access or local AWS profiles. Override LOCAL_PLATFORM_*_VERSION for
+    # candidate artifacts or emergency pinning.
+    uses: ./.github/workflows/local-platform-test.yaml
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
+    with:
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
+      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
+      test_command: ${{ matrix.test_command }}
+      suite_id: ${{ matrix.id }}
+      job_name: Run ${{ matrix.display_id || matrix.id }} tests
+    secrets:
+      pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 
   fmt:
     name: File format check

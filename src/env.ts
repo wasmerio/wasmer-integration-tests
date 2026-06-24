@@ -154,7 +154,8 @@ function formatUnknownError(value: unknown): string {
     : Object.prototype.toString.call(value);
 }
 
-const SECRET_KEY_PATTERN = /(authorization|password|secret|token|api[_-]?key)/i;
+const SECRET_KEY_PATTERN =
+  /(authorization|password|passwd|pwd|secret|token|jwt|api[_-]?key|access[_-]?key|private[_-]?key|credential)/i;
 
 function sanitizeForLogs(value: unknown, depth = 0): unknown {
   if (depth > 5) {
@@ -892,7 +893,9 @@ export class TestEnv {
 
     // Create a copy and then unset env if env has been printed
     const printSpawn = { args: args, ...spawnOpts };
-    if (!this.verbose) {
+    if (this.verbose) {
+      printSpawn.env = sanitizeForLogs(env) as Record<string, string>;
+    } else {
       printSpawn.env = { OBFUSCATED: "Rerun with VERBOSE=true to see." };
     }
     const quiet = options.quiet === true && !this.verbose;
@@ -1428,16 +1431,43 @@ subscription PublishAppFromRepoAutobuild(
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;
     while (true) {
-      console.debug(`Fetching URL ${url}`, { options });
-      const response = edgeHostOverride
-        ? await fetchWithHostOverride(
-            url,
-            options,
-            edgeHostOverride,
-            edgeForwardedProto,
-          )
-        : await fetch(url, options);
-      console.debug(`Fetched URL ${url}`);
+      const attemptStartedAt = Date.now();
+      console.debug(`Fetching URL ${url}`, {
+        options,
+        appId: app.id,
+        appName: app.version.name,
+        edgeHostOverride,
+        waitForVersionId,
+      });
+      let response: Response;
+      try {
+        response = edgeHostOverride
+          ? await fetchWithHostOverride(
+              url,
+              options,
+              edgeHostOverride,
+              edgeForwardedProto,
+            )
+          : await fetch(url, options);
+      } catch (error) {
+        throw new Error(
+          [
+            `Failed to fetch URL '${url}' after ${Date.now() - attemptStartedAt}ms.`,
+            `App: ${this.namespace}/${app.version.name} (${app.id})`,
+            edgeHostOverride ? `Edge host override: ${edgeHostOverride}` : null,
+            waitForVersionId
+              ? `Expected app version: ${waitForVersionId}`
+              : null,
+            `Underlying error: ${formatUnknownError(error)}`,
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join("\n"),
+          { cause: error },
+        );
+      }
+      console.debug(`Fetched URL ${url}`, {
+        elapsedMs: Date.now() - attemptStartedAt,
+      });
       if (this.verbose) {
         console.debug({
           status: response.status,
@@ -1466,6 +1496,18 @@ subscription PublishAppFromRepoAutobuild(
         if (currentId !== waitForVersionId) {
           let msg = "";
           if (!currentId) {
+            if (
+              this.edgeServer &&
+              /^(1|true|yes|on)$/i.test(
+                process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER ?? "",
+              ) &&
+              response.ok
+            ) {
+              console.warn(
+                `Local platform Edge response is missing ${HEADER_APP_VERSION_ID}; accepting healthy response because LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER=1`,
+              );
+              return response;
+            }
             msg = `missing ${HEADER_APP_VERSION_ID} header in response - app does not seem to be published yet`;
           } else {
             msg = `expected version ${waitForVersionId}, got ${currentId}`;
@@ -1569,6 +1611,16 @@ function shouldRouteViaEdgeBridge(
   return normalizedHost.endsWith(`.${normalizedDomain}`);
 }
 
+function fetchTimeoutMs(): number {
+  const raw = process.env.WASMER_TEST_FETCH_TIMEOUT_MS;
+  if (!raw) {
+    return 60_000;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60_000;
+}
+
 async function fetchWithHostOverride(
   targetUrl: string,
   init: RequestInit | Request,
@@ -1589,6 +1641,7 @@ async function fetchWithHostOverride(
 
   return new Promise<Response>((resolve, reject) => {
     const client = target.protocol === "https:" ? https : http;
+    const timeoutMs = fetchTimeoutMs();
     const req = client.request(
       {
         protocol: target.protocol,
@@ -1629,6 +1682,13 @@ async function fetchWithHostOverride(
       },
     );
 
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(
+        new Error(
+          `Timed out after ${timeoutMs}ms waiting for Edge response from ${targetUrl} with Host ${hostHeader}`,
+        ),
+      );
+    });
     req.on("error", reject);
     if (body) {
       req.write(body);

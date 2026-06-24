@@ -11,6 +11,7 @@ import {
   createTempDir,
   HEADER_INSTANCE_ID,
   HEADER_PURGE_INSTANCES,
+  getAllLogs,
   parseDeployOutput,
   randomAppName,
   sleep,
@@ -530,13 +531,16 @@ addEventListener("fetch", (fetchEvent) => {
   `;
   const spec = buildJsWorkerApp(code);
   const info = await env.deployApp(spec);
+  await env.fetchApp(info, "/");
 
   const start = Date.now();
   while (true) {
-    const output = await env.runWasmerCommand({
-      args: ["app", "logs"],
-      cwd: info.dir,
-    });
+    const output = process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER
+      ? { stdout: await getAllLogs(env, info.version.name, start) }
+      : await env.runWasmerCommand({
+          args: ["app", "logs"],
+          cwd: info.dir,
+        });
 
     if (output.stdout.includes("hello logs")) {
       console.log("Logs found in output");

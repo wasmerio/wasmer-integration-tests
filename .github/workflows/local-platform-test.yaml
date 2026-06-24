@@ -1,0 +1,182 @@
+name: Local Platform Test
+
+on:
+  workflow_call:
+    inputs:
+      backend_version:
+        type: string
+        required: true
+      edge_version:
+        type: string
+        required: true
+      test_command:
+        type: string
+        default: pnpm exec jest ./tests/general/
+      prepare_only:
+        type: boolean
+        default: false
+      suite_id:
+        type: string
+        default: default
+      job_name:
+        type: string
+        default: ""
+    secrets:
+      pat:
+        required: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  test:
+    name: ${{ inputs.job_name || (inputs.prepare_only && format('Prepare {0} test environment', inputs.suite_id) || format('Run {0} tests', inputs.suite_id)) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Wasmer CLI
+        uses: wasmerio/setup-wasmer@v2
+
+      - name: Log Wasmer CLI version
+        run: wasmer --version
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Python for wasmopticon tests
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv for wasmopticon tests
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+
+      - name: Ensure uv cache dir exists
+        run: mkdir -p "${UV_CACHE_DIR:?}"
+
+      - run: make setup
+
+      - name: Restore local platform package and compiler caches
+        id: local-platform-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .local-platform/package-cache
+            .local-platform/cache/edge/compiler_cache
+            .local-platform/cache/edge/webc_cache
+          key: local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml', 'wordpress/wasmer.toml') }}
+          restore-keys: |
+            local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-
+            local-platform-v1-${{ runner.os }}-
+
+      - name: Log local platform selection
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_PREPARE_ONLY: ${{ inputs.prepare_only }}
+          LOCAL_PLATFORM_SUITE_ID: ${{ inputs.suite_id }}
+          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+        run: |
+          echo "Local platform requested versions:"
+          echo "  backend_version=$BACKEND_VERSION"
+          echo "  edge_version=$EDGE_VERSION"
+          echo "  suite_id=$LOCAL_PLATFORM_SUITE_ID"
+          echo "  prepare_only=$LOCAL_PLATFORM_PREPARE_ONLY"
+          echo "  test_command=$LOCAL_TEST_COMMAND"
+          echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
+
+      - name: Validate private artifact/release access token
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+        run: |
+          set -euo pipefail
+          needs_pat=0
+          case "$BACKEND_VERSION" in
+            github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+          esac
+          case "$EDGE_VERSION" in
+            resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+          esac
+
+          if [ "$needs_pat" = "1" ] && [ "$HAS_ARTIFACT_FETCH_PAT" != "true" ]; then
+            echo "::error::LOCAL_PLATFORM_ARTIFACT_FETCH_PAT is required for private wasmerio/backend artifacts or wasmerio/edge dev releases, but it was not passed to the workflow."
+            echo "Create repository/org secret LOCAL_PLATFORM_ARTIFACT_FETCH_PAT and make sure it is available to this repository/event."
+            exit 1
+          fi
+
+      - name: Prepare local platform test environment
+        if: ${{ inputs.prepare_only }}
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY  }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
+          WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
+          GH_TOKEN: ${{ secrets.pat }}
+          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
+        run: make local-platform-prepare
+
+      - name: Run local platform tests
+        if: ${{ !inputs.prepare_only }}
+        env:
+          BACKEND_VERSION: ${{ inputs.backend_version }}
+          BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY }}
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
+          WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
+          GH_TOKEN: ${{ secrets.pat }}
+          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
+        run: make local-test
+
+      - name: Normalize local platform cache permissions
+        if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          for path in \
+            .local-platform/package-cache \
+            .local-platform/cache/edge/compiler_cache \
+            .local-platform/cache/edge/webc_cache
+          do
+            if [ -e "$path" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$path"
+              chmod -R u+rwX,go+rX "$path"
+            fi
+          done
+
+      - name: Save local platform package and compiler caches
+        if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .local-platform/package-cache
+            .local-platform/cache/edge/compiler_cache
+            .local-platform/cache/edge/webc_cache
+          key: ${{ steps.local-platform-cache.outputs.cache-primary-key }}
+
+      - name: Upload local platform logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-platform-${{ inputs.suite_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .local-platform/current/logs/**
+            .local-platform/current/diagnostics/**
+            .local-platform/current/resolved.env
+            .local-platform/current/resolved.json
+          if-no-files-found: error
