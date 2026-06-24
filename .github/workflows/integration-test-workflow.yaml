@@ -21,6 +21,11 @@ on:
         type: string
         description: "Checkout a specific branch of the integration tests"
         default: "main"
+      test_repository:
+        required: false
+        type: string
+        description: "Checkout integration tests from a specific repository"
+        default: "wasmerio/wasmer-integration-tests"
       registry:
         required: false
         type: string
@@ -87,7 +92,7 @@ jobs:
       - name: Clone repository
         uses: actions/checkout@v4
         with:
-          repository: wasmerio/wasmer-integration-tests
+          repository: ${{ inputs.test_repository }}
           ref: ${{ inputs.test_branch }}
           submodules: true
       # The relative path works here as we're checking out the wasmer-integration-tests repo
