@@ -21,8 +21,8 @@ lint: setup fmt-check check
 test: setup
 	pnpm exec jest $(JEST_ARGS)
 
-local-test: local-platform-up
-	. ./.local-platform/current/test-env.sh && $(MAKE) test
+local-test: setup
+	bash ./local-platform/scripts/local-test.sh
 
 local-platform-prepare:
 	bash ./local-platform/scripts/prepare-test-environment.sh
