@@ -2,6 +2,8 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 
+import { isVerboseEnabled } from "./env";
+
 export type Path = string;
 
 export interface DirEntry extends Record<Path, string | DirEntry> {
@@ -13,7 +15,7 @@ export async function buildDir(path: Path, files: DirEntry): Promise<void> {
   for (const [name, value] of Object.entries(files)) {
     const subPath = `${path}/${name}`;
     if (typeof value === "string") {
-      if (process.env.VERBOSE) {
+      if (isVerboseEnabled()) {
         console.log("writing file", { path, value, subPath });
       } else {
         console.log(

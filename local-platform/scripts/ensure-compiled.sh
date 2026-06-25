@@ -75,6 +75,17 @@ done < "$resolved_list"
 log "Building Edge runtime helper image for precompilation"
 compose build edge >/dev/null
 
+edge_helper_image="${COMPOSE_PROJECT_NAME}-edge:latest"
+edge_network="${COMPOSE_PROJECT_NAME}_default"
+
+if ! docker image inspect "$edge_helper_image" >/dev/null 2>&1; then
+  fail "Expected Edge helper image $edge_helper_image after compose build"
+fi
+
+if ! docker network inspect "$edge_network" >/dev/null 2>&1; then
+  fail "Expected Compose network $edge_network before precompilation"
+fi
+
 IFS=',' read -r -a package_compilation_engines <<< "${LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES:-wasmer-cranelift}"
 ensure_compiled_threads_cli=()
 if [ -n "${LOCAL_PLATFORM_ENSURE_COMPILED_THREADS:-}" ] && [ "${LOCAL_PLATFORM_ENSURE_COMPILED_THREADS}" -gt 0 ]; then
@@ -90,8 +101,15 @@ for raw_engine in "${package_compilation_engines[@]}"; do
   log "Ensuring Edge compiler cache is warm for engine=$engine (${#package_compilation_packages[@]} package(s))"
 
   timeout "${LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS:-1800}" \
-    docker compose --project-name "$COMPOSE_PROJECT_NAME" --file "$COMPOSE_FILE" \
-      run --rm --no-deps -T --entrypoint /bin/sh edge \
+    docker run --rm --init \
+      --user 0:0 \
+      --network "$edge_network" \
+      -v "$RUN_DIR/artifacts/edge:/usr/local/bin/edge:ro" \
+      -v "$RUN_DIR/edge/platform_config.yaml:/config/platform_config.yaml:ro" \
+      -v "$LOCAL_PLATFORM_EDGE_CACHE_DIR/compiler_cache:/data/compiler_cache" \
+      -v "$LOCAL_PLATFORM_EDGE_CACHE_DIR/webc_cache:/data/webc_cache" \
+      --entrypoint /bin/sh \
+      "$edge_helper_image" \
       -lc 'socat TCP-LISTEN:18000,bind=127.0.0.1,fork,reuseaddr TCP:backend:8000 & exec "$@"' \
       sh /usr/local/bin/edge \
       local ensure-compiled \

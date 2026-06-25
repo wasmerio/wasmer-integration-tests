@@ -1,6 +1,7 @@
 import * as toml from "@iarna/toml";
 import * as yaml from "js-yaml";
 import { DirEntry } from "../fs";
+import { isVerboseEnabled } from "../env";
 import { z } from "zod";
 import * as fs from "fs";
 import * as pathModule from "path";
@@ -311,7 +312,7 @@ export async function writeAppDefinition(
     files["wasmer.toml"] = toml.stringify(app.wasmerToml);
   }
 
-  if (process.env.VERBOSE) {
+  if (isVerboseEnabled()) {
     console.debug(`Writing app definition to ${path}`, { files });
   }
 

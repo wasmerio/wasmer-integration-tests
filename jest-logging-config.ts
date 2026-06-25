@@ -2,11 +2,12 @@ import nodeConsole from "console";
 
 import {
   currentJestTestName,
+  isVerboseEnabled,
   markCurrentJestTestFailed,
   runWithJestTestState,
 } from "./src/env";
 
-if (process.env.VERBOSE === "true") {
+if (isVerboseEnabled()) {
   // Allow opting into streaming logs to stdout/stderr for debugging.
   global.console = nodeConsole;
 }
@@ -111,7 +112,7 @@ function normalizeThrownValue(error: unknown): unknown {
 }
 
 function installTestTaggedConsole(): void {
-  if (process.env.VERBOSE === "true") {
+  if (isVerboseEnabled()) {
     return;
   }
 

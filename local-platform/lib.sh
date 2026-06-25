@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOCAL_PLATFORM_DIR="$REPO_DIR/.local-platform"
 COMPOSE_FILE="$REPO_DIR/docker-compose.local-platform.yaml"
-DEFAULT_TEST_COMMAND='pnpm exec jest ./tests/general/'
+DEFAULT_TEST_COMMAND='pnpm exec jest'
 
 ANSI_RESET=$'\033[0m'
 ANSI_DIM_GRAY=$'\033[90m'
@@ -35,7 +35,37 @@ log_is_verbose() {
 }
 
 log_progress_enabled() {
-  ! log_is_verbose && [ -t 2 ]
+  ! log_is_verbose && [ -t 2 ] && ! is_truthy "${LOCAL_PLATFORM_DISABLE_INLINE_PROGRESS:-0}"
+}
+
+run_quietly() {
+  local label="$1"
+  shift
+  local log_file="$1"
+  shift
+
+  mkdir -p "$(dirname "$log_file")"
+
+  if log_is_verbose || ! [ -t 2 ]; then
+    "$@"
+    return $?
+  fi
+
+  : > "$log_file"
+  set +e
+  "$@" >"$log_file" 2>&1
+  local status=$?
+  set -e
+
+  if [ "$status" -ne 0 ]; then
+    log_clear
+    log_warn "$label failed; showing captured output from $log_file"
+    cat "$log_file" >&2 || true
+    return "$status"
+  fi
+
+  log "$label complete"
+  return 0
 }
 
 log_color_for_level() {
@@ -96,6 +126,46 @@ log_debug() {
   log_emit DEBUG "$@"
 }
 
+log_download_progress() {
+  local label="$1"
+  local path="$2"
+  local pid="$3"
+  local start_ts last_ts last_size
+  start_ts="$(date +%s)"
+  last_ts="$start_ts"
+  last_size=0
+  while process_is_running "$pid"; do
+    local size="0"
+    local now elapsed delta_ts delta_size rate_bytes rate_human size_human
+    if [ -d "$path" ]; then
+      size="$(find "$path" -type f -printf '%s\n' 2>/dev/null | awk '{sum += $1} END {printf "%s", sum + 0}')"
+    elif [ -e "$path" ]; then
+      size="$(wc -c < "$path" 2>/dev/null | tr -d '[:space:]' || printf '0')"
+    fi
+    now="$(date +%s)"
+    elapsed=$((now - start_ts))
+    delta_ts=$((now - last_ts))
+    delta_size=$((size - last_size))
+    if [ "$delta_ts" -le 0 ]; then
+      delta_ts=1
+    fi
+    rate_bytes=$((delta_size / delta_ts))
+    size_human="$(numfmt --to=iec --suffix=B "$size" 2>/dev/null || printf '%s bytes' "$size")"
+    rate_human="$(numfmt --to=iec --suffix=B "$rate_bytes" 2>/dev/null || printf '%s B' "$rate_bytes")"
+    printf '\r\033[KDownloading %s (%s, %s/s, %ss elapsed)' "$label" "$size_human" "$rate_human" "$elapsed" >&2
+    last_ts="$now"
+    last_size="$size"
+    sleep 2
+  done
+  printf '\r\033[K' >&2
+}
+
+remove_path_if_exists() {
+  local path="$1"
+  [ -e "$path" ] || [ -L "$path" ] || return 0
+  rm -rf "$path"
+}
+
 log_warn() {
   log_emit WARNING "$@"
 }
@@ -111,6 +181,24 @@ is_ci() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
+}
+
+ensure_github_token() {
+  if [ -n "${GH_TOKEN:-}" ]; then
+    return 0
+  fi
+
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    export GH_TOKEN="$GITHUB_TOKEN"
+    return 0
+  fi
+
+  command -v gh >/dev/null 2>&1 || fail "GH_TOKEN is not set, GITHUB_TOKEN is not set, and GitHub CLI is not installed"
+  if ! GH_TOKEN="$(gh auth token 2>/dev/null || true)"; then
+    GH_TOKEN=""
+  fi
+  [ -n "$GH_TOKEN" ] || fail "GH_TOKEN is not set and could not be resolved via 'gh auth token'"
+  export GH_TOKEN
 }
 
 set_default_cache_dirs() {

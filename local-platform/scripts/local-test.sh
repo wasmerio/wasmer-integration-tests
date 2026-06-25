@@ -9,16 +9,21 @@ source "$SCRIPT_DIR/../lib.sh"
 LOCAL_PLATFORM_PREPARE_ONLY="${LOCAL_PLATFORM_PREPARE_ONLY:-0}"
 REQUESTED_LOCAL_TEST_COMMAND="${LOCAL_TEST_COMMAND:-}"
 STACK_READY=0
+LOCAL_PLATFORM_AUTO_DOWN="${LOCAL_PLATFORM_AUTO_DOWN:-0}"
 
 cleanup() {
   local exit_code=$?
   set +e
 
   if [ "$STACK_READY" -eq 1 ]; then
-    if [ "$exit_code" -ne 0 ] && is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}"; then
-      log_warn "LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE is set; leaving the local platform running for inspection"
+    if is_truthy "$LOCAL_PLATFORM_AUTO_DOWN"; then
+      if [ "$exit_code" -ne 0 ] && is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}"; then
+        log_warn "LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE is set; leaving the local platform running for inspection"
+      else
+        "$SCRIPT_DIR/down.sh" || true
+      fi
     else
-      "$SCRIPT_DIR/down.sh" || true
+      log "Leaving local platform running; tear down manually with make local-platform-down"
     fi
   fi
 
@@ -59,6 +64,8 @@ set +e
   # shellcheck disable=SC1091
   source "$RUN_DIR/test-env.sh"
   cd "$REPO_DIR"
+  export VERBOSE="${VERBOSE:-false}"
+  export FORCE_COLOR="${FORCE_COLOR:-1}"
   # Mirror GitHub Actions bash run-step semantics so multi-line suite commands
   # fail on the first failing command instead of returning the exit status of
   # only the last line.

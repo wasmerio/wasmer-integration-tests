@@ -28,7 +28,7 @@ Example `local.env`:
 ```bash
 export BACKEND_VERSION=resolve_prod
 export EDGE_VERSION=resolve_prod
-export LOCAL_TEST_COMMAND='pnpm exec jest ./tests/general/'
+export LOCAL_TEST_COMMAND='pnpm exec jest'
 ```
 
 ## Commands

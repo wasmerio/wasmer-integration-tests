@@ -1,3 +1,4 @@
+import { isVerboseEnabled } from "./env";
 import { sleep } from "./util";
 
 const DEFAULT_MAX_RETRIES = 30;
@@ -76,7 +77,7 @@ export async function validateWordpressIsLive(appUrl: string): Promise<void> {
     }
 
     if (attempt < retries) {
-      if (process.env.VERBOSE === "true") {
+      if (isVerboseEnabled()) {
         console.debug(
           `WordPress validation attempt ${attempt}/${retries} failed: ${validationFailureReason(lastAttempt)}`,
         );

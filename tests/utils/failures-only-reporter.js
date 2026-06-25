@@ -3,6 +3,10 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 
+function isVerboseEnabled() {
+  return /^(1|true|yes|on)$/i.test(process.env.VERBOSE ?? "");
+}
+
 const REGISTRY_PATH = path.join(process.cwd(), ".jest-deployed-apps.jsonl");
 const CONSOLE_TEST_MARKER_RE = /^\[\[wasmer-test:([^\]]+)\]\]\s?/;
 
@@ -149,7 +153,7 @@ function consoleEntryForFailingTests(entry, failingTestNames) {
 
 function truncate(value) {
   const maxLength =
-    process.env.VERBOSE === "true"
+    isVerboseEnabled()
       ? Number.POSITIVE_INFINITY
       : Number(process.env.MAX_APP_LOG_PRINT_LENGTH ?? 20_000);
   if (value.length <= maxLength) {

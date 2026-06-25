@@ -11,7 +11,7 @@ on:
         required: true
       test_command:
         type: string
-        default: pnpm exec jest ./tests/general/
+        default: pnpm exec jest
       prepare_only:
         type: boolean
         default: false

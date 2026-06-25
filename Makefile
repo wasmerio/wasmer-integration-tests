@@ -22,7 +22,7 @@ test: setup
 	pnpm exec jest $(JEST_ARGS)
 
 local-test:
-	bash ./local-platform/scripts/local-test.sh
+	LOCAL_TEST_COMMAND='pnpm exec jest $(JEST_ARGS)' bash ./local-platform/scripts/local-test.sh
 
 local-platform-prepare:
 	bash ./local-platform/scripts/prepare-test-environment.sh
