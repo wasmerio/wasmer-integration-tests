@@ -152,10 +152,9 @@ function consoleEntryForFailingTests(entry, failingTestNames) {
 }
 
 function truncate(value) {
-  const maxLength =
-    isVerboseEnabled()
-      ? Number.POSITIVE_INFINITY
-      : Number(process.env.MAX_APP_LOG_PRINT_LENGTH ?? 20_000);
+  const maxLength = isVerboseEnabled()
+    ? Number.POSITIVE_INFINITY
+    : Number(process.env.MAX_APP_LOG_PRINT_LENGTH ?? 20_000);
   if (value.length <= maxLength) {
     return value;
   }
