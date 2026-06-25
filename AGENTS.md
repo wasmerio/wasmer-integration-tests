@@ -20,6 +20,7 @@ Overview on contribution requirements & guidelines
   - `pnpm exec jest tests/validation/log.test.ts --runInBand`
 - Stop the local stack: make local-platform-down
 - Local platform defaults come from `local.env` if present, otherwise `resolve_prod`; see `local.env.example`
+- Troubleshooting runbook (log/diagnostic locations, the `*.localhost` Edge-routing gotcha, validation-vs-jest timeouts, dev-vs-local comparison): see `docs/local-environment-v1.md` → "Troubleshooting (agent runbook)". Key rule: reach apps via `env.fetchApp`/`env.fetchAppUrlThroughEdge`, never a raw `fetch` — raw fetch works on dev but hangs on the local stack.
 
 ## Environment for integration tests
 

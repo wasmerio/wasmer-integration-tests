@@ -1395,6 +1395,39 @@ subscription PublishAppFromRepoAutobuild(
     }
   }
 
+  /**
+   * Fetch an absolute app URL routed through the configured Edge target.
+   *
+   * Unlike {@link fetchApp}, this does not look the app up in the backend or
+   * wait for a specific deployed version - it simply applies the Edge `Host`
+   * header and local redirect-`Location` rewriting so an arbitrary app URL is
+   * reachable on the disposable local platform (where Edge listens on isolated
+   * host ports and the canonical `*.localhost` URL is not directly routable).
+   * When no `EDGE_SERVER` is configured it falls back to a direct fetch, which
+   * is how requests already behave against the dev/remote backend.
+   */
+  async fetchAppUrlThroughEdge(
+    targetUrl: string,
+    options: AppFetchOptions = {},
+  ): Promise<Response> {
+    if (!this.edgeServer) {
+      return fetch(targetUrl, options);
+    }
+
+    const directUrl = new URL(targetUrl);
+    const edgeTarget = new URL(this.edgeServer);
+    edgeTarget.pathname = directUrl.pathname;
+    edgeTarget.search = directUrl.search;
+    edgeTarget.hash = directUrl.hash;
+
+    return fetchWithHostOverride(
+      edgeTarget.toString(),
+      options,
+      directUrl.host,
+      directUrl.protocol.replace(/:$/, ""),
+    );
+  }
+
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
