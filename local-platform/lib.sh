@@ -47,8 +47,13 @@ run_quietly() {
   mkdir -p "$(dirname "$log_file")"
 
   if log_is_verbose || ! [ -t 2 ]; then
-    "$@"
-    return $?
+    # Stream output live (CI logs / verbose runs) but still capture it to
+    # log_file: callers such as bootstrap.sh read the file back afterward.
+    set +e
+    "$@" 2>&1 | tee "$log_file"
+    local status=${PIPESTATUS[0]}
+    set -e
+    return "$status"
   fi
 
   : > "$log_file"
