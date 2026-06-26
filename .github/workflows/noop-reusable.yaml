@@ -1,0 +1,19 @@
+name: Noop Reusable
+
+# BISECT: minimal cross-repo reusable workflow to determine whether the
+# startup_failure is caused by reusable-workflow content or by cross-repo
+# reusable calls from backend on pull_request. Delete after diagnosis.
+
+on:
+  workflow_call:
+    inputs:
+      msg:
+        type: string
+        required: false
+        default: hello
+
+jobs:
+  noop:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "noop reusable ran: ${{ inputs.msg }}"
