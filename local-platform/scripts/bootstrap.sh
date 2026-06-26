@@ -18,6 +18,20 @@ if [ -z "$mysql_app_host" ]; then
   mysql_app_host="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
 fi
 [ -n "$mysql_app_host" ] || mysql_app_host="172.17.0.1"
+
+# The local-dev-env subcommand moved under a `develop` parent in backend
+# bc1a7ad9 ("Reorganize & document CLI commands", 2026-06-22). Older
+# pinned/production images expose it at the top level (`smbe local-dev-env`);
+# newer images (anything built from current backend) nest it (`smbe develop
+# local-dev-env`). Probe the image so bootstrap works against both, which is
+# required while the local platform tests both the latest built backend and the
+# pinned/resolve_prod default.
+dev_env_cmd=(develop local-dev-env)
+if ! docker run --rm --entrypoint /app/smbe "$BACKEND_IMAGE_REF" develop --help >/dev/null 2>&1; then
+  dev_env_cmd=(local-dev-env)
+fi
+log "Using smbe subcommand: ${dev_env_cmd[*]}"
+
 set +e
 run_quietly "Bootstrap backend/test env" "$bootstrap_raw" \
   timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
@@ -41,7 +55,7 @@ run_quietly "Bootstrap backend/test env" "$bootstrap_raw" \
       -e SECRET_KEY=local-dev-secret \
       --entrypoint /app/smbe \
       "$BACKEND_IMAGE_REF" \
-      local-dev-env \
+      "${dev_env_cmd[@]}" \
       --state-dir /platform/state \
       --namespace wasmer-integration-tests \
       --public-url "http://backend:8000" \
