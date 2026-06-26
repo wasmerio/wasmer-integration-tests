@@ -71,7 +71,12 @@ jobs:
     # Prepare the local platform test environment once before the suite matrix
     # fans out. This warms package downloads and Edge compiler/webc caches so
     # every suite does not race to compile the same packages on a cold cache.
-    uses: ./.github/workflows/local-platform-test.yaml
+    #
+    # NB: full owner/repo@ref, not './'. Relative reusable-workflow refs do not
+    # resolve when the top-level caller is a different repository (e.g. backend
+    # calling this suite), which fails the whole run at startup.
+    # TODO(collapse-to-main): flip @feat/blocking-integ-test-pipelines -> @main.
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@feat/blocking-integ-test-pipelines
     with:
       backend_version: ${{ inputs.backend_version }}
       edge_version: ${{ inputs.edge_version }}
@@ -87,7 +92,8 @@ jobs:
     needs:
       - test-suite-matrix
       - local-platform-cache
-    uses: ./.github/workflows/local-platform-test.yaml
+    # TODO(collapse-to-main): flip @feat/blocking-integ-test-pipelines -> @main.
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@feat/blocking-integ-test-pipelines
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
