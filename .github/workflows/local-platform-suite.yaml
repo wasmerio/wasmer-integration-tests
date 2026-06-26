@@ -84,6 +84,9 @@ jobs:
       prepare_only: true
       suite_id: cache-warmup
       job_name: Prepare local platform test environment cache
+      # Warmup compiles the package list, so it gets a more generous cap than
+      # the individual suites.
+      timeout_minutes: 45
     secrets:
       pat: ${{ secrets.pat }}
 
@@ -104,5 +107,9 @@ jobs:
       test_command: ${{ matrix.test_command }}
       suite_id: ${{ matrix.id }}
       job_name: Run ${{ matrix.display_id || matrix.id }} tests
+      # Per-suite wall-clock cap; override per entry via timeout_minutes in
+      # .github/integration-test-suites.json. Stops a hung deploy (e.g. the
+      # templates suite blocking on a stuck autobuild) from running for hours.
+      timeout_minutes: ${{ matrix.timeout_minutes || 30 }}
     secrets:
       pat: ${{ secrets.pat }}

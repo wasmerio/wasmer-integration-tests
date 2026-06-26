@@ -25,6 +25,14 @@ on:
         type: string
         default: main
         description: "Branch of wasmerio/wasmer-integration-tests to check out and run."
+      timeout_minutes:
+        type: number
+        default: 30
+        description: >-
+          Hard wall-clock cap for this single suite job. Without it the job
+          inherits GitHub's 6h default, so a hung deploy (e.g. an autobuild that
+          never completes) keeps the runner busy for hours instead of failing
+          fast. Mirrors the established integration-test-workflow.yaml cap.
     secrets:
       pat:
         required: false
@@ -41,6 +49,7 @@ jobs:
   test:
     name: ${{ inputs.job_name || (inputs.prepare_only && format('Prepare {0} test environment', inputs.suite_id) || format('Run {0} tests', inputs.suite_id)) }}
     runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       # Always check out the integration-tests repo itself (public), even when
       # this reusable workflow is called from another repository (e.g. a service
