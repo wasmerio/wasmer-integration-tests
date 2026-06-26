@@ -218,7 +218,7 @@ describe("stackmachine wordpress ssh", () => {
     app = await deployStackMachineWordpress(env, client);
 
     expect(app.adminUrl).toBeTruthy();
-    await validateWordpressIsLive(app.url);
+    await validateWordpressIsLive(env, app.url);
 
     const sshUser = await enableAppSshWithTestKey(env, app.id);
     const target = sshTargetForUser(env, sshUser);

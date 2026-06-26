@@ -19,45 +19,46 @@ if [ -z "$mysql_app_host" ]; then
 fi
 [ -n "$mysql_app_host" ] || mysql_app_host="172.17.0.1"
 set +e
-timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
-  docker run --rm \
-    --network "${COMPOSE_PROJECT_NAME}_default" \
-    --user "$(id -u):$(id -g)" \
-    --add-host host.docker.internal:host-gateway \
-    -v "$RUN_DIR:/platform" \
-    -e AWS_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
-    -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
-    -e REDIS_URL=redis://redis:6379 \
-    -e SM_BE_CACHE=redis://redis:6379/0 \
-    -e SM_BE_MSGBUS=redis://redis:6379/1 \
-    -e 'SM_BE_DATASTORE_PRIVATE_URI=s3://minioadmin:minioadmin@minio-persistent:9000/backend-datastore-private?style=path&region=us-east-1' \
-    -e "SM_BE_PUBLIC_URL=http://localhost:${BACKEND_HTTP_PORT}" \
-    -e "SM_BE_FRONTEND_URL=http://localhost:${BACKEND_HTTP_PORT}" \
-    -e SM_BE_PRIMARY_APP_DOMAIN=localhost \
-    -e LOKI_URI=http://loki:3100 \
-    -e METRICS_CLICKHOUSE_URL=http://default:root@clickhouse:8123/edge_metrics_local \
-    -e RUST_LOG=info \
-    -e SECRET_KEY=local-dev-secret \
-    --entrypoint /app/smbe \
-    "$BACKEND_IMAGE_REF" \
-    local-dev-env \
-    --state-dir /platform/state \
-    --namespace wasmer-integration-tests \
-    --public-url "http://backend:8000" \
-    --app-domain localhost \
-    --edge-server "http://127.0.0.1:${EDGE_HTTP_PORT}" \
-    --edge-ssh-server "ssh://127.0.0.1:${EDGE_SSH_PORT}" \
-    --edge-dns-server "127.0.0.1:${EDGE_DNS_PORT}" \
-    --mysql-host "$mysql_app_host" \
-    --mysql-port "$MYSQL_APP_DB_1_PORT" \
-    --mysql-secondary-port "$MYSQL_APP_DB_2_PORT" \
-    --mysql-user root \
-    --mysql-password root \
-    --loki-uri http://loki:3100 \
-    --metrics-clickhouse-host clickhouse \
-    --metrics-clickhouse-port 8123 \
-    --write-test-env /platform/test-env.sh \
-    --write-backend-env /platform/backend.env > "$bootstrap_raw" 2>&1
+run_quietly "Bootstrap backend/test env" "$bootstrap_raw" \
+  timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
+    docker run --rm \
+      --network "${COMPOSE_PROJECT_NAME}_default" \
+      --user "$(id -u):$(id -g)" \
+      --add-host host.docker.internal:host-gateway \
+      -v "$RUN_DIR:/platform" \
+      -e AWS_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
+      -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
+      -e REDIS_URL=redis://redis:6379 \
+      -e SM_BE_CACHE=redis://redis:6379/0 \
+      -e SM_BE_MSGBUS=redis://redis:6379/1 \
+      -e 'SM_BE_DATASTORE_PRIVATE_URI=s3://minioadmin:minioadmin@minio-persistent:9000/backend-datastore-private?style=path&region=us-east-1' \
+      -e "SM_BE_PUBLIC_URL=http://localhost:${BACKEND_HTTP_PORT}" \
+      -e "SM_BE_FRONTEND_URL=http://localhost:${BACKEND_HTTP_PORT}" \
+      -e SM_BE_PRIMARY_APP_DOMAIN=localhost \
+      -e LOKI_URI=http://loki:3100 \
+      -e METRICS_CLICKHOUSE_URL=http://default:root@clickhouse:8123/edge_metrics_local \
+      -e RUST_LOG=info \
+      -e SECRET_KEY=local-dev-secret \
+      --entrypoint /app/smbe \
+      "$BACKEND_IMAGE_REF" \
+      local-dev-env \
+      --state-dir /platform/state \
+      --namespace wasmer-integration-tests \
+      --public-url "http://backend:8000" \
+      --app-domain localhost \
+      --edge-server "http://127.0.0.1:${EDGE_HTTP_PORT}" \
+      --edge-ssh-server "ssh://127.0.0.1:${EDGE_SSH_PORT}" \
+      --edge-dns-server "127.0.0.1:${EDGE_DNS_PORT}" \
+      --mysql-host "$mysql_app_host" \
+      --mysql-port "$MYSQL_APP_DB_1_PORT" \
+      --mysql-secondary-port "$MYSQL_APP_DB_2_PORT" \
+      --mysql-user root \
+      --mysql-password root \
+      --loki-uri http://loki:3100 \
+      --metrics-clickhouse-host clickhouse \
+      --metrics-clickhouse-port 8123 \
+      --write-test-env /platform/test-env.sh \
+      --write-backend-env /platform/backend.env
 bootstrap_status=$?
 set -e
 sed -E 's/(WASMER_TOKEN=).+$/\1<redacted>/; s/(EDGE_SYNC_TOKEN=).+$/\1<redacted>/' "$bootstrap_raw" > "$bootstrap_output" || true

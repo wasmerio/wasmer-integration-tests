@@ -45,6 +45,8 @@ for (const entry of manifest) {
   }
 }
 
-console.error(
-  `[local-platform] Persisted Relay queries with text: ${manifest.filter((entry) => typeof entry?.text === "string" && entry.text.length > 0).length}`,
-);
+if (/^(1|true|yes|on)$/i.test(process.env.VERBOSE ?? "")) {
+  console.error(
+    `[local-platform] Persisted Relay queries with text: ${manifest.filter((entry) => typeof entry?.text === "string" && entry.text.length > 0).length}`,
+  );
+}

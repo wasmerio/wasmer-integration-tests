@@ -67,7 +67,9 @@ if (!targetToken && !dryRun) {
 }
 
 function log(message) {
-  console.log(`[package-seed] ${message}`);
+  if (verbose) {
+    console.log(`[package-seed] ${message}`);
+  }
 }
 
 function debug(message) {

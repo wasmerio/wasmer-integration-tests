@@ -128,7 +128,7 @@ describe("stackmachine wordpress regions", () => {
       cleanupAppIds.push(app.id);
       try {
         expect(app.adminUrl).toBeTruthy();
-        await validateWordpressIsLive(app.url);
+        await validateWordpressIsLive(env, app.url);
       } catch (error) {
         throw new Error(
           `StackMachine WordPress app '${app.id}' did not validate in region '${regionName}' (${app.url})`,

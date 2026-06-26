@@ -423,6 +423,14 @@ export const ENV_VAR_VERBOSE: string = "VERBOSE";
 export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 export const ENV_VAR_KEEP_APPS: string = "KEEP_APPS";
 
+export function isTruthyEnvVar(value: string | undefined): boolean {
+  return /^(1|true|yes|on)$/i.test(value ?? "");
+}
+
+export function isVerboseEnabled(): boolean {
+  return isTruthyEnvVar(process.env[ENV_VAR_VERBOSE]);
+}
+
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_BUGT: string = "https://registry.wasmer.fun/graphql";
 export const REGISTRY_PROD: string = "https://registry.wasmer.io/graphql";
@@ -841,8 +849,7 @@ export class TestEnv {
       env.token = maybeToken;
     }
 
-    const verbose = process.env[ENV_VAR_VERBOSE];
-    if (verbose) {
+    if (isVerboseEnabled()) {
       env.verbose = true;
     }
 
@@ -1386,6 +1393,39 @@ subscription PublishAppFromRepoAutobuild(
       }
       return { a: [], aaaa: [] };
     }
+  }
+
+  /**
+   * Fetch an absolute app URL routed through the configured Edge target.
+   *
+   * Unlike {@link fetchApp}, this does not look the app up in the backend or
+   * wait for a specific deployed version - it simply applies the Edge `Host`
+   * header and local redirect-`Location` rewriting so an arbitrary app URL is
+   * reachable on the disposable local platform (where Edge listens on isolated
+   * host ports and the canonical `*.localhost` URL is not directly routable).
+   * When no `EDGE_SERVER` is configured it falls back to a direct fetch, which
+   * is how requests already behave against the dev/remote backend.
+   */
+  async fetchAppUrlThroughEdge(
+    targetUrl: string,
+    options: AppFetchOptions = {},
+  ): Promise<Response> {
+    if (!this.edgeServer) {
+      return fetch(targetUrl, options);
+    }
+
+    const directUrl = new URL(targetUrl);
+    const edgeTarget = new URL(this.edgeServer);
+    edgeTarget.pathname = directUrl.pathname;
+    edgeTarget.search = directUrl.search;
+    edgeTarget.hash = directUrl.hash;
+
+    return fetchWithHostOverride(
+      edgeTarget.toString(),
+      options,
+      directUrl.host,
+      directUrl.protocol.replace(/:$/, ""),
+    );
   }
 
   async fetchApp(

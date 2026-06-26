@@ -1,5 +1,27 @@
 Overview on contribution requirements & guidelines
 
+> This file is the canonical agent guidance. `CLAUDE.md` is a symlink to it, and
+> `.claude/` is a symlink to `.agents/`, so every agent reads the same rules.
+
+## Before committing or pushing (CI gates)
+
+CI runs `make lint`, which is `fmt-check` + `tsc --noEmit` + `eslint`. A
+mis-formatted file fails the **File format check** job and blocks the PR, even
+if nothing else changed. So, before every commit/push:
+
+```bash
+make fmt    # auto-format (Prettier) — never hand-format
+make lint   # fmt-check + typecheck + eslint; must pass cleanly
+```
+
+Notes:
+
+- `make fmt` formats the whole repo (`prettier "**/*"`), so it catches files you
+  did not directly edit (config, JS reporters, docs). Run it, don't just format
+  the file you touched.
+- If you add a generated/vendored/local-only file that must not be formatted,
+  add it to `.prettierignore` (and `.gitignore` if it should not be committed).
+
 ## Build, lint, test
 
 - Prereq: Node 22+, pnpm. First run: make setup
@@ -20,6 +42,7 @@ Overview on contribution requirements & guidelines
   - `pnpm exec jest tests/validation/log.test.ts --runInBand`
 - Stop the local stack: make local-platform-down
 - Local platform defaults come from `local.env` if present, otherwise `resolve_prod`; see `local.env.example`
+- Troubleshooting runbook (log/diagnostic locations, the `*.localhost` Edge-routing gotcha, validation-vs-jest timeouts, dev-vs-local comparison): see `docs/local-environment-v1.md` → "Troubleshooting (agent runbook)". Key rule: reach apps via `env.fetchApp`/`env.fetchAppUrlThroughEdge`, never a raw `fetch` — raw fetch works on dev but hangs on the local stack.
 
 ## Environment for integration tests
 

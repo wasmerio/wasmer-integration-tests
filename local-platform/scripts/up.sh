@@ -221,10 +221,23 @@ touch "$RUN_DIR/backend.env" "$RUN_DIR/edge/platform_config.yaml"
 
 log "Run directory: $RUN_DIR"
 log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION"
+
+require_github_token=0
+case "$BACKEND_VERSION" in
+  artifact:*|github-artifact:*|github-release:*) require_github_token=1 ;;
+esac
+case "$EDGE_VERSION" in
+  github-artifact:*|github-release:*|resolve_prod|resolve_dev|latest_dev|latest-dev) require_github_token=1 ;;
+esac
+
+if [ "$require_github_token" -eq 1 ]; then
+  ensure_github_token
+fi
+
 if is_truthy "${LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT:-}"; then
   log "Custom artifact fetch PAT is present for private artifact/release fetches"
 elif [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
-  log_warn "Using default GitHub token; it may not access private wasmerio/edge or wasmerio/backend artifacts"
+  log "GitHub token is available for artifact/release fetches"
 else
   log_warn "No GitHub token is available; private artifact/release fetches may fail"
 fi
@@ -244,8 +257,8 @@ cleanup() {
   fi
   if [ -f "$RUN_DIR/resolved.env" ]; then
     "$SCRIPT_DIR/collect-logs.sh" || true
-    if is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}"; then
-      log_warn "LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE is set; leaving Compose project $COMPOSE_PROJECT_NAME running for inspection"
+    if is_truthy "${LOCAL_PLATFORM_KEEP_RUNNING_ON_FAILURE:-}" || ! is_truthy "${LOCAL_PLATFORM_AUTO_DOWN:-0}"; then
+      log_warn "Leaving Compose project $COMPOSE_PROJECT_NAME running for inspection"
     else
       LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN=1 "$SCRIPT_DIR/down.sh" || true
     fi
@@ -273,15 +286,16 @@ compose up -d \
 start_compose_log_follow
 
 log "Running backend migrations"
-timeout "${LOCAL_PLATFORM_MIGRATE_TIMEOUT_SECONDS:-300}" \
-  docker run --rm \
-    --network "${COMPOSE_PROJECT_NAME}_default" \
-    -e AWS_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
-    -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
-    -e RUST_LOG=info \
-    --entrypoint /app/smbe \
-    "$BACKEND_IMAGE_REF" \
-    db migrate up
+run_quietly "Backend migrations" "$RUN_DIR/logs/backend-migrate.log" \
+  timeout "${LOCAL_PLATFORM_MIGRATE_TIMEOUT_SECONDS:-300}" \
+    docker run --rm \
+      --network "${COMPOSE_PROJECT_NAME}_default" \
+      -e AWS_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
+      -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wapm \
+      -e RUST_LOG=info \
+      --entrypoint /app/smbe \
+      "$BACKEND_IMAGE_REF" \
+      db migrate up
 
 "$SCRIPT_DIR/bootstrap.sh"
 
@@ -295,16 +309,18 @@ if is_truthy "${LOCAL_PLATFORM_SEED_PACKAGES:-1}"; then
     set -euo pipefail
     # shellcheck disable=SC1091
     source "$RUN_DIR/test-env.sh"
-    node "$REPO_DIR/local-platform/scripts/seed-packages.mjs" "$REPO_DIR" "$RUN_DIR"
+    run_quietly "Package seeding" "$RUN_DIR/logs/package-seed.log" \
+      node "$REPO_DIR/local-platform/scripts/seed-packages.mjs" "$REPO_DIR" "$RUN_DIR"
   )
 else
   log "Skipping package dependency seeding because LOCAL_PLATFORM_SEED_PACKAGES=${LOCAL_PLATFORM_SEED_PACKAGES:-}"
 fi
 
 log "Persisting Relay queries (if any)"
-node "$REPO_DIR/local-platform/scripts/persist-relay-queries.mjs" \
-  "$RUN_DIR/artifacts/relay-persisted-queries.json" \
-  "http://localhost:${BACKEND_HTTP_PORT}/graphql/persist"
+run_quietly "Relay query persistence" "$RUN_DIR/logs/persist-relay-queries.log" \
+  node "$REPO_DIR/local-platform/scripts/persist-relay-queries.mjs" \
+    "$RUN_DIR/artifacts/relay-persisted-queries.json" \
+    "http://localhost:${BACKEND_HTTP_PORT}/graphql/persist"
 
 "$SCRIPT_DIR/ensure-compiled.sh"
 

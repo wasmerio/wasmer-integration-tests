@@ -28,7 +28,7 @@ Example `local.env`:
 ```bash
 export BACKEND_VERSION=resolve_prod
 export EDGE_VERSION=resolve_prod
-export LOCAL_TEST_COMMAND='pnpm exec jest ./tests/general/'
+export LOCAL_TEST_COMMAND='pnpm exec jest'
 ```
 
 ## Commands
@@ -74,6 +74,66 @@ Important files:
 - `artifacts/relay-persisted-queries.json`: currently an empty manifest placeholder
 - `logs/`: collected service and test logs
 - `diagnostics/`: compose config, stats, cache diagnostics, and package seed output
+
+## Troubleshooting (agent runbook)
+
+### Reaching apps locally — never use a raw `fetch`
+
+Deployed apps get canonical URLs like `https://<app>.localhost`, but on the
+local platform **Edge listens on isolated host ports** (HTTP `19080`, HTTPS
+`19443`) and nothing listens on `:80`/`:443`. So the canonical app URL is _not_
+directly routable on the host.
+
+Tests must reach apps through the `TestEnv` Edge helpers, which send the request
+to `EDGE_SERVER` with the app host as the `Host` header and rewrite redirect
+`Location`s that point at the in-container `:9443` port:
+
+- `env.fetchApp(app, path, opts)` — preferred; also waits for the deployed
+  version unless `noWait: true`.
+- `env.fetchAppUrlThroughEdge(url, opts)` — when you only have a URL string
+  (used by `validateWordpressIsLive`). Falls back to a direct `fetch` when no
+  `EDGE_SERVER` is set (i.e. against the dev/remote backend).
+
+A raw `fetch(appUrl)` works against the dev backend (real DNS + standard ports)
+but **hangs against the local stack**. If a test passes on dev but times out
+locally on an HTTP assertion, suspect a raw `fetch` that bypasses the Edge
+helpers. WordPress's not-installed `/` → install-wizard `302` is the classic
+trap: a raw fetch loops on the 302 forever.
+
+### Validation timeout vs. jest timeout
+
+`LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER=1` (set in `test-env.sh`) raises some
+poll budgets — e.g. WordPress validation to 120×2s = 240s, which exceeds the
+180s jest `testTimeout`. When that happens the descriptive validator error
+(HTTP status + body excerpt) is replaced by a generic "Exceeded timeout"
+message. If you see a bare jest timeout, lower the retry budget to surface the
+real reason, e.g. `WASMER_TEST_WORDPRESS_MAX_RETRIES=4 VERBOSE=true`.
+
+### Where to look when an app misbehaves
+
+- Per-suite test output: `.local-platform/current/logs/tests.log`
+- Per-service container logs: `.local-platform/current/logs/<service>.log`
+  (backend, edge, postgres, mysql_app_db_1/2, clickhouse, loki, vector, …) —
+  regenerate with `make local-platform-logs`.
+- App (instance) logs are surfaced inline in `tests.log` for failing tests
+  (apps for failing tests are preserved by default; use `KEEP_APPS=1` to keep
+  them for passing tests too).
+- Compose/topology/stats snapshots: `.local-platform/current/diagnostics/`.
+
+### Running one test against the already-running stack
+
+```bash
+source .local-platform/current/test-env.sh
+VERBOSE=true pnpm exec jest tests/wordpress/wordpress.test.ts --runInBand
+```
+
+### Comparing against the dev backend
+
+When a local failure is suspected to be environmental, reproduce it against dev:
+unset the local-platform vars (`WASMER_REGISTRY`, `WASMER_NAMESPACE`,
+`WASMER_APP_DOMAIN`, `EDGE_SERVER`, `EDGE_SSH_SERVER`, `EDGE_DNS_SERVER`,
+`LOCAL_PLATFORM_*`, `CLICKHOUSE_*`), point at the dev registry/token, and rerun.
+If it fails on dev too, it's a test bug; if only locally, it's a wiring issue.
 
 ## Reuse behavior
 

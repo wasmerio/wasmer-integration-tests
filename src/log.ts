@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { fail } from "node:assert";
 
-import { TestEnv } from "./env";
+import { isVerboseEnabled, TestEnv } from "./env";
 import { sleep } from "./util";
 
 export function countSubstrings(str: string, subStr: string): number {
@@ -22,7 +22,7 @@ const DEFAULT_FAILURE_LOG_LENGTH = 4000;
 const LOCAL_PLATFORM_CLICKHOUSE_QUERY_LIMIT = 1000;
 
 function truncateFailureLogs(logs: string): string {
-  if (process.env.VERBOSE === "true") {
+  if (isVerboseEnabled()) {
     return logs;
   }
 
