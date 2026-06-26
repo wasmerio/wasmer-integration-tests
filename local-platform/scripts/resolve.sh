@@ -69,6 +69,50 @@ kubectl_get_backend_image() {
   printf '%s' "$image"
 }
 
+resolve_backend_dev_github_release() {
+  local repo="${BACKEND_DEV_GITHUB_REPO:-wasmerio/backend}"
+  local pattern="${BACKEND_DEV_GITHUB_ASSET_PATTERN:-*image*.tar}"
+  local tag="${BACKEND_DEV_GITHUB_TAG:-}"
+  local suffix="${BACKEND_DEV_RELEASE_SUFFIX:-_dev}"
+
+  if [ -n "$tag" ]; then
+    log "Using explicit Backend dev release tag from BACKEND_DEV_GITHUB_TAG: $tag"
+    printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
+    return
+  fi
+
+  log "Resolving latest Backend dev release from $repo (tag suffix: $suffix, asset pattern: $pattern)"
+
+  if command -v gh >/dev/null 2>&1; then
+    local release_json release_error
+    release_error="$RUN_DIR/logs/backend-release-list.err"
+    if release_json="$(gh release list --repo "$repo" --limit 200 --order desc --json tagName,publishedAt 2>"$release_error")"; then
+      tag="$(printf '%s' "$release_json" | node -e '
+const suffix = process.argv[1];
+let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const releases = JSON.parse(input || "[]");
+  const matches = releases
+    .filter(release => typeof release.tagName === "string" && release.tagName.endsWith(suffix))
+    .sort((a, b) => Date.parse(a.publishedAt || "") - Date.parse(b.publishedAt || ""));
+  process.stdout.write(matches.at(-1)?.tagName || "");
+});
+' "$suffix")"
+    else
+      local error_summary
+      error_summary="$(head -n 5 "$release_error" 2>/dev/null | tr '\n' ' ' || true)"
+      log_warn "Failed to list Backend releases from $repo: ${error_summary:-unknown gh error}"
+    fi
+  else
+    log_warn "GitHub CLI is not installed; cannot resolve latest Backend dev release automatically"
+  fi
+
+  [ -n "$tag" ] || fail "BACKEND_VERSION=resolve_dev could not find a $repo release ending in $suffix that carries an image asset matching '$pattern'. Ensure backend deploys upload the image archive to the release (see tf-aws-project deploy.yaml) and that LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on $repo, or set BACKEND_DEV_GITHUB_TAG explicitly."
+  log "Resolved Backend dev release tag: $tag"
+  printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
+}
+
 resolve_backend() {
   local selector="$1"
   case "$selector" in
@@ -231,11 +275,21 @@ resolve_edge() {
   esac
 }
 
-BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_VERSION")"
-BACKEND_IMAGE_SOURCE=""
+# Pre-resolve "latest dev" backend selectors into a concrete github-release
+# selector so the rest of the pipeline treats them like any other downloadable
+# image archive (docker load + retag) rather than a registry pull.
+BACKEND_SELECTOR="$BACKEND_VERSION"
 case "$BACKEND_VERSION" in
+  resolve_dev|latest_dev|latest-dev)
+    BACKEND_SELECTOR="$(resolve_backend_dev_github_release)"
+    ;;
+esac
+
+BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_SELECTOR")"
+BACKEND_IMAGE_SOURCE=""
+case "$BACKEND_SELECTOR" in
   artifact:*|github-artifact:*|github-release:*|path:*|url:*)
-    BACKEND_IMAGE_SOURCE="$BACKEND_VERSION"
+    BACKEND_IMAGE_SOURCE="$BACKEND_SELECTOR"
     ;;
 esac
 EDGE_RESOLVED="$(resolve_edge "$EDGE_VERSION")"

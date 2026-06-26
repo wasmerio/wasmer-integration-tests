@@ -21,6 +21,10 @@ on:
       job_name:
         type: string
         default: ""
+      test_branch:
+        type: string
+        default: main
+        description: "Branch of wasmerio/wasmer-integration-tests to check out and run."
     secrets:
       pat:
         required: false
@@ -38,8 +42,14 @@ jobs:
     name: ${{ inputs.job_name || (inputs.prepare_only && format('Prepare {0} test environment', inputs.suite_id) || format('Run {0} tests', inputs.suite_id)) }}
     runs-on: ubuntu-24.04
     steps:
+      # Always check out the integration-tests repo itself (public), even when
+      # this reusable workflow is called from another repository (e.g. a service
+      # building its own image artifact). Without an explicit repository the
+      # default checkout would clone the caller's repo instead of the tests.
       - uses: actions/checkout@v4
         with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
           submodules: true
 
       - name: Install Wasmer CLI

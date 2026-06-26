@@ -1,0 +1,102 @@
+name: Local Platform Suite
+
+# Service-agnostic, reusable "blocking integration test" entrypoint.
+#
+# Any service that wants its changes validated against a disposable local
+# Wasmer platform calls this workflow, overriding only the component it built
+# (e.g. a backend image artifact) and leaving every other component on its
+# latest released version. The same workflow backs this repository's own Code
+# QA, so there is a single source of truth for the suite matrix and caching.
+
+on:
+  workflow_call:
+    inputs:
+      backend_version:
+        type: string
+        required: true
+        description: >-
+          Backend image selector. Pass a freshly built artifact
+          (artifact:<repo>:<run_id>:<name>) to test a candidate, or a release
+          selector (resolve_dev / github-release:* / github-artifact:*) to test
+          the latest published backend.
+      edge_version:
+        type: string
+        required: false
+        default: resolve_dev
+        description: "Edge binary selector. Defaults to the latest dev release."
+      test_branch:
+        type: string
+        required: false
+        default: main
+        description: "Branch of wasmerio/wasmer-integration-tests to run the suite from."
+    secrets:
+      pat:
+        required: false
+        description: >-
+          PAT with actions:read on the artifact source repo and contents:read
+          on private release repos (wasmerio/backend, wasmerio/edge).
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+  pull-requests: read
+
+jobs:
+  test-suite-matrix:
+    name: Load integration test suite matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.suites.outputs.matrix }}
+    steps:
+      - name: Clone integration tests
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
+
+      - name: Read shared test suite manifest
+        id: suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(jq -c '{include: .}' .github/integration-test-suites.json)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  local-platform-cache:
+    name: Prepare local platform test environment cache
+    # Prepare the local platform test environment once before the suite matrix
+    # fans out. This warms package downloads and Edge compiler/webc caches so
+    # every suite does not race to compile the same packages on a cold cache.
+    uses: ./.github/workflows/local-platform-test.yaml
+    with:
+      backend_version: ${{ inputs.backend_version }}
+      edge_version: ${{ inputs.edge_version }}
+      test_branch: ${{ inputs.test_branch }}
+      prepare_only: true
+      suite_id: cache-warmup
+      job_name: Prepare local platform test environment cache
+    secrets:
+      pat: ${{ secrets.pat }}
+
+  tests:
+    name: Local platform integration test / ${{ matrix.display_id || matrix.id }}
+    needs:
+      - test-suite-matrix
+      - local-platform-cache
+    uses: ./.github/workflows/local-platform-test.yaml
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
+    with:
+      backend_version: ${{ inputs.backend_version }}
+      edge_version: ${{ inputs.edge_version }}
+      test_branch: ${{ inputs.test_branch }}
+      test_command: ${{ matrix.test_command }}
+      suite_id: ${{ matrix.id }}
+      job_name: Run ${{ matrix.display_id || matrix.id }} tests
+    secrets:
+      pat: ${{ secrets.pat }}
