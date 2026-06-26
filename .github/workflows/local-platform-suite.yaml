@@ -108,8 +108,10 @@ jobs:
       suite_id: ${{ matrix.id }}
       job_name: Run ${{ matrix.display_id || matrix.id }} tests
       # Per-suite wall-clock cap; override per entry via timeout_minutes in
-      # .github/integration-test-suites.json. Stops a hung deploy (e.g. the
-      # templates suite blocking on a stuck autobuild) from running for hours.
-      timeout_minutes: ${{ matrix.timeout_minutes || 30 }}
+      # .github/integration-test-suites.json. Outer backstop to the 30-minute
+      # per-spec jest timeout: kept above it (30m test + setup/stack-bringup
+      # headroom) so a legitimately long spec hits its own jest timeout and
+      # reports a clean failure instead of the job being killed mid-run.
+      timeout_minutes: ${{ matrix.timeout_minutes || 45 }}
     secrets:
       pat: ${{ secrets.pat }}
