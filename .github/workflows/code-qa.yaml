@@ -37,6 +37,10 @@ jobs:
       backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
       edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
       test_branch: ${{ github.head_ref || github.ref_name }}
+      # This repo (public) has no depot runners; reusable jobs run in this
+      # caller's context, so override the suite's depot-16 default with a
+      # GitHub-hosted runner. Service pipelines (e.g. backend) keep the default.
+      runner: ubuntu-24.04
     secrets:
       pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 
