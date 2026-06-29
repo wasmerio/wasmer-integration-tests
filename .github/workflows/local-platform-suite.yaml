@@ -59,7 +59,7 @@ jobs:
 
   local-platform-cache:
     name: Prepare local platform test environment cache
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@feat/blocking-integ-test-pipelines
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@main
     with:
       backend_version: ${{ inputs.backend_version }}
       edge_version: ${{ inputs.edge_version }}
@@ -77,7 +77,7 @@ jobs:
     needs:
       - test-suite-matrix
       - local-platform-cache
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@feat/blocking-integ-test-pipelines
+    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@main
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
