@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check check lint test clean all
+.PHONY: fmt fmt-check check lint test clean all local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs
 JSPATHS = ./src ./tests ./bin
 JEST_ARGS ?=
 
@@ -20,3 +20,18 @@ lint: setup fmt-check check
 
 test: setup
 	pnpm exec jest $(JEST_ARGS)
+
+local-test: setup
+	bash ./local-platform/scripts/local-test.sh
+
+local-platform-prepare:
+	bash ./local-platform/scripts/prepare-test-environment.sh
+
+local-platform-up:
+	bash ./local-platform/scripts/up.sh
+
+local-platform-down:
+	bash ./local-platform/scripts/down.sh
+
+local-platform-logs:
+	bash ./local-platform/scripts/print-logs.sh

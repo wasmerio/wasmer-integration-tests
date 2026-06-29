@@ -1,0 +1,41 @@
+[
+  {
+    "id": "general",
+    "test_command": "npx jest ./tests/general/"
+  },
+  {
+    "id": "jobs",
+    "test_command": "npx jest ./tests/validation/log.test.ts\nnpx jest ./tests/job"
+  },
+  {
+    "id": "apps",
+    "test_command": "npx jest ./tests/app/app_banning.test.ts"
+  },
+  {
+    "id": "templates",
+    "test_command": "npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "wordpress",
+    "test_command": "npx jest ./tests/validation/log.test.ts\nnpx jest ./tests/wordpress"
+  },
+  {
+    "id": "ssh",
+    "test_command": "npx jest ./tests/ssh"
+  },
+  {
+    "id": "superpanic-without-superpanic",
+    "display_id": "superpanic (without superpanic)",
+    "test_command": "npx jest ./tests/superpanics"
+  },
+  {
+    "id": "wasmopticon",
+    "test_command": "npx jest tests/wasmopticon",
+    "requires_python": true,
+    "python_version": "3.13"
+  },
+  {
+    "id": "stackmachine-sdk",
+    "test_command": "npx jest ./tests/stackmachine/stackmachine-sdk.test.ts"
+  }
+]

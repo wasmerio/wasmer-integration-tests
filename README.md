@@ -90,6 +90,32 @@ the right `WASMER_REGISTRY`, `WASMER_TOKEN`, `WASMER_NAMESPACE`, `EDGE_SERVER`,
 `EDGE_SSH_SERVER`, and `EDGE_DNS_SERVER` values for the local Rust backend plus host-run Edge
 stack.
 
+### Local platform
+
+Use the disposable Docker Compose local platform when you need Backend, Edge, and
+supporting services started from resolved artifacts/images:
+
+```
+make local-platform-up
+source .local-platform/current/test-env.sh
+pnpm exec jest
+make local-platform-down
+```
+
+`make local-test` now runs the same Jest command as `make test` against the
+local environment and leaves the stack running by default so you can iterate
+and rerun tests/services manually. Tear it down explicitly with:
+
+```
+make local-platform-down
+```
+
+To restore the old start → test → teardown behavior for a single run:
+
+```
+LOCAL_PLATFORM_AUTO_DOWN=1 make local-test
+```
+
 ## Writing tests
 
 Many tests create an app through the `wasmer deploy` command, and then validate

@@ -49,7 +49,90 @@ function isObjectLike(value: unknown): value is object {
   );
 }
 
-const SECRET_KEY_PATTERN = /(authorization|password|secret|token|api[_-]?key)/i;
+function readUnknownProperty(value: unknown, property: string): unknown {
+  if (!isObjectLike(value) || !(property in value)) {
+    return undefined;
+  }
+
+  try {
+    return (value as Record<string, unknown>)[property];
+  } catch {
+    return undefined;
+  }
+}
+
+function readStringProperty(
+  value: unknown,
+  property: string,
+): string | undefined {
+  const propertyValue = readUnknownProperty(value, property);
+  return typeof propertyValue === "string" ? propertyValue : undefined;
+}
+
+function readNumberProperty(
+  value: unknown,
+  property: string,
+): number | undefined {
+  const propertyValue = readUnknownProperty(value, property);
+  return typeof propertyValue === "number" ? propertyValue : undefined;
+}
+
+function formatUnknownError(value: unknown): string {
+  if (value instanceof Error) {
+    return value.stack ?? `${value.name}: ${value.message}`;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!isObjectLike(value)) {
+    return String(value);
+  }
+
+  const details: string[] = [];
+  const constructorName = readStringProperty(
+    readUnknownProperty(value, "constructor"),
+    "name",
+  );
+  if (constructorName && constructorName !== "Object") {
+    details.push(constructorName);
+  }
+
+  for (const property of [
+    "name",
+    "message",
+    "code",
+    "errno",
+    "syscall",
+    "address",
+    "port",
+    "stack",
+  ]) {
+    const propertyValue = readUnknownProperty(value, property);
+    if (
+      (typeof propertyValue === "string" && propertyValue.length > 0) ||
+      typeof propertyValue === "number"
+    ) {
+      details.push(`${property}=${propertyValue}`);
+    }
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length > 0) {
+    try {
+      details.push(JSON.stringify(sanitizeForLogs(value), null, 2));
+    } catch {
+      // Ignore JSON serialization failures; the constructor/properties above are
+      // usually more useful for ErrorEvent objects anyway.
+    }
+  }
+
+  return details.length > 0
+    ? details.join("\n")
+    : Object.prototype.toString.call(value);
+}
+
+const SECRET_KEY_PATTERN =
+  /(authorization|password|passwd|pwd|secret|token|jwt|api[_-]?key|access[_-]?key|private[_-]?key|credential)/i;
 
 function sanitizeForLogs(value: unknown, depth = 0): unknown {
   if (depth > 5) {
@@ -91,6 +174,82 @@ function formatThrownError(value: unknown): string {
   return safeStringify(value, true);
 }
 
+// WebSocket close failures surface as opaque ErrorEvents. Decode the
+// `readyState`/`_closeCode`/`_closeMessage` internals into human-readable
+// diagnostics so lost SDK subscriptions are debuggable from CI logs.
+function describeWebSocketTarget(target: unknown): string | null {
+  if (!isObjectLike(target)) {
+    return null;
+  }
+
+  const details: string[] = [];
+  const url = readStringProperty(target, "url");
+  if (url) {
+    details.push(`url=${url}`);
+  }
+
+  const readyState = readNumberProperty(target, "readyState");
+  if (readyState !== undefined) {
+    const readyStateNames = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
+    details.push(
+      `readyState=${readyStateNames[readyState] ?? "UNKNOWN"}(${readyState})`,
+    );
+  }
+
+  const protocol = readStringProperty(target, "protocol");
+  if (protocol) {
+    details.push(`protocol=${protocol}`);
+  }
+
+  const closeCode = readNumberProperty(target, "_closeCode");
+  if (closeCode !== undefined) {
+    details.push(`closeCode=${closeCode}`);
+  }
+
+  const closeMessage = readUnknownProperty(target, "_closeMessage");
+  if (Buffer.isBuffer(closeMessage) && closeMessage.length > 0) {
+    details.push(`closeMessage=${closeMessage.toString("utf-8")}`);
+  }
+
+  return details.length > 0 ? details.join(", ") : null;
+}
+
+function describeErrorEvent(value: unknown): string[] {
+  const details: string[] = [];
+  const constructorName = readStringProperty(
+    readUnknownProperty(value, "constructor"),
+    "name",
+  );
+  if (constructorName) {
+    details.push(`eventClass=${constructorName}`);
+  }
+
+  const type = readStringProperty(value, "type");
+  if (type) {
+    details.push(`eventType=${type}`);
+  }
+
+  const message = readStringProperty(value, "message");
+  if (message) {
+    details.push(`eventMessage=${message}`);
+  }
+
+  const targetDescription = describeWebSocketTarget(
+    readUnknownProperty(value, "target") ??
+      readUnknownProperty(value, "currentTarget"),
+  );
+  if (targetDescription) {
+    details.push(`webSocket={${targetDescription}}`);
+  }
+
+  const nestedError = readUnknownProperty(value, "error");
+  if (nestedError) {
+    details.push(`eventError=${formatUnknownError(nestedError)}`);
+  }
+
+  return details;
+}
+
 interface StackMachineDeployErrorContext {
   registry: string;
   namespace: string;
@@ -120,7 +279,23 @@ function createStackMachineDeployError(
     lines.push(`App dashboard: ${context.dashboardUrl}`);
   }
   lines.push(`Deploy input: ${safeStringify(context.input, true)}`);
+
+  const eventDetails = describeErrorEvent(error);
+  if (eventDetails.length > 0) {
+    lines.push(
+      "Error event details:",
+      ...eventDetails.map((line) => `  - ${line}`),
+    );
+  }
+
   lines.push("Underlying error:", formatThrownError(error));
+
+  if (eventDetails.some((line) => line.includes("readyState=CLOSED"))) {
+    lines.push(
+      "Interpretation: the StackMachine SDK lost its GraphQL WebSocket subscription before receiving a terminal COMPLETE/FAILED build event. The deployment may still be running or may have completed; check the autobuild/app in the dashboard or rerun with VERBOSE=true for raw SDK logs.",
+    );
+  }
+
   if (context.progress.length > 0) {
     lines.push(
       "Recent deployment progress:",
@@ -148,6 +323,14 @@ export const ENV_VAR_WASMOPTICON_DIR: string = "WASMOPTICON_DIR";
 export const ENV_VAR_VERBOSE: string = "VERBOSE";
 export const ENV_VAR_MAX_PRINT_LENGTH: string = "MAX_LINE_PRINT_LENGTH";
 export const ENV_VAR_KEEP_APPS: string = "KEEP_APPS";
+
+export function isTruthyEnvVar(value: string | undefined): boolean {
+  return /^(1|true|yes|on)$/i.test(value ?? "");
+}
+
+export function isVerboseEnabled(): boolean {
+  return isTruthyEnvVar(process.env[ENV_VAR_VERBOSE]);
+}
 
 export const REGISTRY_DEV: string = "https://registry.wasmer.wtf/graphql";
 export const REGISTRY_BUGT: string = "https://registry.wasmer.fun/graphql";
@@ -567,8 +750,7 @@ export class TestEnv {
       env.token = maybeToken;
     }
 
-    const verbose = process.env[ENV_VAR_VERBOSE];
-    if (verbose) {
+    if (isVerboseEnabled()) {
       env.verbose = true;
     }
 
@@ -619,7 +801,9 @@ export class TestEnv {
 
     // Create a copy and then unset env if env has been printed
     const printSpawn = { args: args, ...spawnOpts };
-    if (!this.verbose) {
+    if (this.verbose) {
+      printSpawn.env = sanitizeForLogs(env) as Record<string, string>;
+    } else {
       printSpawn.env = { OBFUSCATED: "Rerun with VERBOSE=true to see." };
     }
     const quiet = options.quiet === true && !this.verbose;
@@ -1142,6 +1326,39 @@ subscription PublishAppFromRepoAutobuild(
     }
   }
 
+  /**
+   * Fetch an absolute app URL routed through the configured Edge target.
+   *
+   * Unlike {@link fetchApp}, this does not look the app up in the backend or
+   * wait for a specific deployed version - it simply applies the Edge `Host`
+   * header and local redirect-`Location` rewriting so an arbitrary app URL is
+   * reachable on the disposable local platform (where Edge listens on isolated
+   * host ports and the canonical `*.localhost` URL is not directly routable).
+   * When no `EDGE_SERVER` is configured it falls back to a direct fetch, which
+   * is how requests already behave against the dev/remote backend.
+   */
+  async fetchAppUrlThroughEdge(
+    targetUrl: string,
+    options: AppFetchOptions = {},
+  ): Promise<Response> {
+    if (!this.edgeServer) {
+      return fetch(targetUrl, options);
+    }
+
+    const directUrl = new URL(targetUrl);
+    const edgeTarget = new URL(this.edgeServer);
+    edgeTarget.pathname = directUrl.pathname;
+    edgeTarget.search = directUrl.search;
+    edgeTarget.hash = directUrl.hash;
+
+    return fetchWithHostOverride(
+      edgeTarget.toString(),
+      options,
+      directUrl.host,
+      directUrl.protocol.replace(/:$/, ""),
+    );
+  }
+
   async fetchApp(
     app: AppInfo,
     urlOrPath: string,
@@ -1185,16 +1402,43 @@ subscription PublishAppFromRepoAutobuild(
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;
     while (true) {
-      console.debug(`Fetching URL ${url}`, { options });
-      const response = edgeHostOverride
-        ? await fetchWithHostOverride(
-            url,
-            options,
-            edgeHostOverride,
-            edgeForwardedProto,
-          )
-        : await fetch(url, options);
-      console.debug(`Fetched URL ${url}`);
+      const attemptStartedAt = Date.now();
+      console.debug(`Fetching URL ${url}`, {
+        options,
+        appId: app.id,
+        appName: app.version.name,
+        edgeHostOverride,
+        waitForVersionId,
+      });
+      let response: Response;
+      try {
+        response = edgeHostOverride
+          ? await fetchWithHostOverride(
+              url,
+              options,
+              edgeHostOverride,
+              edgeForwardedProto,
+            )
+          : await fetch(url, options);
+      } catch (error) {
+        throw new Error(
+          [
+            `Failed to fetch URL '${url}' after ${Date.now() - attemptStartedAt}ms.`,
+            `App: ${this.namespace}/${app.version.name} (${app.id})`,
+            edgeHostOverride ? `Edge host override: ${edgeHostOverride}` : null,
+            waitForVersionId
+              ? `Expected app version: ${waitForVersionId}`
+              : null,
+            `Underlying error: ${formatUnknownError(error)}`,
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join("\n"),
+          { cause: error },
+        );
+      }
+      console.debug(`Fetched URL ${url}`, {
+        elapsedMs: Date.now() - attemptStartedAt,
+      });
       if (this.verbose) {
         console.debug({
           status: response.status,
@@ -1223,6 +1467,18 @@ subscription PublishAppFromRepoAutobuild(
         if (currentId !== waitForVersionId) {
           let msg = "";
           if (!currentId) {
+            if (
+              this.edgeServer &&
+              /^(1|true|yes|on)$/i.test(
+                process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER ?? "",
+              ) &&
+              response.ok
+            ) {
+              console.warn(
+                `Local platform Edge response is missing ${HEADER_APP_VERSION_ID}; accepting healthy response because LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER=1`,
+              );
+              return response;
+            }
             msg = `missing ${HEADER_APP_VERSION_ID} header in response - app does not seem to be published yet`;
           } else {
             msg = `expected version ${waitForVersionId}, got ${currentId}`;
@@ -1326,6 +1582,16 @@ function shouldRouteViaEdgeBridge(
   return normalizedHost.endsWith(`.${normalizedDomain}`);
 }
 
+function fetchTimeoutMs(): number {
+  const raw = process.env.WASMER_TEST_FETCH_TIMEOUT_MS;
+  if (!raw) {
+    return 60_000;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60_000;
+}
+
 async function fetchWithHostOverride(
   targetUrl: string,
   init: RequestInit | Request,
@@ -1346,6 +1612,7 @@ async function fetchWithHostOverride(
 
   return new Promise<Response>((resolve, reject) => {
     const client = target.protocol === "https:" ? https : http;
+    const timeoutMs = fetchTimeoutMs();
     const req = client.request(
       {
         protocol: target.protocol,
@@ -1386,6 +1653,13 @@ async function fetchWithHostOverride(
       },
     );
 
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(
+        new Error(
+          `Timed out after ${timeoutMs}ms waiting for Edge response from ${targetUrl} with Host ${hostHeader}`,
+        ),
+      );
+    });
     req.on("error", reject);
     if (body) {
       req.write(body);

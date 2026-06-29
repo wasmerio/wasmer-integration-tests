@@ -7,9 +7,13 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   actions: read
   contents: read
+  packages: read
   pull-requests: read
 
 concurrency:
@@ -17,14 +21,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    uses: ./.github/workflows/integration-test-workflow.yaml
+  local-platform:
+    name: Local platform integration tests
+    # Delegates to the shared, service-agnostic suite so this repo's own QA and
+    # every downstream service run the exact same matrix + caching.
+    #
+    # Goal: run both backend and edge on their latest releases. Edge already
+    # floats via resolve_dev. Backend floats via resolve_dev too, but that
+    # requires a backend dev release that carries an image asset (published by
+    # tf-aws-project deploy.yaml once backend `make image-archive` is live). Set
+    # the LOCAL_PLATFORM_BACKEND_VERSION repo variable to override (e.g. pin a
+    # specific artifact, or flip to 'resolve_dev' once assets are published).
+    uses: ./.github/workflows/local-platform-suite.yaml
     with:
-      test_branch: ${{ github.head_ref }}
-      provide_quality_assessment: true
+      backend_version: ${{ vars.LOCAL_PLATFORM_BACKEND_VERSION || 'github-artifact:wasmerio/backend:backend-v2026-06-10_3_cc147eb_bugt-image' }}
+      edge_version: ${{ vars.LOCAL_PLATFORM_EDGE_VERSION || 'resolve_dev' }}
+      test_branch: ${{ github.head_ref || github.ref_name }}
+      # This repo (public) has no depot runners; reusable jobs run in this
+      # caller's context, so override the suite's depot-16 default with a
+      # GitHub-hosted runner. Service pipelines (e.g. backend) keep the default.
+      runner: ubuntu-24.04
     secrets:
-      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
-      test_failure_webhook: ${{ secrets.SLACK_WH_INTEG_TEST_FAIL_DEV }}
+      pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
 
   fmt:
     name: File format check

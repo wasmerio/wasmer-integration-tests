@@ -1,0 +1,28 @@
+# Additional packages to mirror from the source registry into the disposable local registry.
+#
+# The local platform automatically discovers package dependencies from tests,
+# wasmopticon fixtures, and src/app constructors. Add one package per line here
+# only when a test depends on a package that cannot be found statically.
+#
+# Formats:
+#   namespace/name          # latest version from the source registry
+#   namespace/name@1.2.3    # exact version
+#   namespace/name@=1.2.3   # exact semver constraint
+#   namespace/name@^1.2.0   # semver range
+#   namespace/name 1.*      # whitespace form, useful for constraints with @
+#
+# Any namespace/name package reference is accepted here as long as it is a
+# syntactically valid package name. Transitive dependencies resolved from the
+# source registry are also mirrored without namespace filtering.
+
+wasmer/s3-server
+wasmer/cli
+wasmer/bash@=1.0.21
+wasmer/bash@=1.0.25
+wasmer/edgejs-quickjs@=0.0.4
+wasmer/pandoc@=0.0.1
+php/php-32@=8.3.2102
+php/php-32@=8.3.2101-rc.1
+php/php-eh@=8.3.404-beta.4
+php/php-eh@=8.3.404-beta.8
+python/python@=3.13.5

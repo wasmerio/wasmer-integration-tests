@@ -12,3 +12,14 @@ flake.nix
 flake.lock
 Makefile
 pnpm-lock.yaml
+local.env.example
+local-platform/**/*.sh
+local-platform/**/Dockerfile
+local-platform/**/*.toml
+local-platform/**/*.sql
+local-platform/package-seed.txt
+local-platform/package-compilation-list.txt
+# Agent config dirs (.claude is a symlink to .agents). Local-only settings live
+# here and must not be reformatted/committed.
+.agents
+.claude

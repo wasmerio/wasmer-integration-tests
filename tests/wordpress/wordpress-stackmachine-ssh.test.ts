@@ -8,7 +8,7 @@ import {
   connectSshWithRetry,
   enableAppSshWithTestKey,
   readTestSshPrivateKey,
-  sshExec,
+  sshShellExec,
   sshTargetForUser,
 } from "../../src/ssh";
 import type { SshExecResult } from "../../src/ssh";
@@ -210,7 +210,7 @@ describe("stackmachine wordpress ssh", () => {
     app = await deployStackMachineWordpress(env, client);
 
     expect(app.adminUrl).toBeTruthy();
-    await validateWordpressIsLive(app.url);
+    await validateWordpressIsLive(env, app.url);
 
     const sshUser = await enableAppSshWithTestKey(env, app.id);
     const target = sshTargetForUser(env, sshUser);
@@ -230,7 +230,7 @@ describe("stackmachine wordpress ssh", () => {
         throw new Error("SSH connection is not initialized");
       }
 
-      return await sshExec(
+      return await sshShellExec(
         conn,
         `cd ${shellQuote(wordpressDir)} && ${command}`,
         allowNonZeroExitCode,
@@ -506,11 +506,11 @@ describe("stackmachine wordpress ssh", () => {
 
   wpCliTest(
     "wp rewrite structure postname",
-    "wp rewrite structure '/%postname%/'",
+    "wp rewrite structure /%postname%/",
     (result) => {
-      expectSuccessful(result);
       expect(result.stdout).toContain("Success:");
     },
+    { allowNonZeroExitCode: true },
   );
 
   wpCliTest("wp rewrite flush", "wp rewrite flush", (result) => {

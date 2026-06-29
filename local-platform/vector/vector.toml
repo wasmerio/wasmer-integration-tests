@@ -1,0 +1,121 @@
+[sources.instance_logs]
+type = "http"
+address = "0.0.0.0:9089"
+
+[sources.instance_logs.decoding]
+codec = "native_json"
+
+[sources.instance_logs.framing]
+method = "newline_delimited"
+max_length = "1000"
+
+[transforms.instance_logs_cleaned]
+type = "remap"
+inputs = ["instance_logs"]
+source = '''
+# Match the production Vector pipeline semantics used by Edge app logs, while
+# adapting to local-platform's containerized setup:
+# - Vector listens on 0.0.0.0 instead of 127.0.0.1
+# - Edge currently POSTs flattened JSON fields to the HTTP source, e.g.:
+#     {"message": "<json string>", "app_id": "da_...", ...}
+# - Keep backward compatibility with the older nested `.log` envelope too.
+del(.path)
+del(.source_type)
+
+envelope = {}
+if exists(.log) && is_object(.log) {
+  envelope = .log
+} else {
+  envelope = .
+}
+
+raw_payload = envelope.message
+if raw_payload == null {
+  log("dropping malformed instance log: missing message payload", level: "error", rate_limit_secs: 10)
+  abort
+}
+
+parsed = {}
+if is_object(raw_payload) {
+  parsed = raw_payload
+} else {
+  parsed_json, err = parse_json(to_string(raw_payload) ?? "")
+  if err != null || !is_object(parsed_json) {
+    log("dropping malformed instance log: message is not valid JSON", level: "error", rate_limit_secs: 10)
+    abort
+  }
+  parsed = parsed_json
+}
+
+stream_raw = parsed.stream
+if stream_raw == "Stdout" {
+  .stream = 1
+} else if stream_raw == "Stderr" {
+  .stream = 2
+} else if stream_raw == "Runtime" {
+  .stream = 3
+} else {
+  .stream = to_int(stream_raw) ?? 0
+}
+
+.timestamp = parsed.timestamp
+.instance_id = to_string(parsed.instance_id) ?? ""
+.message = to_string(parsed.message) ?? ""
+.job_uid = to_string(parsed.job_uid) ?? "00000000-0000-0000-0000-000000000000"
+if .job_uid == "" {
+  .job_uid = "00000000-0000-0000-0000-000000000000"
+}
+
+.app_id_external = to_string(envelope.app_id) ?? ""
+.app_version_id_external = to_string(envelope.app_version_id) ?? ""
+.app_id = to_int(envelope.app_id_numeric) ?? 0
+.app_version_id = to_int(envelope.app_version_id_numeric) ?? 0
+
+del(.log)
+'''
+
+[sinks.instance_logs_to_clickhouse]
+type = "clickhouse"
+inputs = ["instance_logs_cleaned"]
+endpoint = "http://default:root@clickhouse:8123"
+database = "edge_metrics_local"
+table = "app_logs"
+format = "json_each_row"
+skip_unknown_fields = true
+date_time_best_effort = true
+compression = "gzip"
+
+[sinks.instance_logs_to_clickhouse.healthcheck]
+enabled = false
+
+[transforms.instance_logs_for_loki]
+type = "remap"
+inputs = ["instance_logs_cleaned"]
+source = '''
+# Backend's Loki reader expects each stored line to be JSON with a `message`
+# field whose value is itself a JSON string containing the structured log.
+.message = encode_json({
+  "timestamp": .timestamp,
+  "stream": .stream,
+  "message": .message,
+  "instance_id": .instance_id,
+  "job_uid": .job_uid,
+})
+'''
+
+[sinks.instance_logs_to_loki]
+type = "loki"
+inputs = ["instance_logs_for_loki"]
+endpoint = "http://loki:3100"
+
+[sinks.instance_logs_to_loki.encoding]
+codec = "json"
+
+[sinks.instance_logs_to_loki.healthcheck]
+enabled = false
+
+[sinks.instance_logs_to_loki.labels]
+app = "deploy-instances"
+app_id = "{{ app_id_external }}"
+app_version_id = "{{ app_version_id_external }}"
+env = "local-platform"

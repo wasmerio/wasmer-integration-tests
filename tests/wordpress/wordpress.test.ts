@@ -107,7 +107,7 @@ test("app-wordpress", async () => {
 
     console.log("Validating app: ", appInfo.url);
 
-    await validateWordpressIsLive(appInfo.url);
+    await validateWordpressIsLive(env, appInfo.url);
   } catch (err) {
     if (appInfo) {
       markCurrentJestTestFailed();
