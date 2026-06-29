@@ -224,7 +224,7 @@ log "Requested versions: backend=$BACKEND_VERSION edge=$EDGE_VERSION"
 
 require_github_token=0
 case "$BACKEND_VERSION" in
-  artifact:*|github-artifact:*|github-release:*) require_github_token=1 ;;
+  artifact:*|github-artifact:*|github-release:*|resolve_dev|latest_dev|latest-dev) require_github_token=1 ;;
 esac
 case "$EDGE_VERSION" in
   github-artifact:*|github-release:*|resolve_prod|resolve_dev|latest_dev|latest-dev) require_github_token=1 ;;

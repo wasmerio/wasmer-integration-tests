@@ -21,6 +21,28 @@ on:
       job_name:
         type: string
         default: ""
+      test_branch:
+        type: string
+        default: main
+        description: "Branch of wasmerio/wasmer-integration-tests to check out and run."
+      timeout_minutes:
+        type: number
+        default: 30
+        description: >-
+          Hard wall-clock cap for this single suite job. Without it the job
+          inherits GitHub's 6h default, so a hung deploy (e.g. an autobuild that
+          never completes) keeps the runner busy for hours instead of failing
+          fast. Mirrors the established integration-test-workflow.yaml cap.
+      runner:
+        type: string
+        default: depot-ubuntu-24.04-16
+        description: >-
+          Runner label for the suite job. The full local platform stack
+          (postgres/redis/edge/backend/clickhouse/loki/vector/minio) plus
+          concurrent app builds exhausts a 4-core/16GB GitHub runner — Loki gets
+          OOM-pressured and app-log ingestion dies (breaking getAppLogs), and
+          heavy concurrent template builds can kill the runner outright. A
+          larger depot runner gives the co-resident stack headroom.
     secrets:
       pat:
         required: false
@@ -36,10 +58,17 @@ permissions:
 jobs:
   test:
     name: ${{ inputs.job_name || (inputs.prepare_only && format('Prepare {0} test environment', inputs.suite_id) || format('Run {0} tests', inputs.suite_id)) }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
+      # Always check out the integration-tests repo itself (public), even when
+      # this reusable workflow is called from another repository (e.g. a service
+      # building its own image artifact). Without an explicit repository the
+      # default checkout would clone the caller's repo instead of the tests.
       - uses: actions/checkout@v4
         with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
           submodules: true
 
       - name: Install Wasmer CLI
