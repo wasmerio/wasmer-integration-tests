@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { DeployApp } from "stackmachine";
 
 import { randomAppName, TestEnv } from "../../src";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
@@ -8,65 +8,30 @@ jest.setTimeout(1_800_000);
 
 type StackMachineClient = Awaited<ReturnType<TestEnv["stackmachineSdk"]>>;
 
-const deployAppLikeSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  url: z.string(),
-  adminUrl: z.string().optional(),
-});
-
-type DeployAppLike = z.infer<typeof deployAppLikeSchema>;
-
-const stackMachineWordpressDeployInputSchema = z.object({
-  appName: z.string(),
-  owner: z.string(),
-  repoUrl: z.literal("https://github.com/wordpress/wordpress"),
-  branch: z.literal("6.8.3"),
-  enableDatabase: z.literal(true),
-  region: z.string(),
-  extraData: z.object({
-    wordpress: z.object({
-      adminEmail: z.string(),
-      adminPassword: z.string(),
-      adminUsername: z.string(),
-      language: z.string(),
-      siteName: z.string(),
-    }),
-  }),
-});
-
-type StackMachineWordpressDeployInput = z.infer<
-  typeof stackMachineWordpressDeployInputSchema
->;
-
 async function deployStackMachineWordpressToRegion(
   env: TestEnv,
   client: StackMachineClient,
   regionName: string,
-): Promise<DeployAppLike> {
+): Promise<DeployApp> {
   const appName = randomAppName();
-  const input: StackMachineWordpressDeployInput =
-    stackMachineWordpressDeployInputSchema.parse({
-      appName,
-      owner: env.namespace,
-      repoUrl: "https://github.com/wordpress/wordpress",
-      branch: "6.8.3",
-      enableDatabase: true,
-      region: regionName,
-      extraData: {
-        wordpress: {
-          adminEmail: "admin@example.com",
-          adminPassword: generateNeedlesslySecureRandomPassword(),
-          adminUsername: "admin",
-          language: "en_US",
-          siteName: `WordPress region integration test ${regionName}`,
-        },
+  const appVersion = await env.deployStackMachineApp(client, {
+    appName,
+    owner: env.namespace,
+    repoUrl: "https://github.com/wordpress/wordpress",
+    branch: "6.8.3",
+    enableDatabase: true,
+    region: regionName,
+    extraData: {
+      wordpress: {
+        adminEmail: "admin@example.com",
+        adminPassword: generateNeedlesslySecureRandomPassword(),
+        adminUsername: "admin",
+        language: "en_US",
+        siteName: `WordPress region integration test ${regionName}`,
       },
-    });
-  const build = await client.deployApp(input);
-
-  const appVersion = await build.finish();
-  const app = deployAppLikeSchema.parse(appVersion.app);
+    },
+  });
+  const app = appVersion.app;
   await env.recordDeployedApp({
     appId: app.id,
     appName: app.name,
@@ -115,7 +80,7 @@ describe("stackmachine wordpress regions", () => {
 
     const deployedRegions: string[] = [];
     for (const regionName of regionNames) {
-      let app: DeployAppLike;
+      let app: DeployApp;
       try {
         app = await deployStackMachineWordpressToRegion(env, client, regionName);
       } catch (error) {

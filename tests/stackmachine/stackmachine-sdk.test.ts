@@ -1,4 +1,10 @@
-import { createZip } from "stackmachine";
+import {
+  createZip,
+  type AppAlias,
+  type DeployApp,
+  type DeploymentCreateInput,
+  type Log,
+} from "stackmachine";
 import { AppInfo, randomAppName, sleep, TestEnv } from "../../src";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 
@@ -6,37 +12,7 @@ jest.setTimeout(600_000);
 
 type StackMachineClient = Awaited<ReturnType<TestEnv["stackmachineSdk"]>>;
 
-interface AppAliasLike {
-  id: string;
-  url: string;
-  expectedDnsRecords: { host: string; recordType: string; value: string }[];
-  verify(): Promise<boolean>;
-  delete(): Promise<void>;
-}
-
-interface DeployAppLike {
-  id: string;
-  name: string;
-  url: string;
-  adminUrl?: string;
-  willPerishAt: Date | null;
-  activeVersion: {
-    id: string;
-    fetchLogs(since: Date): Promise<
-      {
-        datetime: Date;
-        instanceId: string;
-        message: string;
-        stream: string;
-        timestamp: number;
-      }[]
-    >;
-  } | null;
-  upsertDomain(domain: string): Promise<AppAliasLike>;
-  domains: { id: string; url: string }[];
-}
-
-function appFetchTarget(app: Pick<DeployAppLike, "id" | "url">): AppInfo {
+function appFetchTarget(app: Pick<DeployApp, "id" | "url">): AppInfo {
   return {
     id: app.id,
     url: app.url,
@@ -62,7 +38,7 @@ async function uploadInlineFiles(
   files: Record<string, string>,
 ): Promise<string> {
   const zip = await createZip(files);
-  return client.uploadFile(zip);
+  return client.files.upload(zip);
 }
 
 async function deployUploadedApp(
@@ -70,17 +46,15 @@ async function deployUploadedApp(
   env: TestEnv,
   uploadUrl: string,
   appName = randomAppName(),
-  extraInput: Record<string, unknown> = {},
-): Promise<DeployAppLike> {
-  const build = await client.deployApp({
+  extraInput: Partial<DeploymentCreateInput> = {},
+): Promise<DeployApp> {
+  const appVersion = await env.deployStackMachineApp(client, {
     appName,
     owner: env.namespace,
     uploadUrl,
     ...extraInput,
   });
-
-  const appVersion = await build.finish();
-  const app = appVersion.app as DeployAppLike;
+  const app = appVersion.app;
   await env.recordDeployedApp({
     appId: app.id,
     appName: app.name,
@@ -95,8 +69,8 @@ async function deployInlinePhpApp(
   env: TestEnv,
   body: string,
   appName = randomAppName(),
-  extraInput: Record<string, unknown> = {},
-): Promise<DeployAppLike> {
+  extraInput: Partial<DeploymentCreateInput> = {},
+): Promise<DeployApp> {
   const uploadUrl = await uploadInlineFiles(client, {
     "index.php": body,
   });
@@ -105,7 +79,7 @@ async function deployInlinePhpApp(
 
 async function expectAppBody(
   env: TestEnv,
-  app: DeployAppLike,
+  app: DeployApp,
   expectedSubstring: string,
   urlOrPath = "/",
 ): Promise<void> {
@@ -116,21 +90,30 @@ async function expectAppBody(
   expect(body).toContain(expectedSubstring);
 }
 
+async function listAppDomains(
+  client: StackMachineClient,
+  appId: string,
+): Promise<AppAlias[]> {
+  return (await client.apps.domains.list({ app: appId })).data;
+}
+
 async function waitForLogs(
-  app: DeployAppLike,
+  client: StackMachineClient,
+  app: DeployApp,
   substring: string,
   timeoutMs = 200_000,
 ): Promise<void> {
   const start = Date.now();
-  let latestLogs:
-    | Awaited<
-        ReturnType<NonNullable<DeployAppLike["activeVersion"]>["fetchLogs"]>
-      >
-    | undefined;
+  let latestLogs: Log[] | undefined;
   while (Date.now() - start < timeoutMs) {
-    latestLogs = await app.activeVersion?.fetchLogs(
-      new Date(Date.now() - 30 * 60 * 1000),
-    );
+    if (app.activeVersion) {
+      latestLogs = (
+        await client.apps.versions.logs.list({
+          version: app.activeVersion.id,
+          since: new Date(Date.now() - 30 * 60 * 1000),
+        })
+      ).data;
+    }
     if (latestLogs?.some((entry) => entry.message.includes(substring))) {
       return;
     }
@@ -158,7 +141,7 @@ async function waitForDeletion(
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const app = (await client.getApp({ id: appId })) as DeployAppLike | null;
+    const [app] = await client.apps.retrieveMany([appId]);
     if (!app) {
       return;
     }
@@ -175,8 +158,8 @@ async function waitForDomainDeletion(
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const app = (await client.getApp({ id: appId })) as DeployAppLike | null;
-    if (!app?.domains.find((item) => item.id === aliasId)) {
+    const domains = await listAppDomains(client, appId);
+    if (!domains.find((item) => item.id === aliasId)) {
       return;
     }
     await sleep(2_000);
@@ -185,9 +168,10 @@ async function waitForDomainDeletion(
 }
 
 async function addDomain(
+  client: StackMachineClient,
   env: TestEnv,
-  app: DeployAppLike,
-): Promise<{ alias: AppAliasLike; domainName: string }> {
+  app: DeployApp,
+): Promise<{ alias: AppAlias; domainName: string }> {
   const zone = `${crypto.randomUUID().replace(/-/g, "")}.com`;
   const domainName = `www.${zone}`;
 
@@ -195,7 +179,10 @@ async function addDomain(
     args: ["domain", "register", zone],
   });
 
-  const alias = await app.upsertDomain(domainName);
+  const alias = await client.apps.domains.create({
+    app: app.id,
+    hostname: domainName,
+  });
   expect(alias.expectedDnsRecords.length).toBeGreaterThan(0);
   return { alias, domainName };
 }
@@ -205,12 +192,13 @@ async function waitForDomainPresent(
   appId: string,
   aliasId: string,
   timeoutMs = 60_000,
-): Promise<DeployAppLike> {
+): Promise<AppAlias> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const app = (await client.getApp({ id: appId })) as DeployAppLike | null;
-    if (app?.domains.find((item) => item.id === aliasId)) {
-      return app;
+    const domains = await listAppDomains(client, appId);
+    const alias = domains.find((item) => item.id === aliasId);
+    if (alias) {
+      return alias;
     }
     await sleep(2_000);
   }
@@ -260,7 +248,7 @@ describe("stackmachine sdk", () => {
     const zip = await createZip({
       "index.php": "<html><body><h1>Hello Zip!</h1></body></html>",
     });
-    const uploadUrl = await client.uploadFile(zip);
+    const uploadUrl = await client.files.upload(zip);
     const app = await deployUploadedApp(client, env, uploadUrl);
     cleanupAppIds.push(app.id);
 
@@ -332,12 +320,9 @@ describe("stackmachine sdk", () => {
     );
     cleanupAppIds.push(app.id);
 
-    const fetched = (await client.getApp({
-      id: app.id,
-    })) as DeployAppLike | null;
-    expect(fetched).not.toBeNull();
-    expect(fetched?.id).toBe(app.id);
-    expect(fetched?.url).toBe(app.url);
+    const fetched = await client.apps.retrieve(app.id);
+    expect(fetched.id).toBe(app.id);
+    expect(fetched.url).toBe(app.url);
   });
 
   test("getAppByName example", async () => {
@@ -350,12 +335,8 @@ describe("stackmachine sdk", () => {
     );
     cleanupAppIds.push(app.id);
 
-    const fetched = (await client.getApp({
-      owner: env.namespace,
-      name: app.name,
-    })) as DeployAppLike | null;
-    expect(fetched).not.toBeNull();
-    expect(fetched?.id).toBe(app.id);
+    const fetched = await client.apps.retrieveByName(app.name, env.namespace);
+    expect(fetched.id).toBe(app.id);
   });
 
   test("getAppLogs example", async () => {
@@ -369,7 +350,7 @@ describe("stackmachine sdk", () => {
     cleanupAppIds.push(app.id);
 
     await expectAppBody(env, app, "ok");
-    await waitForLogs(app, "hello from stackmachine sdk logs");
+    await waitForLogs(client, app, "hello from stackmachine sdk logs");
   });
 
   test("addAppDomain example", async () => {
@@ -382,11 +363,9 @@ describe("stackmachine sdk", () => {
     );
     cleanupAppIds.push(app.id);
 
-    const { alias, domainName } = await addDomain(env, app);
+    const { alias, domainName } = await addDomain(client, env, app);
     const refreshed = await waitForDomainPresent(client, app.id, alias.id);
-    expect(
-      refreshed.domains.find((item) => item.id === alias.id)?.url,
-    ).toContain(domainName);
+    expect(refreshed.url).toContain(domainName);
   });
 
   test("deleteAppDomain example", async () => {
@@ -399,9 +378,9 @@ describe("stackmachine sdk", () => {
     );
     cleanupAppIds.push(app.id);
 
-    const { alias } = await addDomain(env, app);
+    const { alias } = await addDomain(client, env, app);
     await waitForDomainPresent(client, app.id, alias.id);
-    await alias.delete();
+    await client.apps.domains.del(alias.id);
     await waitForDomainDeletion(client, app.id, alias.id);
   });
 
@@ -414,7 +393,7 @@ describe("stackmachine sdk", () => {
       "<html><body><h1>Delete Me</h1></body></html>",
     );
 
-    await client.deleteApp({ id: app.id });
+    await client.apps.del(app.id);
     await waitForDeletion(client, app.id);
   });
 
@@ -436,7 +415,7 @@ describe("stackmachine sdk", () => {
     const client = await env.stackmachineSdk();
     const appName = randomAppName();
 
-    const build = await client.deployApp({
+    const appVersion = await env.deployStackMachineApp(client, {
       appName,
       owner: env.namespace,
       repoUrl: "https://github.com/wordpress/wordpress",
@@ -452,9 +431,7 @@ describe("stackmachine sdk", () => {
         },
       },
     });
-
-    const appVersion = await build.finish();
-    const app = appVersion.app as DeployAppLike;
+    const app = appVersion.app;
     await env.recordDeployedApp({
       appId: app.id,
       appName,

@@ -27,8 +27,8 @@ importers:
         specifier: ^12.1.1
         version: 12.1.1
       stackmachine:
-        specifier: 0.1.8
-        version: 0.1.8(graphql@16.13.2)(ws@8.20.1)
+        specifier: 0.3.0
+        version: 0.3.0(graphql@16.13.2)(ws@8.20.1)
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1513,12 +1513,12 @@ packages:
     resolution: {integrity: sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==}
     engines: {node: '>= 6'}
 
-  relay-compiler@18.2.0:
-    resolution: {integrity: sha512-P3o5/Gv/oLC9hckUaz/a+KvDgbFERpjtz5lgsJSIQILg9paaF3k1yaX9qSxErGuU4icZvjoK5G82a/bfPgGZpA==}
+  relay-compiler@20.1.1:
+    resolution: {integrity: sha512-J/FFFLS/3vnbDkyQMw8l3Ev7dNHXMgC1RAs0fITz4Q63TFPOw142knKxY1Mm5ZZBABkAs9g2JghXaqM+phwTxw==}
     hasBin: true
 
-  relay-runtime@18.2.0:
-    resolution: {integrity: sha512-r4FYWlx1dPwFW+KQnuF1ugwVKR4toIFduCGheEf2paRc6nEEcCIgd2p2Jx2gRF+4niO3mCbRZvqdCoKaznUDzg==}
+  relay-runtime@20.1.1:
+    resolution: {integrity: sha512-N98ZkkyuIHdXmHaPuljihM1QbFYXATF0gxA0CESFphszsQzXs9A/zZloVfzdOI/xg3B3CfM/5nozvIoeTDIcfw==}
 
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
@@ -1607,8 +1607,8 @@ packages:
     resolution: {integrity: sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==}
     engines: {node: '>=10'}
 
-  stackmachine@0.1.8:
-    resolution: {integrity: sha512-xHSaEC41t3aHOLYHqT4Q8xzLfNSYTZmPMLA+qykPPt/yd9zX4hUEUkbA3nm1lE4PJ1L2I8FNFjP6o4nwnmvYjA==}
+  stackmachine@0.3.0:
+    resolution: {integrity: sha512-GX6lyCvgXrJSOUXHN6wKr35CKddtyUxbeMYDZLYNkk3F0FxyFeFRtGFOsuCsRFpY2owKT9UkixLfVL0TF2R3Gg==}
 
   string-length@4.0.2:
     resolution: {integrity: sha512-+l6rNN5fYHNhZZy41RXsYptCjA2Igmq4EG7kZAYFQI1E1VTXarr6ZPXBg6eq7Y6eK4FEhY6AJlyuFIb/v/S0VQ==}
@@ -3595,9 +3595,9 @@ snapshots:
       string_decoder: 1.3.0
       util-deprecate: 1.0.2
 
-  relay-compiler@18.2.0: {}
+  relay-compiler@20.1.1: {}
 
-  relay-runtime@18.2.0:
+  relay-runtime@20.1.1:
     dependencies:
       '@babel/runtime': 7.29.2
       fbjs: 3.0.5
@@ -3674,12 +3674,12 @@ snapshots:
     dependencies:
       escape-string-regexp: 2.0.0
 
-  stackmachine@0.1.8(graphql@16.13.2)(ws@8.20.1):
+  stackmachine@0.3.0(graphql@16.13.2)(ws@8.20.1):
     dependencies:
       '@zip.js/zip.js': 2.8.26
       graphql-ws: 6.0.8(graphql@16.13.2)(ws@8.20.1)
-      relay-compiler: 18.2.0
-      relay-runtime: 18.2.0
+      relay-compiler: 20.1.1
+      relay-runtime: 20.1.1
     transitivePeerDependencies:
       - '@fastify/websocket'
       - crossws
