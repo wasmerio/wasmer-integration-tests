@@ -1,5 +1,5 @@
 import { TestEnv } from "../../src/env";
-import { buildPhpApp } from "../../src/index";
+import { buildPhpApp, randomAppName } from "../../src/index";
 import * as fs from "node:fs";
 import path from "node:path";
 import { projectRoot } from "../utils/path";
@@ -13,7 +13,7 @@ test.concurrent("sql-connectivity", async () => {
   {
     console.log("== Setting up environment without SQL ==");
     const want = "Missing required SQL environment variables";
-    const withoutSqlSpec = buildPhpApp(testCode);
+    const withoutSqlSpec = buildPhpApp(testCode, { name: randomAppName() });
     const withoutSqlInfo = await env.deployApp(withoutSqlSpec);
     const res = await env.fetchApp(withoutSqlInfo, "/results");
     const got = await res.text();
@@ -28,6 +28,7 @@ test.concurrent("sql-connectivity", async () => {
   console.log("== Setting up environment with SQL ==");
   const want = "OK";
   const withSqlSpec = buildPhpApp(testCode, {
+    name: randomAppName(),
     debug: true,
     scaling: {
       mode: "single_concurrency",

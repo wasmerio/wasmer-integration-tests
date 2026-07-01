@@ -441,6 +441,66 @@ export function currentJestTestFailed(): boolean {
   return testName ? failedJestTestNames().has(testName) : false;
 }
 
+// Every jest identifier under which the currently-running test may be recorded
+// in the failed set. Captured while the test is still on the stack (its
+// per-test async context and the global expect state are both valid here);
+// during an afterAll teardown neither is reliably resolvable, which is why the
+// name is snapshotted at enqueue time rather than read back later.
+function currentJestTestNamesForCleanup(): string[] {
+  const names = new Set<string>();
+  const local = currentJestTestName();
+  if (local) {
+    names.add(local);
+  }
+  const maybeGlobal = globalThis as typeof globalThis & {
+    expect?: JestExpectLike;
+  };
+  const full = maybeGlobal.expect?.getState?.().currentTestName;
+  if (full) {
+    names.add(full);
+  }
+  return Array.from(names);
+}
+
+const PENDING_APP_CLEANUPS_KEY = Symbol.for(
+  "wasmer-integration-tests.pending-app-cleanups",
+);
+
+interface PendingAppCleanup {
+  env: TestEnv;
+  app: AppInfo;
+  testNames: string[];
+}
+
+// Per-worker queue of apps awaiting deletion. jest gives each test file its own
+// global object, so this list only ever holds the current file's apps and is
+// drained by the global afterAll hook installed in jest-logging-config.ts.
+function pendingAppCleanups(): PendingAppCleanup[] {
+  const globalWithQueue = globalThis as typeof globalThis & {
+    [PENDING_APP_CLEANUPS_KEY]?: PendingAppCleanup[];
+  };
+  globalWithQueue[PENDING_APP_CLEANUPS_KEY] ??= [];
+  return globalWithQueue[PENDING_APP_CLEANUPS_KEY];
+}
+
+// Delete every queued app whose test passed; preserve (and print) the rest.
+// Called once per test file from a global afterAll, by which point jest has
+// recorded all failures for the file, so the keep/delete decision is final.
+export async function flushPendingAppCleanups(): Promise<void> {
+  const queue = pendingAppCleanups();
+  if (queue.length === 0) {
+    return;
+  }
+  const drained = queue.splice(0, queue.length);
+  const failed = failedJestTestNames();
+  const keepAll = isTruthyEnvVar(process.env[ENV_VAR_KEEP_APPS]);
+  for (const entry of drained) {
+    const preserve =
+      keepAll || entry.testNames.some((name) => failed.has(name));
+    await entry.env.finalizeAppCleanup(entry.app, preserve);
+  }
+}
+
 function deployedAppsRegistryPath(): string {
   return path.join(process.cwd(), ".jest-deployed-apps.jsonl");
 }
@@ -1011,64 +1071,101 @@ export class TestEnv {
   }
 
   shouldPreserveAppsForCurrentTest(): boolean {
-    return Boolean(process.env[ENV_VAR_KEEP_APPS]) || currentJestTestFailed();
+    return (
+      isTruthyEnvVar(process.env[ENV_VAR_KEEP_APPS]) || currentJestTestFailed()
+    );
   }
 
-  async deleteApp(app: AppInfo): Promise<void> {
-    if (this.shouldPreserveAppsForCurrentTest()) {
-      const label = (value: string) => colorize(ANSI_DIM, value.padEnd(14));
-      const origin = app.origin ?? currentJestTestName() ?? "unknown";
-      const reason = process.env[ENV_VAR_KEEP_APPS]
-        ? "KEEP_APPS"
-        : "FAILED TEST";
-      const title = colorize(
-        ANSI_BOLD,
-        colorize(ANSI_CYAN, `${reason}: app preserved`),
-      );
-      process.stderr.write(
-        [
-          `\n${colorize(
-            ANSI_CYAN,
-            "┌────────────────────────────────────────────────────────",
-          )}`,
-          `${colorize(ANSI_CYAN, "│")} ${title}`,
-          `${colorize(
-            ANSI_CYAN,
-            "├────────────────────────────────────────────────────────",
-          )}`,
-          `${colorize(ANSI_CYAN, "│")} ${label("origin")} ${origin}`,
-          `${colorize(ANSI_CYAN, "│")} ${label("app id")} ${colorize(
-            ANSI_YELLOW,
-            app.id,
-          )}`,
-          `${colorize(ANSI_CYAN, "│")} ${label(
-            "app name",
-          )} ${this.namespace}/${app.version.name}`,
-          `${colorize(ANSI_CYAN, "│")} ${label("app url")} ${colorize(
-            ANSI_GREEN,
-            app.url,
-          )}`,
-          `${colorize(ANSI_CYAN, "│")} ${label("permalink")} ${colorize(
-            ANSI_GREEN,
-            app.app.permalink,
-          )}`,
-          `${colorize(ANSI_CYAN, "│")} ${label("dashboard")} ${colorize(
-            ANSI_GREEN,
-            this.appDashboardUrl(app),
-          )}`,
-          `${colorize(
-            ANSI_CYAN,
-            "└────────────────────────────────────────────────────────",
-          )}`,
-          "",
-        ].join("\n"),
-      );
+  // Tear down a deployed test app. By default this is *deferred*: the app is
+  // queued and only deleted in the global afterAll flush, once jest has
+  // recorded whether the test failed. This is what lets a failing test keep its
+  // app for inspection — jest does not mark a test failed until its body (and
+  // any `finally { deleteApp }`) has already run, so deleting inline here would
+  // always win the race and destroy the very app we wanted to preserve.
+  //
+  // Pass `{ immediate: true }` only when a test depends on the deletion having
+  // completed mid-run (e.g. redeploying the same app name); such an app is
+  // being replaced, not preserved, so it is always deleted.
+  async deleteApp(
+    app: AppInfo,
+    options?: { immediate?: boolean },
+  ): Promise<void> {
+    if (options?.immediate) {
+      await this.runWasmerCommand({ args: ["app", "delete", app.id] });
+      return;
+    }
+
+    pendingAppCleanups().push({
+      env: this,
+      app,
+      testNames: currentJestTestNamesForCleanup(),
+    });
+  }
+
+  // Resolve a queued app during the afterAll flush: preserve+announce it if its
+  // test failed (or KEEP_APPS is set), otherwise delete it. Deletion tolerates
+  // a missing app (noAssertSuccess) since a suite's own teardown may already
+  // have removed it.
+  async finalizeAppCleanup(app: AppInfo, preserve: boolean): Promise<void> {
+    if (preserve) {
+      this.announcePreservedApp(app);
       return;
     }
 
     await this.runWasmerCommand({
       args: ["app", "delete", app.id],
+      noAssertSuccess: true,
     });
+  }
+
+  private announcePreservedApp(app: AppInfo): void {
+    const label = (value: string) => colorize(ANSI_DIM, value.padEnd(14));
+    const origin = app.origin ?? "unknown";
+    const reason = isTruthyEnvVar(process.env[ENV_VAR_KEEP_APPS])
+      ? "KEEP_APPS"
+      : "FAILED TEST";
+    const title = colorize(
+      ANSI_BOLD,
+      colorize(ANSI_CYAN, `${reason}: app preserved`),
+    );
+    process.stderr.write(
+      [
+        `\n${colorize(
+          ANSI_CYAN,
+          "┌────────────────────────────────────────────────────────",
+        )}`,
+        `${colorize(ANSI_CYAN, "│")} ${title}`,
+        `${colorize(
+          ANSI_CYAN,
+          "├────────────────────────────────────────────────────────",
+        )}`,
+        `${colorize(ANSI_CYAN, "│")} ${label("origin")} ${origin}`,
+        `${colorize(ANSI_CYAN, "│")} ${label("app id")} ${colorize(
+          ANSI_YELLOW,
+          app.id,
+        )}`,
+        `${colorize(ANSI_CYAN, "│")} ${label(
+          "app name",
+        )} ${this.namespace}/${app.version.name}`,
+        `${colorize(ANSI_CYAN, "│")} ${label("app url")} ${colorize(
+          ANSI_GREEN,
+          app.url,
+        )}`,
+        `${colorize(ANSI_CYAN, "│")} ${label("permalink")} ${colorize(
+          ANSI_GREEN,
+          app.app.permalink,
+        )}`,
+        `${colorize(ANSI_CYAN, "│")} ${label("dashboard")} ${colorize(
+          ANSI_GREEN,
+          this.appDashboardUrl(app),
+        )}`,
+        `${colorize(
+          ANSI_CYAN,
+          "└────────────────────────────────────────────────────────",
+        )}`,
+        "",
+      ].join("\n"),
+    );
   }
 
   appDashboardUrl(app: AppInfo): string {

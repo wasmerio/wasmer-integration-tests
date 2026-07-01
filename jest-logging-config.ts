@@ -2,6 +2,7 @@ import nodeConsole from "console";
 
 import {
   currentJestTestName,
+  flushPendingAppCleanups,
   isVerboseEnabled,
   markCurrentJestTestFailed,
   runWithJestTestState,
@@ -332,3 +333,14 @@ const globalWithJest = globalThis as unknown as {
 globalWithJest.expect = wrapExpectApi(globalWithJest.expect);
 globalWithJest.test = wrapTestApi(globalWithJest.test);
 globalWithJest.it = wrapTestApi(globalWithJest.it);
+
+// Delete apps queued by env.deleteApp() once every test in the file has run.
+// Deferring to afterAll (rather than afterEach) keeps this race-free under
+// test.concurrent — all failures are recorded before the queue is drained, so
+// apps belonging to failed tests are reliably preserved instead of deleted.
+const globalWithHooks = globalThis as typeof globalThis & {
+  afterAll?: (fn: () => unknown) => void;
+};
+globalWithHooks.afterAll?.(async () => {
+  await flushPendingAppCleanups();
+});

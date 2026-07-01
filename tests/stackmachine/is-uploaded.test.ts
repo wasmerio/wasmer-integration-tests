@@ -99,13 +99,12 @@ test("BE-1610: isUploaded survives a config-only re-version", async () => {
   const zip = await createZip({
     "index.php": "<html><body>BE-1610</body></html>",
   });
-  const uploadUrl = await client.uploadFile(zip);
-  const build = await client.deployApp({
+  const uploadUrl = await client.files.upload(zip);
+  const appVersion = await env.deployStackMachineApp(client, {
     appName,
     owner: env.namespace,
     uploadUrl,
   });
-  const appVersion = await build.finish();
   const app = appVersion.app as DeployAppLike;
   await env.recordDeployedApp({
     appId: app.id,

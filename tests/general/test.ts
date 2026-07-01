@@ -311,7 +311,9 @@ test.concurrent("recreate-app-with-same-name", async () => {
   assertEquals(body, "version ALPHA");
 
   console.log("Deleting app", { info });
-  await env.deleteApp(info);
+  // Delete now (not deferred): this test redeploys the same app name below, so
+  // the deletion must complete before the recreate.
+  await env.deleteApp(info, { immediate: true });
 
   console.log("Sleeping...");
   sleep(5_000);
