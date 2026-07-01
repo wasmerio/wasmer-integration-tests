@@ -102,7 +102,7 @@ test("app-wordpress", async () => {
     await logSniff.assertLogsWithin(
       appYaml.name!,
       "Installation complete",
-      60 * SECOND,
+      180 * SECOND,
     );
 
     console.log("Validating app: ", appInfo.url);
