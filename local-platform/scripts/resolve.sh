@@ -291,6 +291,9 @@ case "$BACKEND_VERSION" in
   resolve_dev|latest_dev|latest-dev)
     BACKEND_SELECTOR="$(resolve_backend_dev_github_release)"
     ;;
+  resolve_prod)
+    BACKEND_SELECTOR="$(resolve_backend "$BACKEND_VERSION")"
+    ;;
 esac
 
 BACKEND_IMAGE_REF="$(resolve_backend "$BACKEND_SELECTOR")"
