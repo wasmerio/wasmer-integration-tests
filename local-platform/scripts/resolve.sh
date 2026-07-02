@@ -128,6 +128,7 @@ resolve_backend() {
           tag="$(gh release view --repo "${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}" --json tagName --jq .tagName 2>/dev/null || true)"
         fi
         [ -n "$tag" ] || fail "BACKEND_VERSION=resolve_prod in CI requires BACKEND_IMAGE_REF, BACKEND_PROD_GITHUB_TAG, or GitHub release access to ${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}"
+        tag="${tag#v}"
         printf '%s:%s' "$image_repository" "$tag"
         return
       fi
