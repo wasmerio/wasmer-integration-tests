@@ -176,6 +176,24 @@ let preserveApps = false;
 let postId: number | undefined;
 let commentId: number | undefined;
 let pageId: number | undefined;
+let setupError: unknown;
+let setupErrorReported = false;
+
+// A beforeAll throw makes jest fail every test in the suite with the same
+// full hook error. Instead the setup error is captured and rethrown from the
+// first test only; the remaining tests fail fast with a one-line pointer.
+function assertSetupSucceeded(): void {
+  if (setupError === undefined) {
+    return;
+  }
+  if (setupErrorReported) {
+    throw new Error(
+      "Suite setup (deploy/SSH) failed — see the first test failure for details.",
+    );
+  }
+  setupErrorReported = true;
+  throw setupError instanceof Error ? setupError : new Error(String(setupError));
+}
 
 function requireId(value: number | undefined, label: string): number {
   if (value === undefined) {
@@ -193,6 +211,7 @@ function wpCliTest(
   const testName =
     typeof options.skip === "string" ? `${name} [skipped: ${options.skip}]` : name;
   const runner = async () => {
+    assertSetupSucceeded();
     const resolvedCommand =
       typeof command === "function" ? command() : command;
     await runStep(
@@ -247,12 +266,13 @@ describe(SUITE_NAME, () => {
         );
       };
     } catch (error) {
-      // A setup failure here never triggers afterEach, so the per-test preserve
-      // flag would stay false and afterAll would delete a broken deploy. Mark it
-      // for preservation so a failed deploy/SSH setup can be inspected, matching
-      // how the rest of the suite (and other tests) keep apps on failure.
+      // Mark the app for preservation so a failed deploy/SSH setup can be
+      // inspected, matching how the rest of the suite keeps apps on failure.
+      // The error is captured (not rethrown) so that assertSetupSucceeded()
+      // can report it once from the first test instead of jest repeating the
+      // full hook error for all ~30 tests.
       preserveApps = true;
-      throw error;
+      setupError = error;
     }
   });
 
@@ -333,6 +353,7 @@ describe(SUITE_NAME, () => {
   );
 
   test("wp post create post", async () => {
+    assertSetupSucceeded();
     const result = await runStep(
       runWp,
       "wp post create post",
@@ -361,6 +382,7 @@ describe(SUITE_NAME, () => {
   );
 
   test("wp comment create", async () => {
+    assertSetupSucceeded();
     const id = requireId(postId, "post ID");
     const result = await runStep(
       runWp,
@@ -444,6 +466,7 @@ describe(SUITE_NAME, () => {
   );
 
   test("wp post create page", async () => {
+    assertSetupSucceeded();
     const result = await runStep(
       runWp,
       "wp post create page",

@@ -397,6 +397,10 @@ export async function sshShellExec(
 
   const START = `__START_${Math.random().toString(36).slice(2)}__`;
   const END = `__END_${Math.random().toString(36).slice(2)}__`;
+  // The PTY echoes our typed input back, so the buffer contains
+  // "echo __END__:$RC" (literal $RC) before the real "__END__:<code>" line.
+  // Requiring digits directly after the colon skips the echoed input.
+  const endMarkerRe = new RegExp(`${END}:(\\d+)`);
   return await new Promise((resolve, reject) => {
     console.info(`SSH shell trying to run: ${command}`);
     conn.shell((error, stream) => {
@@ -410,21 +414,22 @@ export async function sshShellExec(
       let code: number | undefined;
       let done = false;
 
-      const parseCode = (buf: string): boolean => {
+      const parseCode = (buf: string, isFinal = false): boolean => {
         if (code !== undefined) {
           return true;
         }
-        const idx = buf.indexOf(`${END}:`);
-        if (idx === -1) {
-          return false;
+        const lines = buf.split(/\r?\n/);
+        // While streaming, the last element is an incomplete line: a chunk
+        // boundary could truncate the exit code (e.g. "127" read as "12").
+        const complete = isFinal ? lines : lines.slice(0, -1);
+        for (const line of complete) {
+          const match = line.match(endMarkerRe);
+          if (match) {
+            code = parseInt(match[1], 10);
+            return true;
+          }
         }
-        const tail = buf.substring(idx + END.length + 1).trim();
-        const match = tail.match(/(\d+)/);
-        if (!match) {
-          return false;
-        }
-        code = parseInt(match[1], 10);
-        return true;
+        return false;
       };
 
       const finish = () => {
@@ -434,19 +439,40 @@ export async function sshShellExec(
         done = true;
         stream.removeListener("data", onStdout);
         stream.stderr.removeListener("data", onStderr);
-
-        const endIdx = stdout.indexOf(END);
-        const startIdx =
-          endIdx === -1
-            ? stdout.lastIndexOf(START)
-            : stdout.lastIndexOf(START, endIdx);
-        let cmdOut = "";
-        if (startIdx !== -1 && endIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length, endIdx);
-        } else if (startIdx !== -1) {
-          cmdOut = stdout.substring(startIdx + START.length);
+        if (!parseCode(stdout, true)) {
+          parseCode(stderr, true);
         }
-        cmdOut = cmdOut.replace(/^\r?\n/, "");
+
+        // Collect output between the START marker line and the END marker
+        // line, dropping echoes of the helper's own injected commands.
+        const lines = stdout.split(/\r?\n/);
+        const startIdx = lines.findIndex((line) => line.trim() === START);
+        const outLines: string[] = [];
+        for (const line of lines.slice(startIdx + 1)) {
+          const endMatch = line.match(endMarkerRe);
+          if (endMatch) {
+            // Output without a trailing newline shares its line with the
+            // marker (e.g. `{"status":"ok"}__END__:0`); keep the prefix.
+            const prefix = line.slice(0, endMatch.index ?? 0);
+            if (prefix.trim() !== "") {
+              outLines.push(prefix);
+            }
+            break;
+          }
+          if (
+            line.includes(START) ||
+            line.includes(END) ||
+            line.trim() === "RC=$?"
+          ) {
+            continue;
+          }
+          outLines.push(line);
+        }
+        const cmdOut = outLines.join("\n").replace(/^\r?\n/, "");
+        stderr = stderr
+          .split(/\r?\n/)
+          .filter((line) => !line.includes(END))
+          .join("\n");
 
         if (code === undefined) {
           reject(
