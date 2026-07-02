@@ -130,7 +130,7 @@ jobs:
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat && 'true' || 'false' }}
+          GH_TOKEN: ${{ secrets.pat }}
         run: |
           set -euo pipefail
           needs_pat=0
@@ -141,7 +141,7 @@ jobs:
             resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
           esac
 
-          if [ "$needs_pat" = "1" ] && [ "$HAS_ARTIFACT_FETCH_PAT" != "true" ]; then
+          if [ "$needs_pat" = "1" ] && [ -z "${GH_TOKEN:-}" ]; then
             echo "::error::LOCAL_PLATFORM_ARTIFACT_FETCH_PAT is required for private wasmerio/backend artifacts or wasmerio/edge dev releases, but it was not passed to the workflow."
             echo "Create repository/org secret LOCAL_PLATFORM_ARTIFACT_FETCH_PAT and make sure it is available to this repository/event."
             exit 1
