@@ -187,9 +187,13 @@ function assertSetupSucceeded(): void {
     return;
   }
   if (setupErrorReported) {
-    throw new Error(
+    const error = new Error(
       "Suite setup (deploy/SSH) failed — see the first test failure for details.",
     );
+    // Jest renders the code frame and stack trace from error.stack; both are
+    // redundant noise for this sentinel, so reduce it to the message alone.
+    error.stack = error.message;
+    throw error;
   }
   setupErrorReported = true;
   throw setupError instanceof Error ? setupError : new Error(String(setupError));
