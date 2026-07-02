@@ -122,12 +122,19 @@ resolve_backend() {
         return
       fi
       if is_ci; then
+        local repo="${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}"
         local image_repository="${BACKEND_IMAGE_REPOSITORY:-ghcr.io/wasmerio/backend}"
         local tag="${BACKEND_PROD_GITHUB_TAG:-}"
         if [ -z "$tag" ] && command -v gh >/dev/null 2>&1; then
-          tag="$(gh release view --repo "${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}" --json tagName --jq .tagName 2>/dev/null || true)"
+          tag="$(gh release view --repo "$repo" --json tagName --jq .tagName 2>/dev/null || true)"
         fi
         [ -n "$tag" ] || fail "BACKEND_VERSION=resolve_prod in CI requires BACKEND_IMAGE_REF, BACKEND_PROD_GITHUB_TAG, or GitHub release access to ${BACKEND_PROD_GITHUB_REPO:-wasmerio/backend}"
+        if command -v docker >/dev/null 2>&1 && ! docker manifest inspect "$image_repository:${tag#v}" >/dev/null 2>&1; then
+          local pattern="${BACKEND_PROD_GITHUB_ASSET_PATTERN:-*image*.tar}"
+          log "Backend prod image tag ${tag#v} not found in $image_repository; falling back to release asset selector from $repo"
+          printf 'github-release:%s:%s:%s' "$repo" "$tag" "$pattern"
+          return
+        fi
         tag="${tag#v}"
         printf '%s:%s' "$image_repository" "$tag"
         return
