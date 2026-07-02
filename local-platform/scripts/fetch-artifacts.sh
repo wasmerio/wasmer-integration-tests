@@ -95,6 +95,18 @@ fetch_to_file() {
     script -q -c "${quoted_cmd[*]}" /dev/null </dev/null >"$gh_log_file" 2>&1
   }
 
+  ensure_gh_download_succeeded() {
+    local resolved_ref="$1"
+    if [ ! -s "$gh_log_file" ]; then
+      fail "GitHub download for $label ($resolved_ref) produced no log output"
+    fi
+    if rg -q "(no assets to download|not found|HTTP 404|HTTP 403|forbidden|failed to get release|could not resolve host|error)" "$gh_log_file"; then
+      local summary
+      summary="$(tail -n 20 "$gh_log_file" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')"
+      fail "GitHub download failed for $label ($resolved_ref): ${summary:-unknown gh error}"
+    fi
+  }
+
   case "$resolved" in
     path:*)
       local source_path="${resolved#path:}"
@@ -125,6 +137,7 @@ fetch_to_file() {
       start_download_progress
       run_gh_download gh run download "$run_id" --repo "$repo" --name "$artifact_name" --dir "$tmp_dir"
       stop_download_progress
+      ensure_gh_download_succeeded "$resolved"
       local candidate
       candidate="$(find "$tmp_dir" -type f | sort | head -n 1 || true)"
       [ -n "$candidate" ] || fail "Artifact $resolved did not contain any files"
@@ -145,6 +158,7 @@ fetch_to_file() {
       start_download_progress
       run_gh_download gh run download --repo "$repo" --name "$artifact_name" --dir "$tmp_dir"
       stop_download_progress
+      ensure_gh_download_succeeded "$resolved"
       local candidate
       candidate="$(find "$tmp_dir" -type f | sort | head -n 1 || true)"
       [ -n "$candidate" ] || fail "Artifact $resolved did not contain any files"
@@ -172,6 +186,7 @@ fetch_to_file() {
         run_gh_download gh release download "$tag" --repo "$repo" --pattern "$pattern" --dir "$tmp_dir"
       fi
       stop_download_progress
+      ensure_gh_download_succeeded "$resolved"
       local candidate
       candidate="$(find "$tmp_dir" -type f | sort | head -n 1 || true)"
       [ -n "$candidate" ] || fail "GitHub release $resolved did not download any files"
