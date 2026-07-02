@@ -18,6 +18,13 @@ jest.setTimeout(600_000);
 
 type StackMachineClient = Awaited<ReturnType<TestEnv["stackmachineSdk"]>>;
 
+// The app is deployed in beforeAll, where jest exposes no currentTestName, so a
+// recorded app would otherwise carry a null origin and the failures-only
+// reporter could not associate it with any failing test. Tag the record with
+// the suite name (kept in sync with the describe title below) so the reporter
+// can surface the preserved app for every failing test in this suite.
+const SUITE_NAME = "stackmachine wordpress ssh";
+
 type RunWpCommand = (
   command: string,
   allowNonZeroExitCode?: boolean,
@@ -155,6 +162,7 @@ async function deployStackMachineWordpress(
     appName: app.name,
     appUrl: app.url,
     appPermalink: app.url,
+    origin: SUITE_NAME,
   });
   return app;
 }
@@ -203,43 +211,53 @@ function wpCliTest(
   test(testName, runner);
 }
 
-describe("stackmachine wordpress ssh", () => {
+describe(SUITE_NAME, () => {
   beforeAll(async () => {
     env = TestEnv.fromEnv();
-    const client = await env.stackmachineSdk();
-    app = await deployStackMachineWordpress(env, client);
+    try {
+      const client = await env.stackmachineSdk();
+      app = await deployStackMachineWordpress(env, client);
 
-    expect(app.adminUrl).toBeTruthy();
-    await validateWordpressIsLive(env, app.url);
+      expect(app.adminUrl).toBeTruthy();
+      await validateWordpressIsLive(env, app.url);
 
-    const sshUser = await enableAppSshWithTestKey(env, app.id);
-    const target = sshTargetForUser(env, sshUser);
-    conn = await connectSshWithRetry({
-      host: target.host,
-      port: target.port,
-      username: sshUser.username,
-      privateKey: readTestSshPrivateKey(),
-      tries: 8,
-      delayMs: 5_000,
-      readyTimeout: 10_000,
-    });
+      const sshUser = await enableAppSshWithTestKey(env, app.id);
+      const target = sshTargetForUser(env, sshUser);
+      conn = await connectSshWithRetry({
+        host: target.host,
+        port: target.port,
+        username: sshUser.username,
+        privateKey: readTestSshPrivateKey(),
+        tries: 8,
+        delayMs: 5_000,
+        readyTimeout: 10_000,
+      });
 
-    const wordpressDir = sshUser.sftpRootFolder || "/app";
-    runWp = async (command, allowNonZeroExitCode = false) => {
-      if (!conn) {
-        throw new Error("SSH connection is not initialized");
-      }
+      const wordpressDir = sshUser.sftpRootFolder || "/app";
+      runWp = async (command, allowNonZeroExitCode = false) => {
+        if (!conn) {
+          throw new Error("SSH connection is not initialized");
+        }
 
-      return await sshShellExec(
-        conn,
-        `cd ${shellQuote(wordpressDir)} && ${command}`,
-        allowNonZeroExitCode,
-      );
-    };
+        return await sshShellExec(
+          conn,
+          `cd ${shellQuote(wordpressDir)} && ${command}`,
+          allowNonZeroExitCode,
+        );
+      };
+    } catch (error) {
+      // A setup failure here never triggers afterEach, so the per-test preserve
+      // flag would stay false and afterAll would delete a broken deploy. Mark it
+      // for preservation so a failed deploy/SSH setup can be inspected, matching
+      // how the rest of the suite (and other tests) keep apps on failure.
+      preserveApps = true;
+      throw error;
+    }
   });
 
   afterEach(() => {
-    preserveApps = preserveApps || Boolean(process.env.KEEP_APPS) || currentJestTestFailed();
+    preserveApps =
+      preserveApps || Boolean(process.env.KEEP_APPS) || currentJestTestFailed();
   });
 
   afterAll(async () => {

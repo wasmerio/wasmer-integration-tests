@@ -28,7 +28,14 @@ function matchesFailingTest(record, failingTestNames) {
   return candidates.some(
     (candidate) =>
       failingTestNames.has(candidate) ||
-      [...failingTestNames].some((testName) => testName.endsWith(candidate)),
+      [...failingTestNames].some(
+        (testName) =>
+          testName.endsWith(candidate) ||
+          // Suite-level records (e.g. apps deployed in beforeAll, tagged with
+          // the describe title) have no per-test name, so match any failing
+          // test whose full name is nested under that prefix.
+          testName.startsWith(`${candidate} `),
+      ),
   );
 }
 
