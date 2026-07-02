@@ -89,6 +89,19 @@ class FakeShellStream extends EventEmitter {
   }
 }
 
+// These tests target the interactive-shell marker parsing, so force
+// sshShellExec down the shell path: with EDGE_SSH_SERVER set (as in the local
+// platform CI env) it would first try conn.exec, which the fake lacks.
+const savedEdgeSshServer = process.env.EDGE_SSH_SERVER;
+beforeAll(() => {
+  delete process.env.EDGE_SSH_SERVER;
+});
+afterAll(() => {
+  if (savedEdgeSshServer !== undefined) {
+    process.env.EDGE_SSH_SERVER = savedEdgeSshServer;
+  }
+});
+
 function fakeConn(stream: FakeShellStream): Client {
   return {
     shell: (cb: (err: Error | undefined, stream: FakeShellStream) => void) => {
