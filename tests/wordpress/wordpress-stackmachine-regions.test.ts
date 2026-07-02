@@ -1,6 +1,7 @@
 import type { DeployApp } from "stackmachine";
 
 import { randomAppName, TestEnv } from "../../src";
+import { deployAppToAppInfo } from "../../src/convert";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { validateWordpressIsLive } from "../../src/wordpress";
 
@@ -42,25 +43,19 @@ async function deployStackMachineWordpressToRegion(
 }
 
 describe("stackmachine wordpress regions", () => {
-  const cleanupAppIds: string[] = [];
+  const cleanupApps: DeployApp[] = [];
 
   afterEach(async () => {
     const env = TestEnv.fromEnv();
-    if (env.shouldPreserveAppsForCurrentTest()) {
-      cleanupAppIds.length = 0;
-      return;
-    }
-
-    while (cleanupAppIds.length > 0) {
-      const appId = cleanupAppIds.pop();
-      if (!appId) {
+    // Same canonical path as every other suite: preserve on KEEP_APPS or a
+    // failing test (with the "app preserved" banner), otherwise delete.
+    const preserve = env.shouldPreserveAppsForCurrentTest();
+    while (cleanupApps.length > 0) {
+      const app = cleanupApps.pop();
+      if (!app) {
         continue;
       }
-      try {
-        await env.backend.deleteApp(appId);
-      } catch {
-        // Ignore cleanup races when the test already deleted the app.
-      }
+      await env.finalizeAppCleanup(deployAppToAppInfo(app), preserve);
     }
   });
 
@@ -90,7 +85,7 @@ describe("stackmachine wordpress regions", () => {
         );
       }
 
-      cleanupAppIds.push(app.id);
+      cleanupApps.push(app);
       try {
         expect(app.adminUrl).toBeTruthy();
         await validateWordpressIsLive(env, app.url);

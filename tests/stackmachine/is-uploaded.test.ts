@@ -24,7 +24,8 @@ import { createZip } from "stackmachine";
 import * as yaml from "js-yaml";
 
 import { assertEquals, assertNotEquals } from "../../src/testing_tools";
-import { AppInfo, randomAppName, sleep, TestEnv } from "../../src/index";
+import { randomAppName, sleep, TestEnv } from "../../src/index";
+import { deployAppToAppInfo } from "../../src/convert";
 
 jest.setTimeout(600_000);
 
@@ -74,18 +75,6 @@ async function getActiveVersion(
     node: { activeVersion: ActiveVersion };
   }>(ACTIVE_VERSION_QUERY, { id: appId });
   return res.data.node.activeVersion;
-}
-
-// Minimal AppInfo so env.deleteApp() (which only needs id + version.name) can
-// clean up an app deployed through the StackMachine SDK.
-function deletable(id: string, name: string, url: string): AppInfo {
-  return {
-    id,
-    url,
-    dir: "",
-    app: { id, url, permalink: "", activeVersionId: null },
-    version: { appId: id, appVersionId: "", name, path: "", url },
-  };
 }
 
 test("BE-1610: isUploaded survives a config-only re-version", async () => {
@@ -159,6 +148,6 @@ test("BE-1610: isUploaded survives a config-only re-version", async () => {
       "BE-1610: isUploaded must stay true after a config-only re-version",
     );
   } finally {
-    await env.deleteApp(deletable(app.id, app.name, app.url));
+    await env.deleteApp(deployAppToAppInfo(app));
   }
 });

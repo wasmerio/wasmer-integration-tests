@@ -2,7 +2,8 @@ import { Client } from "ssh2";
 import type { DeployApp } from "stackmachine";
 
 import { randomAppName, TestEnv } from "../../src";
-import { currentJestTestFailed } from "../../src/env";
+import { deployAppToAppInfo } from "../../src/convert";
+import { currentJestTestFailed, isTruthyEnvVar } from "../../src/env";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import {
   connectSshWithRetry,
@@ -257,21 +258,25 @@ describe(SUITE_NAME, () => {
 
   afterEach(() => {
     preserveApps =
-      preserveApps || Boolean(process.env.KEEP_APPS) || currentJestTestFailed();
+      preserveApps ||
+      isTruthyEnvVar(process.env.KEEP_APPS) ||
+      currentJestTestFailed();
   });
 
   afterAll(async () => {
     conn?.end();
 
-    if (!env || !app || preserveApps) {
+    if (!env || !app) {
       return;
     }
 
-    try {
-      await env.backend.deleteApp(app.id);
-    } catch {
-      // Ignore cleanup races when the app has already been deleted.
-    }
+    // Route through the canonical cleanup path so KEEP_APPS and failure
+    // preservation behave exactly like every other suite. KEEP_APPS is also
+    // checked directly here (not only via afterEach) so a suite where no test
+    // body ran — e.g. a beforeAll failure or a fully-skipped run — still keeps
+    // the app.
+    const preserve = preserveApps || isTruthyEnvVar(process.env.KEEP_APPS);
+    await env.finalizeAppCleanup(deployAppToAppInfo(app), preserve);
   });
 
   wpCliTest("wp eval returns JSON", `wp eval 'echo json_encode(["status" => "ok"]);'`, (result) => {
