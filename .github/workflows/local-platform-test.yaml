@@ -130,7 +130,7 @@ jobs:
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           EDGE_VERSION: ${{ inputs.edge_version }}
-          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat && 'true' || 'false' }}
         run: |
           set -euo pipefail
           needs_pat=0
