@@ -27,8 +27,8 @@ importers:
         specifier: ^12.1.1
         version: 12.1.1
       stackmachine:
-        specifier: 0.3.0
-        version: 0.3.0(graphql@16.13.2)(ws@8.20.1)
+        specifier: 0.4.0
+        version: 0.4.0(graphql@16.13.2)(ws@8.20.1)
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1664,8 +1664,8 @@ packages:
     resolution: {integrity: sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==}
     engines: {node: '>=10'}
 
-  stackmachine@0.3.0:
-    resolution: {integrity: sha512-GX6lyCvgXrJSOUXHN6wKr35CKddtyUxbeMYDZLYNkk3F0FxyFeFRtGFOsuCsRFpY2owKT9UkixLfVL0TF2R3Gg==}
+  stackmachine@0.4.0:
+    resolution: {integrity: sha512-8LIJiAASTNbca0Epayhicf0ePCIoWsRNtvS1iIqdvVtKNwFnUoVmbe6Z+7OQ1Ny909pIyiXfA0MMmohOKqMKvA==}
 
   string-length@4.0.2:
     resolution: {integrity: sha512-+l6rNN5fYHNhZZy41RXsYptCjA2Igmq4EG7kZAYFQI1E1VTXarr6ZPXBg6eq7Y6eK4FEhY6AJlyuFIb/v/S0VQ==}
@@ -3782,7 +3782,7 @@ snapshots:
     dependencies:
       escape-string-regexp: 2.0.0
 
-  stackmachine@0.3.0(graphql@16.13.2)(ws@8.20.1):
+  stackmachine@0.4.0(graphql@16.13.2)(ws@8.20.1):
     dependencies:
       '@zip.js/zip.js': 2.8.26
       graphql-ws: 6.0.8(graphql@16.13.2)(ws@8.20.1)
