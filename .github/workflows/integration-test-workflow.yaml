@@ -1,8 +1,10 @@
 name: Integration Test Workflow
 
-concurrency:
-  group: ${{ github.ref }}-${{ inputs.registry }}
-  cancel-in-progress: true
+# NOTE: concurrency is declared on the test-suites job below, NOT at the
+# workflow level. Workflow-level concurrency in a called (reusable) workflow
+# cancels the ENTIRE caller run, so a newer deployment-test invocation would
+# also kill unrelated sibling jobs in the caller (e.g. the local platform
+# suite). Job-level groups only ever cancel their own superseded jobs.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -71,6 +73,11 @@ jobs:
     needs: test-suite-matrix
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.timeout_minutes || 15 }}
+    # Unique per ref + registry + suite: a superseding deployment test for the
+    # same ref/registry replaces only the matching suite job, nothing else.
+    concurrency:
+      group: integration-tests-${{ github.ref }}-${{ inputs.registry }}-${{ matrix.id }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
