@@ -96,6 +96,33 @@ jobs:
 
       - run: make setup
 
+      # Edge's compiled-module artifacts are only valid for the Edge build that
+      # produced them (they live under a per-runtime-hash directory), so the
+      # cache key must contain the RESOLVED release tag, not a floating
+      # selector like `resolve_dev`. Keying on the selector froze a stale blob
+      # under a "hit" key: every job restored it, recompiled all packages
+      # (~5 min), and the save step skipped because the key already existed.
+      - name: Resolve edge version for cache key
+        id: edge-cache-key
+        env:
+          EDGE_VERSION: ${{ inputs.edge_version }}
+          GH_TOKEN: ${{ secrets.pat || github.token }}
+        run: |
+          set -euo pipefail
+          resolved="$EDGE_VERSION"
+          case "$EDGE_VERSION" in
+            resolve_dev)
+              tag="$(gh release list --repo wasmerio/edge --limit 200 --order desc --json tagName --jq '[.[] | select(.tagName | endswith("_dev1"))][0].tagName' 2>/dev/null || true)"
+              [ -n "$tag" ] && resolved="$tag"
+              ;;
+            resolve_prod)
+              tag="$(gh release list --repo wasmerio/edge --limit 100 --order desc --json tagName,publishedAt --jq 'sort_by(.publishedAt) | last | .tagName' 2>/dev/null || true)"
+              [ -n "$tag" ] && resolved="$tag"
+              ;;
+          esac
+          echo "Edge cache key component: $resolved"
+          echo "resolved=$resolved" >> "$GITHUB_OUTPUT"
+
       - name: Restore local platform package and compiler caches
         id: local-platform-cache
         uses: actions/cache/restore@v4
@@ -104,10 +131,14 @@ jobs:
             .local-platform/package-cache
             .local-platform/cache/edge/compiler_cache
             .local-platform/cache/edge/webc_cache
-          key: local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml', 'wordpress/wasmer.toml') }}
+          key: local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml', 'wordpress/wasmer.toml') }}
+          # Prefix fallbacks still help: the package-cache (downloaded webc
+          # files) is edge-version-independent, so restoring a neighboring
+          # entry saves the package downloads even when compiled artifacts
+          # need to be rebuilt for a new Edge release.
           restore-keys: |
-            local-platform-v1-${{ runner.os }}-${{ inputs.edge_version }}-
-            local-platform-v1-${{ runner.os }}-
+            local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-
+            local-platform-v2-${{ runner.os }}-
 
       - name: Log local platform selection
         env:
