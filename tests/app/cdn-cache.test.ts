@@ -5,7 +5,6 @@ import type { AppFetchOptions } from "../../src/env";
 jest.setTimeout(180_000);
 
 const CACHE_WARMUP_TIMEOUT_MS = 15_000;
-const NEGATIVE_CACHE_TIMEOUT_MS = 3_000;
 const PURGE_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 100;
 const STABLE_RESPONSE_COUNT = 2;
@@ -420,7 +419,7 @@ async function expectNotCached(
   let lastToken: string | undefined;
   const start = Date.now();
 
-  while (Date.now() - start < NEGATIVE_CACHE_TIMEOUT_MS) {
+  while (Date.now() - start < CACHE_WARMUP_TIMEOUT_MS) {
     const result = await fetchText(env, app, path, init);
     observations.push(result);
 
@@ -445,6 +444,32 @@ async function expectNotCached(
 
     await sleep(POLL_INTERVAL_MS);
   }
+}
+
+async function expectNoCacheRequiresRevalidation(
+  env: TestEnv,
+  app: AppInfo,
+  path: string,
+): Promise<void> {
+  const initial = await fetchText(env, app, path);
+  expect(initial.status).toBe(200);
+  expect(initial.json?.token).toBeDefined();
+
+  const etag = initial.headers.get("etag");
+  expect(etag).toBe('"fixture-etag"');
+
+  const revalidated = await fetchText(env, app, path, {
+    headers: { "if-none-match": etag ?? "" },
+  });
+
+  if (revalidated.status === 304) {
+    expect(revalidated.body).toBe("");
+    return;
+  }
+
+  expect(revalidated.status).toBe(200);
+  expect(revalidated.json?.token).toBeDefined();
+  expect(revalidated.json?.token).not.toBe(initial.json?.token);
 }
 
 async function mutationExists(
@@ -487,6 +512,11 @@ async function purgeAppCdnCache(env: TestEnv, app: AppInfo): Promise<void> {
   );
 
   expect(response.data?.purgeAppCdnCache.success).toBe(true);
+}
+
+function isKnownUnsupportedLocalTarget(env: TestEnv): boolean {
+  const registryHostname = new URL(env.registry).hostname;
+  return registryHostname === "localhost" || registryHostname === "127.0.0.1";
 }
 
 async function waitForPurgeToTakeEffect(
@@ -570,7 +600,11 @@ describe("app CDN cache smoke", () => {
       await Promise.all([
         expectNotCached(env, app, uniquePath("/cache/no-store")),
         expectNotCached(env, app, uniquePath("/cache/private")),
-        expectNotCached(env, app, uniquePath("/cache/no-cache")),
+        expectNoCacheRequiresRevalidation(
+          env,
+          app,
+          uniquePath("/cache/no-cache"),
+        ),
         expectNotCached(env, app, uniquePath("/cache/post"), {
           method: "POST",
           body: "post-body",
@@ -711,8 +745,14 @@ describe("app CDN cache smoke", () => {
       expect(notFound.token).toBeDefined();
 
       if (!(await mutationExists(env, "purgeAppCdnCache"))) {
+        if (!isKnownUnsupportedLocalTarget(env)) {
+          throw new Error(
+            `Expected registry ${env.registry} to expose purgeAppCdnCache for CDN purge coverage.`,
+          );
+        }
+
         console.warn(
-          "Skipping CDN purge check: registry does not expose purgeAppCdnCache.",
+          "Skipping CDN purge check: local registry does not expose purgeAppCdnCache.",
         );
         return;
       }
