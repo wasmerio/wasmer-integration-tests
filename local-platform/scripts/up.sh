@@ -299,6 +299,18 @@ run_quietly "Backend migrations" "$RUN_DIR/logs/backend-migrate.log" \
 
 "$SCRIPT_DIR/bootstrap.sh"
 
+# Repo-owned template seeding (bootstrap.sh passes --skip-templates to the
+# backend's embedded seeder). Only needs Postgres, which is already up.
+if is_truthy "${LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER:-}"; then
+  log "Skipping repo-owned template seeding (LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1)"
+elif is_truthy "${LOCAL_PLATFORM_SEED_TEMPLATES:-1}"; then
+  log "Seeding app templates into local registry"
+  run_quietly "Template seeding" "$RUN_DIR/logs/template-seed.log" \
+    node "$REPO_DIR/local-platform/scripts/seed-app-templates.mjs" "$REPO_DIR" "$RUN_DIR"
+else
+  log "Skipping app template seeding because LOCAL_PLATFORM_SEED_TEMPLATES=${LOCAL_PLATFORM_SEED_TEMPLATES:-}"
+fi
+
 log "Starting backend"
 compose up -d backend
 node "$REPO_DIR/local-platform/scripts/wait-url.mjs" "http://localhost:${BACKEND_HTTP_PORT}/graphql" "${LOCAL_PLATFORM_BACKEND_TIMEOUT_MS:-120000}"
