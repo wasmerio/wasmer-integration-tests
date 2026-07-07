@@ -1502,6 +1502,18 @@ export class TestEnv {
           }
 
           const body = await response.text().catch(() => "<unreadable body>");
+
+          // Best-effort: include the app's own logs so instance boot
+          // failures (which only surface as opaque 5xx from Edge) are
+          // diagnosable from the test failure alone.
+          let appLogs = "";
+          try {
+            const { getAllLogs } = await import("./log");
+            appLogs = await getAllLogs(this, app.version.name);
+          } catch (logError) {
+            appLogs = `<failed to fetch app logs: ${logError}>`;
+          }
+
           throw new Error(
             [
               `Fetching app URL '${url}' returned status ${response.status}` +
@@ -1511,6 +1523,7 @@ export class TestEnv {
               `App: ${this.namespace}/${app.version.name} (${app.id})`,
               "Pass noAssertSuccess: true if a non-success status is expected.",
               `Body (truncated): ${body.slice(0, 2000)}`,
+              `App logs (tail): ${appLogs.slice(-3000) || "<empty>"}`,
             ].join("\n"),
           );
         }
