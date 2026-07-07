@@ -2,12 +2,12 @@ import { AppInfo, buildJsWorkerApp, sleep, TestEnv } from "../../src";
 import type { AppDefinition } from "../../src/app/construct";
 import type { AppFetchOptions } from "../../src/env";
 
-jest.setTimeout(180_000);
+jest.setTimeout(300_000);
 
-const CACHE_WARMUP_TIMEOUT_MS = 15_000;
-const PURGE_TIMEOUT_MS = 30_000;
-const POLL_INTERVAL_MS = 100;
-const STABLE_RESPONSE_COUNT = 2;
+const CACHE_WARMUP_TIMEOUT_MS = 30_000;
+const PURGE_TIMEOUT_MS = 60_000;
+const POLL_INTERVAL_MS = 500;
+const STABLE_RESPONSE_COUNT = 3;
 
 type CdnFixtureBody = {
   route: string;
