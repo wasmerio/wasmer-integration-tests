@@ -5,8 +5,8 @@ import {
   type DeploymentCreateInput,
   type Log,
 } from "stackmachine";
-import { AppInfo, randomAppName, sleep, TestEnv } from "../../src";
-import { generateNeedlesslySecureRandomPassword } from "../../src/security";
+import { AppInfo, pollUntil, randomAppName, sleep, TestEnv } from "../../src";
+import { deployStackMachineWordpress } from "../utils/stackmachine-wordpress";
 
 jest.setTimeout(600_000);
 
@@ -139,15 +139,13 @@ async function waitForDeletion(
   appId: string,
   timeoutMs = 60_000,
 ): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const [app] = await client.apps.retrieveMany([appId]);
-    if (!app) {
-      return;
-    }
-    await sleep(2_000);
-  }
-  throw new Error(`Timed out waiting for deletion of app '${appId}'`);
+  await pollUntil(
+    async () => {
+      const [app] = await client.apps.retrieveMany([appId]);
+      return !app;
+    },
+    { timeoutMs, intervalMs: 2_000, description: `deletion of app '${appId}'` },
+  );
 }
 
 async function waitForDomainDeletion(
@@ -156,15 +154,17 @@ async function waitForDomainDeletion(
   aliasId: string,
   timeoutMs = 60_000,
 ): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const domains = await listAppDomains(client, appId);
-    if (!domains.find((item) => item.id === aliasId)) {
-      return;
-    }
-    await sleep(2_000);
-  }
-  throw new Error(`Timed out waiting for deletion of domain '${aliasId}'`);
+  await pollUntil(
+    async () => {
+      const domains = await listAppDomains(client, appId);
+      return !domains.find((item) => item.id === aliasId);
+    },
+    {
+      timeoutMs,
+      intervalMs: 2_000,
+      description: `deletion of domain '${aliasId}'`,
+    },
+  );
 }
 
 async function addDomain(
@@ -193,16 +193,17 @@ async function waitForDomainPresent(
   aliasId: string,
   timeoutMs = 60_000,
 ): Promise<AppAlias> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const domains = await listAppDomains(client, appId);
-    const alias = domains.find((item) => item.id === aliasId);
-    if (alias) {
-      return alias;
-    }
-    await sleep(2_000);
-  }
-  throw new Error(`Timed out waiting for domain '${aliasId}' to be attached`);
+  return pollUntil(
+    async () => {
+      const domains = await listAppDomains(client, appId);
+      return domains.find((item) => item.id === aliasId);
+    },
+    {
+      timeoutMs,
+      intervalMs: 2_000,
+      description: `domain '${aliasId}' to be attached`,
+    },
+  );
 }
 
 describe("stackmachine sdk", () => {
@@ -413,30 +414,8 @@ describe("stackmachine sdk", () => {
   test("deployWordpress example", async () => {
     const env = TestEnv.fromEnv();
     const client = await env.stackmachineSdk();
-    const appName = randomAppName();
-
-    const appVersion = await env.deployStackMachineApp(client, {
-      appName,
-      owner: env.namespace,
-      repoUrl: "https://github.com/wordpress/wordpress",
-      branch: "6.8.3",
-      enableDatabase: true,
-      extraData: {
-        wordpress: {
-          adminEmail: "admin@example.com",
-          adminPassword: generateNeedlesslySecureRandomPassword(),
-          adminUsername: "admin",
-          language: "en_US",
-          siteName: "Gallant Goldberg",
-        },
-      },
-    });
-    const app = appVersion.app;
-    await env.recordDeployedApp({
-      appId: app.id,
-      appName,
-      appUrl: app.url,
-      appPermalink: app.url,
+    const app = await deployStackMachineWordpress(env, client, {
+      siteName: "Gallant Goldberg",
     });
     cleanupAppIds.push(app.id);
 

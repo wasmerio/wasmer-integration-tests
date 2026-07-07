@@ -217,11 +217,16 @@ addEventListener("fetch", (fetchEvent) => {
   };
 }
 
-export const DEFAULT_APP_YAML = {
-  kind: "wasmer.io/App.v0",
-  name: randomAppName(),
-  package: ".",
-};
+// A function rather than a constant: a shared constant would evaluate
+// randomAppName() once at module load, silently giving every app built from
+// it in the same process the same name (and thus colliding deploys).
+export function defaultAppYaml(): AppYaml {
+  return {
+    kind: "wasmer.io/App.v0",
+    name: randomAppName(),
+    package: ".",
+  };
+}
 export function buildPhpApp(
   phpCode: string,
   additionalAppYamlSettings?: Record<string, unknown>,
@@ -248,7 +253,7 @@ export function buildPhpApp(
       ],
     },
     appYaml: AppYaml.parse({
-      ...DEFAULT_APP_YAML,
+      ...defaultAppYaml(),
       ...additionalAppYamlSettings,
     }),
     files: {
@@ -287,7 +292,7 @@ export function buildPythonApp(
       ],
     },
     appYaml: AppYaml.parse({
-      ...DEFAULT_APP_YAML,
+      ...defaultAppYaml(),
       ...additionalAppYamlSettings,
     }),
     files: {

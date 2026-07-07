@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-all
+#!/usr/bin/env -S npx tsx
 
 // Helper script to purge old apps from the test namespace.
 // This should be run periodically to keep the namespace clean.
@@ -58,4 +58,7 @@ async function main() {
   console.log(`Done. Deleted ${out.deleted} apps.`);
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

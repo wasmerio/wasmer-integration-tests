@@ -169,8 +169,7 @@ export class BackendClient {
       }),
     });
     type nodeLike = z.infer<typeof nodeLike>;
-    const res = await this.gqlQuery<nodeLike>(
-      `
+    const query = `
       query($id:ID!) {
         node(id:$id) {
           ... on DeployApp {
@@ -183,45 +182,38 @@ export class BackendClient {
           }
         }
       }
-    `,
-      { id: appId },
-    );
+    `;
 
-    const AM_RETRIES = 2;
-    let i = 0;
-    const errors: Error[] = [];
-    while (i < AM_RETRIES) {
-      i++;
+    // The backend can briefly return an incomplete node right after a deploy
+    // (e.g. activeVersion not yet assigned), so re-fetch a few times before
+    // giving up.
+    const AM_RETRIES = 3;
+    const errors: string[] = [];
+    for (let i = 0; i < AM_RETRIES; i++) {
+      if (i > 0) {
+        await sleep(5000);
+      }
+      const res = await this.gqlQuery<nodeLike>(query, { id: appId });
       const nodeParse = nodeLike.safeParse(res.data);
-
       if (!nodeParse.success) {
         console.debug({ res });
         errors.push(
-          Error(
-            `Failed to parse object for: ${appId}, error: ${nodeParse.error}`,
-          ),
+          `attempt ${i + 1}: failed to parse app node: ${nodeParse.error}`,
         );
-
-        await sleep(5000);
         continue;
       }
+
       const node = nodeParse.data.node;
-
-      const id = node.id;
-      const url = node.url;
-      const activeVersionId = node.activeVersion?.id ?? null;
-      const permalink = node.permalink;
-
-      const app: ApiDeployApp = {
-        id,
-        url,
-        permalink,
-        activeVersionId,
+      return {
+        id: node.id,
+        url: node.url,
+        permalink: node.permalink,
+        activeVersionId: node.activeVersion?.id ?? null,
       };
-
-      return app;
     }
-    throw errors;
+    throw new Error(
+      `Failed to load app ${appId} after ${AM_RETRIES} attempts:\n${errors.join("\n")}`,
+    );
   }
 
   async appsInNamespace(

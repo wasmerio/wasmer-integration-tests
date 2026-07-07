@@ -123,9 +123,7 @@ test.skip("app-cache-purge-instaboot-php", async () => {
       "bootsrap=journal+memory",
     );
     // Body should be a timestamp.
-    try {
-      parseInt(body);
-    } catch {
+    if (Number.isNaN(parseInt(body))) {
       throw new Error(`Expected body to be a timestamp, got: ${body}`);
     }
   }
@@ -171,9 +169,8 @@ test.skip("instaboot-max-age", async () => {
       res.headers.get(EDGE_HEADER_JOURNAL_STATUS),
       "bootsrap=journal+memory",
     );
-    try {
-      initialTimestamp = parseInt(body);
-    } catch {
+    initialTimestamp = parseInt(body);
+    if (Number.isNaN(initialTimestamp)) {
       throw new Error(`Expected body to be a timestamp, got: ${body}`);
     }
   }
@@ -196,10 +193,8 @@ test.skip("instaboot-max-age", async () => {
       res.headers.get(EDGE_HEADER_JOURNAL_STATUS),
       "bootsrap=journal+memory",
     );
-    let newTimestamp: number;
-    try {
-      newTimestamp = parseInt(body);
-    } catch {
+    const newTimestamp = parseInt(body);
+    if (Number.isNaN(newTimestamp)) {
       throw new Error(`Expected body to be a timestamp, got: "${body}"`);
     }
 

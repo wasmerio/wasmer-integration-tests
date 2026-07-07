@@ -1,5 +1,5 @@
-import path from "path";
-import { TestEnv, createTempDir, sleep } from "../../src";
+import path from "node:path";
+import { pollUntil, TestEnv, createTempDir } from "../../src";
 import * as fs from "node:fs";
 import * as dns from "node:dns";
 
@@ -44,38 +44,17 @@ test.concurrent("dns-zonefile", async () => {
   console.log("Resolved Edge DNS server ip: " + dnsServerIp);
 
   // Resolve the custom domain.
-  const start = Date.now();
-  while (true) {
-    const elapsed = Date.now() - start;
-    if (elapsed > 60_000) {
-      throw new Error(
-        "Timeout while waiting for DNS records to become available",
-      );
-    }
-
-    console.log("Resolving custom domain", { subdomain, dnsServerIp });
-    let domainRecords: string[];
-
-    try {
-      domainRecords = await resolver.resolve4(subdomain.trim());
-    } catch (error) {
-      console.error("Error while resolving DNS records ... retrying ...", {
-        error,
-      });
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      continue;
-    }
-
-    console.log("Resolved", { domainRecords });
-    const isMatch =
-      domainRecords.length === 1 && domainRecords[0] === "127.0.0.1";
-    if (isMatch) {
-      break;
-    } else {
-      console.log("DNS records do not match yet, waiting...", {
-        domainRecords,
-      });
-      await sleep(3_000);
-    }
-  }
+  await pollUntil(
+    async () => {
+      console.log("Resolving custom domain", { subdomain, dnsServerIp });
+      const domainRecords = await resolver.resolve4(subdomain.trim());
+      console.log("Resolved", { domainRecords });
+      return domainRecords.length === 1 && domainRecords[0] === "127.0.0.1";
+    },
+    {
+      timeoutMs: 60_000,
+      intervalMs: 3000,
+      description: `custom domain ${subdomain} to resolve to 127.0.0.1`,
+    },
+  );
 });

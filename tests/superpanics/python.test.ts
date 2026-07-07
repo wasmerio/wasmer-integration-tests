@@ -1,14 +1,17 @@
-import { buildPythonApp, TestEnv } from "../../src/index";
 import * as fs from "node:fs";
 import path from "node:path";
+
+import { buildPythonApp, TestEnv } from "../../src/index";
 import { projectRoot } from "../utils/path";
 
-const AM_TRIES = 2;
+// Deploys occasionally flake on transient infra errors, so the whole flow is
+// retried a bounded number of times. A genuine failure fails all attempts.
+const AM_TRIES = 3;
+
 // Test that we can deploy a simple python app
 test.concurrent("deploy python app", async () => {
-  let i = 0;
-  while (true) {
-    i++;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= AM_TRIES; attempt++) {
     try {
       const env = TestEnv.fromEnv();
       const filePath = path.join(
@@ -19,7 +22,6 @@ test.concurrent("deploy python app", async () => {
       );
       let testCode = await fs.promises.readFile(filePath, "utf-8");
       testCode = testCode.replaceAll("__TEMPLATE__", `${Math.random()}`);
-      console.log(testCode);
       const app = buildPythonApp(testCode);
       const appInfo = await env.deployApp(app);
 
@@ -27,16 +29,13 @@ test.concurrent("deploy python app", async () => {
       const want = `${uniquePing}`;
       const res = await env.fetchApp(appInfo, want);
       const gotJson = (await res.json()) as { echo: string };
-      const got = gotJson.echo;
-      expect(got).toBe(want);
+      expect(gotJson.echo).toBe(want);
       await env.deleteApp(appInfo);
       return;
     } catch (e) {
-      if (AM_TRIES - i < 0) {
-        throw e;
-      }
-      console.error(`Test failed, retries left: ${AM_TRIES - i}`);
-      console.error(e);
+      lastError = e;
+      console.error(`Attempt ${attempt}/${AM_TRIES} failed:`, e);
     }
   }
+  throw lastError;
 });

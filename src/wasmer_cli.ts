@@ -20,8 +20,8 @@ export interface WasmerConfig {
 export function loadWasmerConfig(): WasmerConfig {
   const wasmer_dir = env.WASMER_DIR ?? path.join(os.homedir(), ".wasmer");
   const p = path.join(wasmer_dir, "wasmer.toml");
-  const conte = fs.readFileSync(p, "utf-8");
-  const data = toml.parse(conte);
+  const contents = fs.readFileSync(p, "utf-8");
+  const data = toml.parse(contents);
   return data;
 }
 
@@ -35,7 +35,7 @@ export interface DeployOutput {
   path: Path;
 }
 
-const deployOutpchema = z.object({
+const deployOutputSchema = z.object({
   json_config: z.string(),
   id: z.string(),
   app: z.object({
@@ -47,7 +47,7 @@ const deployOutpchema = z.object({
 });
 
 export function parseDeployOutput(stdout: string, dir: Path): DeployOutput {
-  const parsedData = deployOutpchema.parse(JSON.parse(stdout));
+  const parsedData = deployOutputSchema.parse(JSON.parse(stdout));
 
   const jsonConfig = JSON.parse(parsedData.json_config);
   const fullName = jsonConfig?.meta?.name;

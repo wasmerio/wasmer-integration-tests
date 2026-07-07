@@ -908,7 +908,22 @@ export class TestEnv {
     };
 
     const [code] = await Promise.all([
-      new Promise<number>((resolve) => proc.on("exit", resolve)),
+      new Promise<number>((resolve, reject) => {
+        proc.on("error", (error) => {
+          reject(
+            new Error(
+              `Failed to spawn '${this.wasmerBinary}' (is the wasmer binary on PATH / WASMER_PATH correct?): ${error.message}`,
+              { cause: error },
+            ),
+          );
+        });
+        proc.on("exit", (exitCode, signal) => {
+          if (exitCode === null) {
+            console.warn(`Command terminated by signal ${signal}`);
+          }
+          resolve(exitCode ?? -1);
+        });
+      }),
       collectOutput(proc.stdout!, stdoutChunks),
       collectOutput(proc.stderr!, stderrChunks),
     ]);
@@ -946,8 +961,8 @@ export class TestEnv {
   //
   // Returns the package name.
   async ensurePackagePublished(dir: Path): Promise<PackageIdent> {
-    const manifsetPath = path.join(dir, "wasmer.toml");
-    const manifestRaw = await fs.promises.readFile(manifsetPath, "utf-8");
+    const manifestPath = path.join(dir, "wasmer.toml");
+    const manifestRaw = await fs.promises.readFile(manifestPath, "utf-8");
 
     // TODO: Setup zod object for manifest files
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -956,7 +971,7 @@ export class TestEnv {
       manifest = toml.parse(manifestRaw);
     } catch (err) {
       throw new Error(
-        `Failed to parse package manifest at '${manifsetPath}': ${err}`,
+        `Failed to parse package manifest at '${manifestPath}': ${err}`,
       );
     }
 
@@ -1252,139 +1267,6 @@ export class TestEnv {
     }
   }
 
-  async *graphqlSubscription(
-    endpoint: string,
-    token: string,
-    query: string,
-    variables = {},
-    heartbeatInterval = 1000, // each second
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ): AsyncGenerator<any, void, unknown> {
-    const socket = new WebSocket(endpoint, ["graphql-ws"]);
-    // generate a random subscription_id
-    const subscription_id = Math.random().toString(36).substring(7);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sendMessage = (message: any) => {
-      socket.send(JSON.stringify(message));
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const waitForEvent = (type: any) =>
-      new Promise((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const handler = (event: any) => {
-          const response = JSON.parse(event.data);
-          if (response.type == "error") {
-            console.error(response);
-            resolve(response);
-            console.log(JSON.stringify(response));
-          }
-          if (response.type == "complete") {
-            resolve(response);
-            console.log(JSON.stringify(response));
-          }
-
-          if (response.type === type) {
-            socket.removeEventListener("message", handler);
-            resolve(response);
-          } else {
-            console.log(JSON.stringify(response));
-          }
-        };
-        socket.addEventListener("message", handler);
-      });
-
-    socket.onopen = () => {
-      sendMessage({
-        type: "connection_init",
-        payload: { headers: { Authorization: `Bearer ${token}` } },
-      });
-    };
-
-    await waitForEvent("connection_ack");
-
-    sendMessage({
-      id: subscription_id,
-      type: "start",
-      payload: { query, variables },
-    });
-
-    // Send heartbeat (ping) messages periodically
-    const heartbeatIntervalId = setInterval(() => {
-      sendMessage({ type: "ping" });
-    }, heartbeatInterval);
-
-    try {
-      while (true) {
-        const response = await waitForEvent("data");
-        yield response;
-      }
-    } finally {
-      socket.close();
-      clearInterval(heartbeatIntervalId);
-    }
-  }
-
-  async deployAppFromRepo(
-    repo: string,
-    extra_data: Record<string, unknown> = {},
-    branch: string | null = null,
-  ): Promise<string | undefined> {
-    const registry = this.registry;
-    const token = "";
-    const query = `
-subscription PublishAppFromRepoAutobuild(
-  $repoUrl: String!
-  $appName: String!
-  $extraData: AutobuildDeploymentExtraData = null
-  $branch: String = null
-) {
-  publishAppFromRepoAutobuild(
-    repoUrl: $repoUrl
-    appName: $appName
-    managed: true
-    waitForScreenshotGeneration: false
-    extraData: $extraData
-    branch: $branch
-  ) {
-    kind
-    message
-    dbPassword
-    appVersion {
-      app {
-        url
-      }
-    }
-  }
-}`;
-    const variables = {
-      repoUrl: repo,
-      appName: crypto.randomUUID().split("-").join("").slice(0, 10),
-      extraData: extra_data,
-      branch: branch,
-    };
-    for await (const res of this.graphqlSubscription(
-      registry,
-      token,
-      query,
-      variables,
-    )) {
-      if (res.errors) {
-        console.error(res.errors);
-      }
-      const msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
-      if (msg) {
-        console.log(msg);
-      }
-      const payload = res.payload;
-      if (payload?.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
-        return res.payload.data.publishAppFromRepoAutobuild.appVersion?.app
-          ?.url;
-      }
-    }
-  }
-
   // Resolve the A/AAAA records for the main app domain.
   //
   // Uses the Edge DNS servers.
@@ -1543,14 +1425,10 @@ subscription PublishAppFromRepoAutobuild(
         });
       }
 
-      if (!options.noAssertSuccess && !response.ok) {
-        console.error(
-          "Response is not OK! We can't check why as that breaks some tests. Continuing",
-        );
-      }
-
-      // NOTE: this step happens after the success check on purpose, because
-      // another error like a 404 indicates problems in the deployment flow.
+      // NOTE: the version check runs before the success assertion on purpose:
+      // a non-OK response while the new version is still propagating is
+      // retryable, whereas a non-OK response from the expected version is a
+      // real deployment-flow failure.
       if (waitForVersionId) {
         const requestId = response.headers.get(HEADER_WASMER_REQUEST_ID);
         if (!requestId) {
@@ -1597,6 +1475,26 @@ subscription PublishAppFromRepoAutobuild(
           continue;
         } else {
           console.debug(`App is at expected version ${waitForVersionId}`);
+        }
+      }
+
+      if (!options.noAssertSuccess && !response.ok) {
+        // Redirect statuses are expected: fetchApp does not follow redirects
+        // by default (options.redirect defaults to "manual" above).
+        const redirectExpected =
+          options.redirect === "manual" &&
+          response.status >= 300 &&
+          response.status < 400;
+        if (!redirectExpected) {
+          const body = await response.text().catch(() => "<unreadable body>");
+          throw new Error(
+            [
+              `Fetching app URL '${url}' returned status ${response.status}.`,
+              `App: ${this.namespace}/${app.version.name} (${app.id})`,
+              "Pass noAssertSuccess: true if a non-success status is expected.",
+              `Body (truncated): ${body.slice(0, 2000)}`,
+            ].join("\n"),
+          );
         }
       }
       return response;

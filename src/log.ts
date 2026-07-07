@@ -167,6 +167,14 @@ export class LogSniff {
         }
       }
 
+      // More hits than expected can never recover (logs don't un-append),
+      // so fail immediately instead of spinning until the deadline.
+      if (latestHitCount > requiredHits) {
+        fail(
+          `expected exactly ${requiredHits} occurrence(s) of '${want}' in app logs, found ${latestHitCount}. Logs:\n${truncateFailureLogs(latestLogs)}`,
+        );
+      }
+
       const now = Date.now();
       if (now >= deadline) {
         const errorStr = latestError ? ` Latest error: ${latestError}.` : "";

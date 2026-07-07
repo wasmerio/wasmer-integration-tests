@@ -8,8 +8,10 @@ test("getAllAppTemplates returns an array of templates", async () => {
   const templates = await backend.getAllAppTemplates();
 
   expect(Array.isArray(templates)).toBe(true);
+  // An empty template list would make the per-template checks below vacuous.
+  expect(templates.length).toBeGreaterThan(0);
 
-  // Optional: Validate structure of each template
+  // Validate structure of each template
   for (const template of templates) {
     expect(template).toHaveProperty("name");
     expect(template).toHaveProperty("slug");

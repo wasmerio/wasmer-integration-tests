@@ -18,6 +18,7 @@ import {
   TestEnv,
   writeAppDefinition,
 } from "../../src/index";
+import { pollUntil } from "../../src/util";
 
 test.concurrent("wasmer-cli-version", async function () {
   const env = TestEnv.fromEnv();
@@ -30,7 +31,6 @@ test.concurrent("wasmer-cli-version", async function () {
       (acc: Record<string, string>, line: string): Record<string, string> => {
         line = line.trim();
         if (line.includes(":")) {
-          console.log({ line });
           const [key, value] = line.split(":");
           acc[key.trim()] = value.trim();
         }
@@ -138,7 +138,7 @@ test.concurrent("app-https-redirect", async () => {
     info2.url.replace("https://", "http://"),
     { redirect: "manual" },
   );
-  console.log(await res2.text());
+  await res2.body?.cancel();
   assertEquals(res2.status, 200);
   await env.deleteApp(info);
 });
@@ -316,7 +316,7 @@ test.concurrent("recreate-app-with-same-name", async () => {
   await env.deleteApp(info, { immediate: true });
 
   console.log("Sleeping...");
-  sleep(5_000);
+  await sleep(5_000);
 
   // Now deploy the app again with the same name but different content.
   spec.files!.public["index.html"] = "version BETA";
@@ -386,24 +386,19 @@ test.skip("app-delete", async () => {
 
   console.log("App deleted, waiting for app to become inaccessible...");
 
-  const start = Date.now();
-
   const url = `https://${domain}/`;
-
-  while (true) {
-    const res = await env.fetchApp(info, url, { noAssertSuccess: true });
-    if (res.status === 400) {
-      console.log("App is no longer accessible");
-      break;
-    } else {
-      console.log("App still accessible ... waiting ...");
-      const elapsed = Date.now() - start;
-      if (elapsed > 60_000) {
-        throw new Error("App is still accessible after 60 seconds");
-      }
-      await sleep(10_000);
-    }
-  }
+  await pollUntil(
+    async () => {
+      const res = await env.fetchApp(info, url, { noAssertSuccess: true });
+      await res.body?.cancel();
+      return res.status === 400;
+    },
+    {
+      timeoutMs: 60_000,
+      intervalMs: 10_000,
+      description: `deleted app ${domain} to become inaccessible`,
+    },
+  );
   await env.deleteApp(info);
 });
 
@@ -536,24 +531,22 @@ addEventListener("fetch", (fetchEvent) => {
   await env.fetchApp(info, "/");
 
   const start = Date.now();
-  while (true) {
-    const output = process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER
-      ? { stdout: await getAllLogs(env, info.version.name, start) }
-      : await env.runWasmerCommand({
-          args: ["app", "logs"],
-          cwd: info.dir,
-        });
-
-    if (output.stdout.includes("hello logs")) {
-      console.log("Logs found in output");
-      break;
-    } else {
-      const elapsed = Date.now() - start;
-      if (elapsed > 60_000) {
-        throw new Error("Logs not found after 60 seconds");
-      }
-    }
-  }
+  await pollUntil(
+    async () => {
+      const output = process.env.LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER
+        ? { stdout: await getAllLogs(env, info.version.name, start) }
+        : await env.runWasmerCommand({
+            args: ["app", "logs"],
+            cwd: info.dir,
+          });
+      return output.stdout.includes("hello logs");
+    },
+    {
+      timeoutMs: 60_000,
+      intervalMs: 3000,
+      description: "'hello logs' to appear in app logs",
+    },
+  );
   await env.deleteApp(info);
 });
 
@@ -881,16 +874,9 @@ test.concurrent("deploy-fails-without-app-name", async () => {
   const dir = await createTempDir();
   await writeAppDefinition(dir, spec);
 
-  try {
-    await env.deployAppDir(dir, { noWait: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.log("Deploy failed with error: " + message);
-    assert(message.includes("does not specify any app name"));
-    return;
-  }
-
-  throw new Error("Expected deploy to fail without app name");
+  await expect(env.deployAppDir(dir, { noWait: true })).rejects.toThrow(
+    "does not specify any app name",
+  );
 });
 
 test.concurrent("deploy-fails-without-owner", async () => {
@@ -901,14 +887,7 @@ test.concurrent("deploy-fails-without-owner", async () => {
   const dir = await createTempDir();
   await writeAppDefinition(dir, spec);
 
-  try {
-    await env.deployAppDir(dir, { noWait: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.log("Deploy failed with error: " + message);
-    assert(message.includes("No owner specified"));
-    return;
-  }
-
-  throw new Error("Expected deploy to fail without app name");
+  await expect(env.deployAppDir(dir, { noWait: true })).rejects.toThrow(
+    "No owner specified",
+  );
 });

@@ -1,4 +1,4 @@
-import * as fs from "fs/promises";
+import * as fs from "node:fs/promises";
 import path from "node:path";
 import {
   randomAppName,
@@ -25,7 +25,6 @@ describe("Log tests", () => {
     // Deploy app
     const spec = buildPhpApp(phpPathLogger, { name: appName });
     spec.appYaml.name = appName;
-    console.log(JSON.stringify(spec, null, " "));
     const deployedApp = await env.deployApp(spec);
     await env.fetchApp(deployedApp, "/this-is-a-unique-path");
 

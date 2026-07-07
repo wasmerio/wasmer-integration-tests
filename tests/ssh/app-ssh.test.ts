@@ -1,17 +1,13 @@
-import path from "node:path";
-
 import SftpClient from "ssh2-sftp-client";
 
 import { TestEnv } from "../../src";
 import {
   AppCapabilities,
-  AppDefinition,
-  randomAppName,
   SshCapability,
   writeAppDefinition,
 } from "../../src/app/construct";
-import { copyPackageAnonymous } from "../../src/package";
 import { generateNeedlesslySecureRandomPassword } from "../../src/security";
+import { preparePhpTestserverApp } from "../utils/php-testserver";
 import {
   connectSftpWithRetry,
   connectSshWithRetry,
@@ -22,26 +18,7 @@ import {
 } from "../../src/ssh";
 
 const setupApp = async (env: TestEnv) => {
-  const rootPackageDir = path.join("wasmopticon", "php/php-testserver");
-  const dir = await copyPackageAnonymous(rootPackageDir);
-
-  const definition: AppDefinition = {
-    appYaml: {
-      kind: "wasmer.io/App.v0",
-      name: randomAppName(),
-      owner: env.namespace,
-      package: ".",
-      // Enable debug mode to allow instance purging.
-      debug: true,
-      volumes: [
-        {
-          name: "data",
-          mount: "/data",
-        },
-      ],
-    },
-  };
-  await writeAppDefinition(dir, definition);
+  const { dir, definition } = await preparePhpTestserverApp(env);
   const info = await env.deployAppDir(dir);
   const permalinkID = await env.getAppPermalinkID(info.id);
   const sshUsername = `${permalinkID}_`;

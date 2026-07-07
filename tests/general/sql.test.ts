@@ -48,10 +48,10 @@ test.concurrent("sql-connectivity", async () => {
   }
 
   // Also test the app version URL to make sure it is configured properly.
-  // Reggression test for WAX-373
+  // Regression test for WAX-373
   {
     const url = withSqlInfo.version.url + "/results";
-    const res = await fetch(url);
+    const res = await env.fetchAppUrlThroughEdge(url);
     const got = await res.text();
     expect(got).toBe(want);
   }
