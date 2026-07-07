@@ -37,6 +37,11 @@ export const AppCapabilities = z.object({
     })
     .optional(),
   ssh: SshCapability.optional(),
+  cdn_cache: z
+    .object({
+      enabled: z.boolean(),
+    })
+    .optional(),
 });
 
 export const AppVolumes = z.object({
