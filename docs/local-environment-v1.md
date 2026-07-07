@@ -9,7 +9,7 @@ Run `wasmer-integration-tests` against a disposable local Wasmer stack built fro
 1. resolves concrete Backend and Edge inputs;
 2. starts a disposable Docker Compose stack on isolated localhost ports;
 3. bootstraps Backend config and local test env files;
-4. seeds package dependencies into the local registry;
+4. seeds app templates and package dependencies into the local registry;
 5. warms the Edge compiler cache;
 6. runs the requested Jest command against the local stack;
 7. collects logs and tears everything down.
@@ -179,4 +179,5 @@ Code QA first warms the shared local-platform caches once, then fans out the sui
 
 - The stack intentionally uses the latest dependency images for supporting services.
 - Local package seeding mirrors public package dependencies into the disposable local registry before tests run.
+- App templates are seeded by this repo's own `local-platform/scripts/seed-app-templates.mjs` (bootstrap passes `--skip-templates` to the backend's embedded seeder when the image supports it). This keeps bootstrap independent of the GraphQL template contract baked into a given backend image; if the public registry's `getAppTemplates` contract changes, update `QUERY_VARIANTS` in that script. Set `LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1` to fall back to the embedded seeder, or `LOCAL_PLATFORM_SEED_TEMPLATES=0` to skip template seeding entirely.
 - Edge compiler and package caches are persisted under `.local-platform/cache/edge` so repeated runs are faster.

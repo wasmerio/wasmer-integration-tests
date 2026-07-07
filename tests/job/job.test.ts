@@ -34,7 +34,6 @@ async function performTest(
   spec.appYaml.locality = {
     regions: ["be-mons"],
   };
-  console.debug(JSON.stringify(spec));
   const deployedApp = await env.deployApp(spec);
 
   const logSniff = new LogSniff(env);
@@ -49,6 +48,10 @@ async function performTest(
   await env.deleteApp(deployedApp);
 }
 
+// NOTE: all four job tests below were disabled in 2025-04 (commit 618e91e,
+// "ignore all log related tests") because log retrieval was too flaky to
+// assert on. Re-enable once app-log delivery is reliable; until then the
+// jobs/cron surface has no integration coverage.
 test.skip("Logvalidation - Http job: post-deployment", async () => {
   await performTest(
     [

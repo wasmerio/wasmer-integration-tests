@@ -7,13 +7,14 @@ import { ENV_VAR_MAX_PRINT_LENGTH, TestEnv } from "../../src/env";
 import { copyPackageAnonymous } from "../../src/package";
 import {
   AppYaml,
-  DEFAULT_APP_YAML,
+  defaultAppYaml,
   randomAppName,
 } from "../../src/app/construct";
 import { AppInfo } from "../../src";
 import { appGetToAppInfo } from "../../src/convert";
 import { truncateOutput } from "../../src/util";
 import { findPackageDirs } from "../../src/fs";
+import { projectRoot } from "../utils/path";
 
 // Increase timeout: deploying multiple apps can take time.
 jest.setTimeout(20 * 60 * 1000);
@@ -29,7 +30,7 @@ async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
     app.domains = [];
   } catch {
     // App yaml not found, create it
-    app = AppYaml.parse(DEFAULT_APP_YAML);
+    app = defaultAppYaml();
   }
 
   app.owner = namespace;
@@ -129,7 +130,14 @@ async function tryShipitDeploy(workDir: string, env: TestEnv) {
   procEnv.WASMER_REGISTRY = env.registry;
   procEnv.WASMER_TOKEN = env.token ?? procEnv.WASMER_TOKEN;
   procEnv.WASMER_NAMESPACE = env.namespace;
-  procEnv.PATH = `/home/lorkin/Projects/wasmer/backend/scripts/local-dev/bin:${procEnv.PATH ?? ""}`;
+  // shipit is expected on PATH. SHIPIT_BIN_DIR (or a backend checkout next to
+  // this repo) can supply it for local runs.
+  const shipitBinDir =
+    process.env.SHIPIT_BIN_DIR ??
+    path.resolve(projectRoot, "..", "backend", "scripts", "local-dev", "bin");
+  if (fs.existsSync(shipitBinDir)) {
+    procEnv.PATH = `${shipitBinDir}:${procEnv.PATH ?? ""}`;
+  }
 
   // We get output here but we can't parse it to some app info
   // since the output isn't even close to being anything json
@@ -175,8 +183,15 @@ describe("wasmopticon: Crawl and deploy", () => {
       if (fs.existsSync(shipitDeployDir)) {
         console.info("resolving app from shipit output after deploy command failure");
         app = appGetToAppInfo(await env.getAppGetFromDir(shipitDeployDir));
+      } else if (fs.existsSync(path.join(workDir, "wasmer.toml"))) {
+        // The fixture declares its own runnable package: deploy it as-is.
+        // A remote build would re-detect the project with shipit presets and
+        // can produce a broken app (e.g. a worker-style JS app run under the
+        // node preset crashes at boot), which is not what the fixture tests.
+        console.info("falling back to direct deploy of the declared package");
+        app = await env.deployAppDir(workDir);
       } else {
-        console.info("failling back to normal deploy");
+        console.info("falling back to remote build");
         app = await env.deployAppDir(workDir, {
           extraCliArgs: ["--build-remote"],
         });

@@ -1,4 +1,5 @@
-import { buildStaticSiteApp, sleep, TestEnv } from "../../src/index";
+import { buildStaticSiteApp, TestEnv } from "../../src/index";
+import { pollUntil } from "../../src/util";
 
 // Test that blackholed apps do not serve DNS records anymore.
 test.concurrent("app-ban-blackholed", async () => {
@@ -25,26 +26,25 @@ test.concurrent("app-ban-blackholed", async () => {
 
   // Wait for the app to be blackholed.
   console.log("waiting for Edge server to stop serving DNS records...");
+  await pollUntil(
+    async () => {
+      const newIps = await env.resolveAppDns(info);
+      if (newIps.a.length === 0 && newIps.aaaa.length === 0) {
+        return true;
+      }
+      console.log("dns server is still returning records for domain", {
+        domain,
+        newIps,
+      });
+      return false;
+    },
+    {
+      timeoutMs: 60_000,
+      intervalMs: 1000,
+      description: `app ${domain} to be blackholed (no more DNS records)`,
+    },
+  );
 
-  const start = Date.now();
-
-  const timeoutSecs = 60;
-  while (true) {
-    const newIps = await env.resolveAppDns(info);
-    if (newIps.a.length == 0 && newIps.aaaa.length == 0) {
-      break;
-    }
-    console.log("dns server is still returning records for domain", {
-      domain,
-      newIps,
-    });
-
-    const elapsed = Date.now() - start;
-    if (elapsed > timeoutSecs * 1000) {
-      throw new Error(
-        `Timed out waiting for app ${domain} to be blackholed - still serving DNS records after ${timeoutSecs} seconds`,
-      );
-    }
-    await sleep(1000);
-  }
+  // Deferred cleanup; deletion of a banned app is best-effort.
+  await env.deleteApp(info);
 });

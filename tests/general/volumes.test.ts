@@ -5,17 +5,13 @@ import { createHash, createHmac } from "node:crypto";
 
 import { assertEquals } from "../../src/testing_tools";
 
-import { copyPackageAnonymous } from "../../src/package";
-import { randomAppName } from "../../src/app/construct";
-import { projectRoot } from "../utils/path";
-import { sleep } from "../../src/util";
+import { pollUntil } from "../../src/util";
+import { preparePhpTestserverApp } from "../utils/php-testserver";
 
 import {
-  AppDefinition,
   HEADER_INSTANCE_ID,
   HEADER_PURGE_INSTANCES,
   TestEnv,
-  writeAppDefinition,
 } from "../../src/index";
 
 interface AppVolumeNode {
@@ -235,53 +231,29 @@ async function readS3ObjectWithRetry(
   bucket: string,
   key: string,
 ): Promise<string> {
-  let lastBody = "";
-  let lastStatus = 0;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const response = await signedS3Request(credentials, bucket, key, {
-      method: "GET",
-    });
-    lastStatus = response.status;
-    lastBody = await response.text();
-    if (response.ok) {
-      return lastBody;
-    }
-    await sleep(2500);
-  }
-  throw new Error(
-    `Failed to read S3 object ${bucket}/${key}: HTTP ${lastStatus}: ${lastBody}`,
+  return pollUntil(
+    async () => {
+      const response = await signedS3Request(credentials, bucket, key, {
+        method: "GET",
+      });
+      const body = await response.text();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${body}`);
+      }
+      return body;
+    },
+    {
+      timeoutMs: 30_000,
+      intervalMs: 2500,
+      description: `S3 object ${bucket}/${key} to become readable`,
+    },
   );
 }
 
 test("app-volumes", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join(
-    projectRoot,
-    "wasmopticon",
-    "php",
-    "php-testserver",
-  );
-  const dir = await copyPackageAnonymous(rootPackageDir);
-
-  const app: AppDefinition = {
-    appYaml: {
-      kind: "wasmer.io/App.v0",
-      name: randomAppName(),
-      owner: env.namespace,
-      package: ".",
-      // Enable debug mode to allow instance purging.
-      debug: true,
-      volumes: [
-        {
-          name: "data",
-          mount: "/data",
-        },
-      ],
-    },
-  };
-  writeAppDefinition(dir, app);
-
+  const { dir } = await preparePhpTestserverApp(env);
   const info = await env.deployAppDir(dir);
 
   const file1Content = "value1";
@@ -317,33 +289,7 @@ test("app-volumes", async () => {
 test("app-volume-survives-redeploy-with-refreshed-s3-credentials", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join(
-    projectRoot,
-    "wasmopticon",
-    "php",
-    "php-testserver",
-  );
-  const dir = await copyPackageAnonymous(rootPackageDir);
-  const appName = randomAppName();
-
-  const app: AppDefinition = {
-    appYaml: {
-      kind: "wasmer.io/App.v0",
-      name: appName,
-      owner: env.namespace,
-      package: ".",
-      // Enable debug mode to allow instance purging after redeploy.
-      debug: true,
-      volumes: [
-        {
-          name: "data",
-          mount: "/data",
-        },
-      ],
-    },
-  };
-  await writeAppDefinition(dir, app);
-
+  const { dir } = await preparePhpTestserverApp(env);
   const info = await env.deployAppDir(dir);
   const initialVolume = await getSingleAppVolume(env, info.id);
   expect(initialVolume.mountPath).toBe("/data");
@@ -414,34 +360,10 @@ test("app-volume-survives-redeploy-with-refreshed-s3-credentials", async () => {
 test("volume-mount-inside-package-dir", async () => {
   const env = TestEnv.fromEnv();
 
-  const rootPackageDir = path.join(
-    projectRoot,
-    "wasmopticon",
-    "php",
-    "php-testserver",
-  );
-  const dir = await copyPackageAnonymous(rootPackageDir);
-
   // The PHP testserver mounts code at /app, so we'll mount a volume inside that.
-
-  const app: AppDefinition = {
-    appYaml: {
-      kind: "wasmer.io/App.v0",
-      name: randomAppName(),
-      owner: env.namespace,
-      package: ".",
-      // Enable debug mode to allow instance purging.
-      debug: true,
-      volumes: [
-        {
-          name: "data",
-          mount: "/app/data",
-        },
-      ],
-    },
-  };
-  writeAppDefinition(dir, app);
-
+  const { dir } = await preparePhpTestserverApp(env, {
+    volumeMount: "/app/data",
+  });
   const info = await env.deployAppDir(dir);
 
   const file1Content = "value1";

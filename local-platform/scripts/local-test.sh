@@ -57,6 +57,17 @@ if is_truthy "$LOCAL_PLATFORM_PREPARE_ONLY"; then
   exit 0
 fi
 
+# Integration tests are network-bound, but jest's percentage-based maxWorkers
+# collapses to one worker on small CI runners, serializing whole test files.
+# Give CI a core-scaled worker pool (capped: the runner also hosts the full
+# local platform stack) unless the caller overrides.
+if is_ci && [ -z "${JEST_MAX_WORKERS:-}" ]; then
+  cores="$(nproc 2>/dev/null || echo 4)"
+  JEST_MAX_WORKERS=$((cores < 8 ? cores : 8))
+  export JEST_MAX_WORKERS
+  log "CI detected: defaulting JEST_MAX_WORKERS=$JEST_MAX_WORKERS ($cores cores)"
+fi
+
 log "Running tests: $LOCAL_TEST_COMMAND"
 set +e
 (

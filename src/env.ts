@@ -447,19 +447,18 @@ export function currentJestTestFailed(): boolean {
 // during an afterAll teardown neither is reliably resolvable, which is why the
 // name is snapshotted at enqueue time rather than read back later.
 function currentJestTestNamesForCleanup(): string[] {
-  const names = new Set<string>();
+  // Trust the per-test async context when it exists: the global expect state
+  // is shared and, under test.concurrent, frequently names a DIFFERENT test,
+  // which both preserved passing tests' apps and deleted failing tests' apps.
   const local = currentJestTestName();
   if (local) {
-    names.add(local);
+    return [local];
   }
   const maybeGlobal = globalThis as typeof globalThis & {
     expect?: JestExpectLike;
   };
   const full = maybeGlobal.expect?.getState?.().currentTestName;
-  if (full) {
-    names.add(full);
-  }
-  return Array.from(names);
+  return full ? [full] : [];
 }
 
 const PENDING_APP_CLEANUPS_KEY = Symbol.for(
@@ -492,11 +491,22 @@ export async function flushPendingAppCleanups(): Promise<void> {
     return;
   }
   const drained = queue.splice(0, queue.length);
-  const failed = failedJestTestNames();
+  const failed = Array.from(failedJestTestNames());
   const keepAll = isTruthyEnvVar(process.env[ENV_VAR_KEEP_APPS]);
+
+  // The failed set holds names from two sources: the custom test environment
+  // records the full jest name (describe prefix + formatted title) while the
+  // per-test async context may carry only the test title. Match on suffix in
+  // either direction so the two shapes agree; err toward preserving.
+  const namesMatch = (a: string, b: string): boolean =>
+    a === b || a.endsWith(b) || b.endsWith(a);
+
   for (const entry of drained) {
     const preserve =
-      keepAll || entry.testNames.some((name) => failed.has(name));
+      keepAll ||
+      entry.testNames.some((name) =>
+        failed.some((failedName) => namesMatch(failedName, name)),
+      );
     await entry.env.finalizeAppCleanup(entry.app, preserve);
   }
 }
@@ -712,6 +722,10 @@ export interface AppFetchOptions extends RequestInit {
   // quite heavy cognitive load, and causes integration test failures if altered. This field is appended
   // to handle edge cases when we most certainly want to wait
   forceWait?: boolean;
+  // Custom acceptance predicate for the response status. Defaults to
+  // response.ok (plus 3xx when redirect handling is "manual"). Useful for
+  // reachability probes where any non-5xx proves the app is serving.
+  acceptStatus?: (status: number) => boolean;
 }
 
 export class TestEnv {
@@ -908,7 +922,22 @@ export class TestEnv {
     };
 
     const [code] = await Promise.all([
-      new Promise<number>((resolve) => proc.on("exit", resolve)),
+      new Promise<number>((resolve, reject) => {
+        proc.on("error", (error) => {
+          reject(
+            new Error(
+              `Failed to spawn '${this.wasmerBinary}' (is the wasmer binary on PATH / WASMER_PATH correct?): ${error.message}`,
+              { cause: error },
+            ),
+          );
+        });
+        proc.on("exit", (exitCode, signal) => {
+          if (exitCode === null) {
+            console.warn(`Command terminated by signal ${signal}`);
+          }
+          resolve(exitCode ?? -1);
+        });
+      }),
       collectOutput(proc.stdout!, stdoutChunks),
       collectOutput(proc.stderr!, stderrChunks),
     ]);
@@ -946,8 +975,8 @@ export class TestEnv {
   //
   // Returns the package name.
   async ensurePackagePublished(dir: Path): Promise<PackageIdent> {
-    const manifsetPath = path.join(dir, "wasmer.toml");
-    const manifestRaw = await fs.promises.readFile(manifsetPath, "utf-8");
+    const manifestPath = path.join(dir, "wasmer.toml");
+    const manifestRaw = await fs.promises.readFile(manifestPath, "utf-8");
 
     // TODO: Setup zod object for manifest files
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -956,7 +985,7 @@ export class TestEnv {
       manifest = toml.parse(manifestRaw);
     } catch (err) {
       throw new Error(
-        `Failed to parse package manifest at '${manifsetPath}': ${err}`,
+        `Failed to parse package manifest at '${manifestPath}': ${err}`,
       );
     }
 
@@ -1019,7 +1048,11 @@ export class TestEnv {
 
     if (this.edgeServer && !noWait) {
       // Specific target server, but waiting is enabled, so manually test.
-      await this.fetchApp(info, "/");
+      // Reachability probe: any response below 500 proves the app is
+      // deployed and serving; apps may legitimately 4xx on "/".
+      await this.fetchApp(info, "/", {
+        acceptStatus: (status) => status < 500,
+      });
     }
 
     await recordDeployedApp(this, info);
@@ -1252,139 +1285,6 @@ export class TestEnv {
     }
   }
 
-  async *graphqlSubscription(
-    endpoint: string,
-    token: string,
-    query: string,
-    variables = {},
-    heartbeatInterval = 1000, // each second
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ): AsyncGenerator<any, void, unknown> {
-    const socket = new WebSocket(endpoint, ["graphql-ws"]);
-    // generate a random subscription_id
-    const subscription_id = Math.random().toString(36).substring(7);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sendMessage = (message: any) => {
-      socket.send(JSON.stringify(message));
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const waitForEvent = (type: any) =>
-      new Promise((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const handler = (event: any) => {
-          const response = JSON.parse(event.data);
-          if (response.type == "error") {
-            console.error(response);
-            resolve(response);
-            console.log(JSON.stringify(response));
-          }
-          if (response.type == "complete") {
-            resolve(response);
-            console.log(JSON.stringify(response));
-          }
-
-          if (response.type === type) {
-            socket.removeEventListener("message", handler);
-            resolve(response);
-          } else {
-            console.log(JSON.stringify(response));
-          }
-        };
-        socket.addEventListener("message", handler);
-      });
-
-    socket.onopen = () => {
-      sendMessage({
-        type: "connection_init",
-        payload: { headers: { Authorization: `Bearer ${token}` } },
-      });
-    };
-
-    await waitForEvent("connection_ack");
-
-    sendMessage({
-      id: subscription_id,
-      type: "start",
-      payload: { query, variables },
-    });
-
-    // Send heartbeat (ping) messages periodically
-    const heartbeatIntervalId = setInterval(() => {
-      sendMessage({ type: "ping" });
-    }, heartbeatInterval);
-
-    try {
-      while (true) {
-        const response = await waitForEvent("data");
-        yield response;
-      }
-    } finally {
-      socket.close();
-      clearInterval(heartbeatIntervalId);
-    }
-  }
-
-  async deployAppFromRepo(
-    repo: string,
-    extra_data: Record<string, unknown> = {},
-    branch: string | null = null,
-  ): Promise<string | undefined> {
-    const registry = this.registry;
-    const token = "";
-    const query = `
-subscription PublishAppFromRepoAutobuild(
-  $repoUrl: String!
-  $appName: String!
-  $extraData: AutobuildDeploymentExtraData = null
-  $branch: String = null
-) {
-  publishAppFromRepoAutobuild(
-    repoUrl: $repoUrl
-    appName: $appName
-    managed: true
-    waitForScreenshotGeneration: false
-    extraData: $extraData
-    branch: $branch
-  ) {
-    kind
-    message
-    dbPassword
-    appVersion {
-      app {
-        url
-      }
-    }
-  }
-}`;
-    const variables = {
-      repoUrl: repo,
-      appName: crypto.randomUUID().split("-").join("").slice(0, 10),
-      extraData: extra_data,
-      branch: branch,
-    };
-    for await (const res of this.graphqlSubscription(
-      registry,
-      token,
-      query,
-      variables,
-    )) {
-      if (res.errors) {
-        console.error(res.errors);
-      }
-      const msg = res.payload?.data?.publishAppFromRepoAutobuild?.message;
-      if (msg) {
-        console.log(msg);
-      }
-      const payload = res.payload;
-      if (payload?.data?.publishAppFromRepoAutobuild?.kind === "COMPLETE") {
-        return res.payload.data.publishAppFromRepoAutobuild.appVersion?.app
-          ?.url;
-      }
-    }
-  }
-
   // Resolve the A/AAAA records for the main app domain.
   //
   // Uses the Edge DNS servers.
@@ -1498,6 +1398,7 @@ subscription PublishAppFromRepoAutobuild(
 
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;
+    let fetchRetryUsed = false;
     while (true) {
       const attemptStartedAt = Date.now();
       console.debug(`Fetching URL ${url}`, {
@@ -1518,6 +1419,17 @@ subscription PublishAppFromRepoAutobuild(
             )
           : await fetch(url, options);
       } catch (error) {
+        // A just-started Edge under heavy instance spin-up load (CI cold
+        // start) can stall a request until the client times out. When waiting
+        // for a deployment, give the (now warmer) Edge one more attempt.
+        if (waitForVersionId && !fetchRetryUsed) {
+          fetchRetryUsed = true;
+          console.warn(
+            `Fetch attempt for '${url}' failed after ${Date.now() - attemptStartedAt}ms (${String(error)}); retrying once...`,
+          );
+          await sleep(1000);
+          continue;
+        }
         throw new Error(
           [
             `Failed to fetch URL '${url}' after ${Date.now() - attemptStartedAt}ms.`,
@@ -1543,14 +1455,10 @@ subscription PublishAppFromRepoAutobuild(
         });
       }
 
-      if (!options.noAssertSuccess && !response.ok) {
-        console.error(
-          "Response is not OK! We can't check why as that breaks some tests. Continuing",
-        );
-      }
-
-      // NOTE: this step happens after the success check on purpose, because
-      // another error like a 404 indicates problems in the deployment flow.
+      // NOTE: the version check runs before the success assertion on purpose:
+      // a non-OK response while the new version is still propagating is
+      // retryable, whereas a non-OK response from the expected version is a
+      // real deployment-flow failure.
       if (waitForVersionId) {
         const requestId = response.headers.get(HEADER_WASMER_REQUEST_ID);
         if (!requestId) {
@@ -1598,6 +1506,57 @@ subscription PublishAppFromRepoAutobuild(
         } else {
           console.debug(`App is at expected version ${waitForVersionId}`);
         }
+      }
+
+      // Redirect statuses are expected by default: fetchApp does not follow
+      // redirects unless asked (options.redirect defaults to "manual" above).
+      const statusAcceptable = options.acceptStatus
+        ? options.acceptStatus(response.status)
+        : response.ok ||
+          (options.redirect === "manual" &&
+            response.status >= 300 &&
+            response.status < 400);
+      if (!options.noAssertSuccess && !statusAcceptable) {
+        // While waiting for a fresh deployment, non-OK responses are often
+        // transient (instance cold start, journal replay), so keep retrying
+        // within the same time budget as the version wait. Only a status
+        // that persists past the deadline is a real failure.
+        if (
+          waitForVersionId &&
+          Date.now() - start <= RETRY_TIMEOUT_SECS * 1000
+        ) {
+          console.info(
+            `App returned status ${response.status} while waiting for deployment, retrying after delay...`,
+          );
+          await sleep(1000);
+          continue;
+        }
+
+        const body = await response.text().catch(() => "<unreadable body>");
+
+        // Best-effort: include the app's own logs so instance boot
+        // failures (which only surface as opaque 5xx from Edge) are
+        // diagnosable from the test failure alone.
+        let appLogs = "";
+        try {
+          const { getAllLogs } = await import("./log");
+          appLogs = await getAllLogs(this, app.version.name);
+        } catch (logError) {
+          appLogs = `<failed to fetch app logs: ${logError}>`;
+        }
+
+        throw new Error(
+          [
+            `Fetching app URL '${url}' returned status ${response.status}` +
+              (waitForVersionId
+                ? ` (retried for ${RETRY_TIMEOUT_SECS} seconds).`
+                : "."),
+            `App: ${this.namespace}/${app.version.name} (${app.id})`,
+            "Pass noAssertSuccess: true if a non-success status is expected.",
+            `Body (truncated): ${body.slice(0, 2000)}`,
+            `App logs (tail): ${appLogs.slice(-3000) || "<empty>"}`,
+          ].join("\n"),
+        );
       }
       return response;
     }

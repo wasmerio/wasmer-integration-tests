@@ -17,10 +17,6 @@ export async function buildDir(path: Path, files: DirEntry): Promise<void> {
     if (typeof value === "string") {
       if (isVerboseEnabled()) {
         console.log("writing file", { path, value, subPath });
-      } else {
-        console.log(
-          `File writes obfuscated, please set VERBOSE=<truthy> to see file writes`,
-        );
       }
       await fs.promises.writeFile(subPath, value);
     } else {

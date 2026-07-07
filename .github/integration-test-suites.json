@@ -30,12 +30,12 @@
   },
   {
     "id": "wasmopticon",
-    "test_command": "npx jest tests/wasmopticon",
+    "test_command": "JEST_MAX_CONCURRENCY=1 npx jest tests/wasmopticon",
     "requires_python": true,
     "python_version": "3.13"
   },
   {
     "id": "stackmachine-sdk",
-    "test_command": "npx jest ./tests/stackmachine/stackmachine-sdk.test.ts"
+    "test_command": "npx jest tests/stackmachine/stackmachine-sdk-"
   }
 ]

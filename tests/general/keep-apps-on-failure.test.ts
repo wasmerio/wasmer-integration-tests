@@ -37,3 +37,22 @@ test("flush preserves failed-test apps and deletes passed-test apps", async () =
   // Queue drained.
   expect((g[PENDING_KEY] as unknown[]).length).toBe(0);
 });
+
+test("flush matches short async-context titles against full jest names", async () => {
+  const decisions: Decision[] = [];
+  const g = globalThis as unknown as Record<symbol, unknown>;
+
+  // The test environment records the full name (describe prefix included);
+  // the per-test async context may only carry the formatted title.
+  g[FAILED_KEY] = new Set<string>(["my suite deploy pkg/failing-case"]);
+  g[PENDING_KEY] = [
+    stubEntry("app-failed-short", ["deploy pkg/failing-case"], decisions),
+    stubEntry("app-passed-short", ["deploy pkg/passing-case"], decisions),
+  ];
+
+  await flushPendingAppCleanups();
+
+  const byId = Object.fromEntries(decisions.map((d) => [d.id, d.preserve]));
+  expect(byId["app-failed-short"]).toBe(true);
+  expect(byId["app-passed-short"]).toBe(false);
+});

@@ -32,6 +32,23 @@ if ! docker run --rm --entrypoint /app/smbe "$BACKEND_IMAGE_REF" develop --help 
 fi
 log "Using smbe subcommand: ${dev_env_cmd[*]}"
 
+# Template seeding is done by this repo's own tooling (up.sh runs
+# seed-app-templates.mjs) instead of the seeder embedded in the backend image.
+# The embedded seeder hardcodes a GraphQL query against the public registry, so
+# registry schema drift breaks bootstrap for every already-built backend image.
+# Skip it whenever the image supports --skip-templates; set
+# LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1 to opt back into the embedded one.
+skip_templates_args=()
+if ! is_truthy "${LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER:-}"; then
+  if docker run --rm --entrypoint /app/smbe "$BACKEND_IMAGE_REF" \
+    "${dev_env_cmd[@]}" --help 2>/dev/null | grep -q -- '--skip-templates'; then
+    skip_templates_args=(--skip-templates)
+    log "Skipping embedded template seeder (repo-owned seed-app-templates.mjs runs instead)"
+  else
+    log_warn "Backend image does not support --skip-templates; the embedded template seeder will run and may fail on registry schema drift"
+  fi
+fi
+
 set +e
 run_quietly "Bootstrap backend/test env" "$bootstrap_raw" \
   timeout "${LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS:-900}" \
@@ -72,7 +89,8 @@ run_quietly "Bootstrap backend/test env" "$bootstrap_raw" \
       --metrics-clickhouse-host clickhouse \
       --metrics-clickhouse-port 8123 \
       --write-test-env /platform/test-env.sh \
-      --write-backend-env /platform/backend.env
+      --write-backend-env /platform/backend.env \
+      "${skip_templates_args[@]}"
 bootstrap_status=$?
 set -e
 sed -E 's/(WASMER_TOKEN=).+$/\1<redacted>/; s/(EDGE_SYNC_TOKEN=).+$/\1<redacted>/' "$bootstrap_raw" > "$bootstrap_output" || true

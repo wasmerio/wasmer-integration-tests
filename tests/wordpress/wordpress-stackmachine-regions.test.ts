@@ -1,46 +1,11 @@
 import type { DeployApp } from "stackmachine";
 
-import { randomAppName, TestEnv } from "../../src";
+import { TestEnv } from "../../src";
 import { deployAppToAppInfo } from "../../src/convert";
-import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import { validateWordpressIsLive } from "../../src/wordpress";
+import { deployStackMachineWordpress } from "../utils/stackmachine-wordpress";
 
 jest.setTimeout(1_800_000);
-
-type StackMachineClient = Awaited<ReturnType<TestEnv["stackmachineSdk"]>>;
-
-async function deployStackMachineWordpressToRegion(
-  env: TestEnv,
-  client: StackMachineClient,
-  regionName: string,
-): Promise<DeployApp> {
-  const appName = randomAppName();
-  const appVersion = await env.deployStackMachineApp(client, {
-    appName,
-    owner: env.namespace,
-    repoUrl: "https://github.com/wordpress/wordpress",
-    branch: "6.8.3",
-    enableDatabase: true,
-    region: regionName,
-    extraData: {
-      wordpress: {
-        adminEmail: "admin@example.com",
-        adminPassword: generateNeedlesslySecureRandomPassword(),
-        adminUsername: "admin",
-        language: "en_US",
-        siteName: `WordPress region integration test ${regionName}`,
-      },
-    },
-  });
-  const app = appVersion.app;
-  await env.recordDeployedApp({
-    appId: app.id,
-    appName: app.name,
-    appUrl: app.url,
-    appPermalink: app.url,
-  });
-  return app;
-}
 
 describe("stackmachine wordpress regions", () => {
   const cleanupApps: DeployApp[] = [];
@@ -77,7 +42,10 @@ describe("stackmachine wordpress regions", () => {
     for (const regionName of regionNames) {
       let app: DeployApp;
       try {
-        app = await deployStackMachineWordpressToRegion(env, client, regionName);
+        app = await deployStackMachineWordpress(env, client, {
+          region: regionName,
+          siteName: `WordPress region integration test ${regionName}`,
+        });
       } catch (error) {
         throw new Error(
           `Failed to deploy StackMachine WordPress app to region '${regionName}'`,

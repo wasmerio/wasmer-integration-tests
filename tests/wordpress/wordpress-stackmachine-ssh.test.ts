@@ -1,10 +1,9 @@
 import { Client } from "ssh2";
 import type { DeployApp } from "stackmachine";
 
-import { randomAppName, TestEnv } from "../../src";
+import { TestEnv } from "../../src";
 import { deployAppToAppInfo } from "../../src/convert";
 import { currentJestTestFailed, isTruthyEnvVar } from "../../src/env";
-import { generateNeedlesslySecureRandomPassword } from "../../src/security";
 import {
   connectSshWithRetry,
   enableAppSshWithTestKey,
@@ -14,10 +13,9 @@ import {
 } from "../../src/ssh";
 import type { SshExecResult } from "../../src/ssh";
 import { validateWordpressIsLive } from "../../src/wordpress";
+import { deployStackMachineWordpress } from "../utils/stackmachine-wordpress";
 
 jest.setTimeout(600_000);
-
-type StackMachineClient = Awaited<ReturnType<TestEnv["stackmachineSdk"]>>;
 
 // The app is deployed in beforeAll, where jest exposes no currentTestName, so a
 // recorded app would otherwise carry a null origin and the failures-only
@@ -136,37 +134,7 @@ async function runStep(
   return result;
 }
 
-async function deployStackMachineWordpress(
-  env: TestEnv,
-  client: StackMachineClient,
-): Promise<DeployApp> {
-  const appName = randomAppName();
-  const appVersion = await env.deployStackMachineApp(client, {
-    appName,
-    owner: env.namespace,
-    repoUrl: "https://github.com/wordpress/wordpress",
-    branch: "6.8.3",
-    enableDatabase: true,
-    extraData: {
-      wordpress: {
-        adminEmail: "admin@example.com",
-        adminPassword: generateNeedlesslySecureRandomPassword(),
-        adminUsername: "admin",
-        language: "en_US",
-        siteName: "WordPress SSH integration test",
-      },
-    },
-  });
-  const app = appVersion.app;
-  await env.recordDeployedApp({
-    appId: app.id,
-    appName: app.name,
-    appUrl: app.url,
-    appPermalink: app.url,
-    origin: SUITE_NAME,
-  });
-  return app;
-}
+
 
 let env: TestEnv;
 let app: DeployApp;
@@ -240,7 +208,10 @@ describe(SUITE_NAME, () => {
     env = TestEnv.fromEnv();
     try {
       const client = await env.stackmachineSdk();
-      app = await deployStackMachineWordpress(env, client);
+      app = await deployStackMachineWordpress(env, client, {
+      siteName: "WordPress SSH integration test",
+      origin: SUITE_NAME,
+    });
 
       expect(app.adminUrl).toBeTruthy();
       await validateWordpressIsLive(env, app.url);

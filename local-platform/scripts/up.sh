@@ -133,11 +133,16 @@ reuse_existing_run_if_running() {
     log "Stopping existing local platform run because the requested selectors changed"
     log "Existing selectors: backend=$existing_backend_version edge=$existing_edge_version"
     log "Requested selectors: backend=$BACKEND_VERSION edge=$EDGE_VERSION"
-    RUN_DIR="$existing_run_dir"
-    export RUN_DIR
-    # shellcheck disable=SC1090
-    source "$existing_resolved_env"
-    LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN=1 "$SCRIPT_DIR/down.sh"
+    # Tear down in a subshell: down.sh needs the OLD run's resolved env, but
+    # sourcing it in this shell would clobber the freshly requested selectors
+    # (BACKEND_VERSION/EDGE_VERSION/...) that the new run must resolve with.
+    (
+      RUN_DIR="$existing_run_dir"
+      export RUN_DIR
+      # shellcheck disable=SC1090
+      source "$existing_resolved_env"
+      LOCAL_PLATFORM_SKIP_COLLECT_ON_DOWN=1 "$SCRIPT_DIR/down.sh"
+    )
     return 1
   fi
 
@@ -298,6 +303,18 @@ run_quietly "Backend migrations" "$RUN_DIR/logs/backend-migrate.log" \
       db migrate up
 
 "$SCRIPT_DIR/bootstrap.sh"
+
+# Repo-owned template seeding (bootstrap.sh passes --skip-templates to the
+# backend's embedded seeder). Only needs Postgres, which is already up.
+if is_truthy "${LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER:-}"; then
+  log "Skipping repo-owned template seeding (LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1)"
+elif is_truthy "${LOCAL_PLATFORM_SEED_TEMPLATES:-1}"; then
+  log "Seeding app templates into local registry"
+  run_quietly "Template seeding" "$RUN_DIR/logs/template-seed.log" \
+    node "$REPO_DIR/local-platform/scripts/seed-app-templates.mjs" "$REPO_DIR" "$RUN_DIR"
+else
+  log "Skipping app template seeding because LOCAL_PLATFORM_SEED_TEMPLATES=${LOCAL_PLATFORM_SEED_TEMPLATES:-}"
+fi
 
 log "Starting backend"
 compose up -d backend

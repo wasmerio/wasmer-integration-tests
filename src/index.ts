@@ -6,7 +6,7 @@ export {
   TestEnv,
 } from "./env";
 export type { DeployedAppRecordInput } from "./env";
-export { sleep } from "./util";
+export { pollUntil, sleep } from "./util";
 
 export type { AppDefinition } from "./app/construct";
 export {

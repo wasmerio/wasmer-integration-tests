@@ -24,4 +24,7 @@ async function updateStaticSiteLoop() {
   }
 }
 
-updateStaticSiteLoop();
+updateStaticSiteLoop().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -59,7 +59,10 @@ jobs:
 
   local-platform-cache:
     name: Prepare local platform test environment cache
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@main
+    # Local reference: resolves to the same repo+ref as this suite file, so a
+    # PR branch of this repo exercises its own workflow changes while external
+    # callers (which pin this suite @main) keep getting main.
+    uses: ./.github/workflows/local-platform-test.yaml
     with:
       backend_version: ${{ inputs.backend_version }}
       edge_version: ${{ inputs.edge_version }}
@@ -77,7 +80,10 @@ jobs:
     needs:
       - test-suite-matrix
       - local-platform-cache
-    uses: wasmerio/wasmer-integration-tests/.github/workflows/local-platform-test.yaml@main
+    # Local reference: resolves to the same repo+ref as this suite file, so a
+    # PR branch of this repo exercises its own workflow changes while external
+    # callers (which pin this suite @main) keep getting main.
+    uses: ./.github/workflows/local-platform-test.yaml
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.test-suite-matrix.outputs.matrix) }}
