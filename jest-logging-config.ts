@@ -163,6 +163,20 @@ function installTestTaggedConsole(): void {
   global.console = taggedConsole;
 }
 
+// Approximate jest-each's title interpolation so per-case async contexts carry
+// the formatted test name (e.g. "deploy %s" -> "deploy path/to/pkg"). Only the
+// common specifiers are handled; unknown ones are left in place.
+function formatEachTitle(template: string, args: unknown[]): string {
+  let index = 0;
+  return template.replace(/%[psdifjo%]/g, (specifier) => {
+    if (specifier === "%%") {
+      return "%";
+    }
+    const value = args[index++];
+    return typeof value === "string" ? value : (JSON.stringify(value) ?? "?");
+  });
+}
+
 function wrapTestCallback(fn: unknown, testName?: string): unknown {
   if (typeof fn !== "function") {
     return fn;
@@ -170,45 +184,53 @@ function wrapTestCallback(fn: unknown, testName?: string): unknown {
 
   const callback = fn as JestTestCallback;
 
-  if (callback.length > 0) {
-    return function wrappedDoneCallback(this: unknown, done: unknown): unknown {
-      if (typeof done !== "function") {
-        return callback.call(this, done);
-      }
+  // A single wrapper handles both invocation styles. jest passes a `done`
+  // callback as the trailing argument for done-style tests; jest-each passes
+  // case values (never functions in this suite) as leading arguments. The
+  // original callback's arity is preserved so jest-circus/jest-each keep
+  // making the same done-vs-promise decision they would for the raw callback.
+  const wrapped = function (this: unknown, ...args: unknown[]): unknown {
+    const last = args[args.length - 1];
+    const resolvedName =
+      testName && testName.includes("%")
+        ? formatEachTitle(testName, args)
+        : testName;
 
+    if (typeof last === "function") {
+      const done = last as (error?: unknown) => void;
       const wrappedDone = (error?: unknown): void => {
         if (error) {
           markCurrentJestTestFailed();
         }
-        (done as (error?: unknown) => void)(normalizeThrownValue(error));
+        done(normalizeThrownValue(error));
       };
 
       try {
         return withCurrentJestState(
-          () => callback.call(this, wrappedDone),
-          testName,
+          () => callback.apply(this, [...args.slice(0, -1), wrappedDone]),
+          resolvedName,
         );
       } catch (error) {
         markCurrentJestTestFailed();
         throw normalizeThrownValue(error);
       }
-    };
-  }
-
-  return async function wrappedPromiseCallback(
-    this: unknown,
-    ...args: unknown[]
-  ): Promise<unknown> {
-    try {
-      return await withCurrentJestState(
-        () => callback.apply(this, args),
-        testName,
-      );
-    } catch (error) {
-      markCurrentJestTestFailed();
-      throw normalizeThrownValue(error);
     }
+
+    return (async () => {
+      try {
+        return await withCurrentJestState(
+          () => callback.apply(this, args),
+          resolvedName,
+        );
+      } catch (error) {
+        markCurrentJestTestFailed();
+        throw normalizeThrownValue(error);
+      }
+    })();
   };
+
+  Object.defineProperty(wrapped, "length", { value: callback.length });
+  return wrapped;
 }
 
 const wrappedMatcherObjects = new WeakMap<object, unknown>();

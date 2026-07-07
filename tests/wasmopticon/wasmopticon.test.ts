@@ -183,8 +183,15 @@ describe("wasmopticon: Crawl and deploy", () => {
       if (fs.existsSync(shipitDeployDir)) {
         console.info("resolving app from shipit output after deploy command failure");
         app = appGetToAppInfo(await env.getAppGetFromDir(shipitDeployDir));
+      } else if (fs.existsSync(path.join(workDir, "wasmer.toml"))) {
+        // The fixture declares its own runnable package: deploy it as-is.
+        // A remote build would re-detect the project with shipit presets and
+        // can produce a broken app (e.g. a worker-style JS app run under the
+        // node preset crashes at boot), which is not what the fixture tests.
+        console.info("falling back to direct deploy of the declared package");
+        app = await env.deployAppDir(workDir);
       } else {
-        console.info("failling back to normal deploy");
+        console.info("falling back to remote build");
         app = await env.deployAppDir(workDir, {
           extraCliArgs: ["--build-remote"],
         });

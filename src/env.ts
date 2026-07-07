@@ -447,19 +447,18 @@ export function currentJestTestFailed(): boolean {
 // during an afterAll teardown neither is reliably resolvable, which is why the
 // name is snapshotted at enqueue time rather than read back later.
 function currentJestTestNamesForCleanup(): string[] {
-  const names = new Set<string>();
+  // Trust the per-test async context when it exists: the global expect state
+  // is shared and, under test.concurrent, frequently names a DIFFERENT test,
+  // which both preserved passing tests' apps and deleted failing tests' apps.
   const local = currentJestTestName();
   if (local) {
-    names.add(local);
+    return [local];
   }
   const maybeGlobal = globalThis as typeof globalThis & {
     expect?: JestExpectLike;
   };
   const full = maybeGlobal.expect?.getState?.().currentTestName;
-  if (full) {
-    names.add(full);
-  }
-  return Array.from(names);
+  return full ? [full] : [];
 }
 
 const PENDING_APP_CLEANUPS_KEY = Symbol.for(
@@ -492,11 +491,22 @@ export async function flushPendingAppCleanups(): Promise<void> {
     return;
   }
   const drained = queue.splice(0, queue.length);
-  const failed = failedJestTestNames();
+  const failed = Array.from(failedJestTestNames());
   const keepAll = isTruthyEnvVar(process.env[ENV_VAR_KEEP_APPS]);
+
+  // The failed set holds names from two sources: the custom test environment
+  // records the full jest name (describe prefix + formatted title) while the
+  // per-test async context may carry only the test title. Match on suffix in
+  // either direction so the two shapes agree; err toward preserving.
+  const namesMatch = (a: string, b: string): boolean =>
+    a === b || a.endsWith(b) || b.endsWith(a);
+
   for (const entry of drained) {
     const preserve =
-      keepAll || entry.testNames.some((name) => failed.has(name));
+      keepAll ||
+      entry.testNames.some((name) =>
+        failed.some((failedName) => namesMatch(failedName, name)),
+      );
     await entry.env.finalizeAppCleanup(entry.app, preserve);
   }
 }
@@ -712,6 +722,10 @@ export interface AppFetchOptions extends RequestInit {
   // quite heavy cognitive load, and causes integration test failures if altered. This field is appended
   // to handle edge cases when we most certainly want to wait
   forceWait?: boolean;
+  // Custom acceptance predicate for the response status. Defaults to
+  // response.ok (plus 3xx when redirect handling is "manual"). Useful for
+  // reachability probes where any non-5xx proves the app is serving.
+  acceptStatus?: (status: number) => boolean;
 }
 
 export class TestEnv {
@@ -1034,7 +1048,11 @@ export class TestEnv {
 
     if (this.edgeServer && !noWait) {
       // Specific target server, but waiting is enabled, so manually test.
-      await this.fetchApp(info, "/");
+      // Reachability probe: any response below 500 proves the app is
+      // deployed and serving; apps may legitimately 4xx on "/".
+      await this.fetchApp(info, "/", {
+        acceptStatus: (status) => status < 500,
+      });
     }
 
     await recordDeployedApp(this, info);
@@ -1478,55 +1496,55 @@ export class TestEnv {
         }
       }
 
-      if (!options.noAssertSuccess && !response.ok) {
-        // Redirect statuses are expected: fetchApp does not follow redirects
-        // by default (options.redirect defaults to "manual" above).
-        const redirectExpected =
-          options.redirect === "manual" &&
-          response.status >= 300 &&
-          response.status < 400;
-        if (!redirectExpected) {
-          // While waiting for a fresh deployment, non-OK responses are often
-          // transient (instance cold start, journal replay), so keep retrying
-          // within the same time budget as the version wait. Only a status
-          // that persists past the deadline is a real failure.
-          if (
-            waitForVersionId &&
-            Date.now() - start <= RETRY_TIMEOUT_SECS * 1000
-          ) {
-            console.info(
-              `App returned status ${response.status} while waiting for deployment, retrying after delay...`,
-            );
-            await sleep(1000);
-            continue;
-          }
-
-          const body = await response.text().catch(() => "<unreadable body>");
-
-          // Best-effort: include the app's own logs so instance boot
-          // failures (which only surface as opaque 5xx from Edge) are
-          // diagnosable from the test failure alone.
-          let appLogs = "";
-          try {
-            const { getAllLogs } = await import("./log");
-            appLogs = await getAllLogs(this, app.version.name);
-          } catch (logError) {
-            appLogs = `<failed to fetch app logs: ${logError}>`;
-          }
-
-          throw new Error(
-            [
-              `Fetching app URL '${url}' returned status ${response.status}` +
-                (waitForVersionId
-                  ? ` (retried for ${RETRY_TIMEOUT_SECS} seconds).`
-                  : "."),
-              `App: ${this.namespace}/${app.version.name} (${app.id})`,
-              "Pass noAssertSuccess: true if a non-success status is expected.",
-              `Body (truncated): ${body.slice(0, 2000)}`,
-              `App logs (tail): ${appLogs.slice(-3000) || "<empty>"}`,
-            ].join("\n"),
+      // Redirect statuses are expected by default: fetchApp does not follow
+      // redirects unless asked (options.redirect defaults to "manual" above).
+      const statusAcceptable = options.acceptStatus
+        ? options.acceptStatus(response.status)
+        : response.ok ||
+          (options.redirect === "manual" &&
+            response.status >= 300 &&
+            response.status < 400);
+      if (!options.noAssertSuccess && !statusAcceptable) {
+        // While waiting for a fresh deployment, non-OK responses are often
+        // transient (instance cold start, journal replay), so keep retrying
+        // within the same time budget as the version wait. Only a status
+        // that persists past the deadline is a real failure.
+        if (
+          waitForVersionId &&
+          Date.now() - start <= RETRY_TIMEOUT_SECS * 1000
+        ) {
+          console.info(
+            `App returned status ${response.status} while waiting for deployment, retrying after delay...`,
           );
+          await sleep(1000);
+          continue;
         }
+
+        const body = await response.text().catch(() => "<unreadable body>");
+
+        // Best-effort: include the app's own logs so instance boot
+        // failures (which only surface as opaque 5xx from Edge) are
+        // diagnosable from the test failure alone.
+        let appLogs = "";
+        try {
+          const { getAllLogs } = await import("./log");
+          appLogs = await getAllLogs(this, app.version.name);
+        } catch (logError) {
+          appLogs = `<failed to fetch app logs: ${logError}>`;
+        }
+
+        throw new Error(
+          [
+            `Fetching app URL '${url}' returned status ${response.status}` +
+              (waitForVersionId
+                ? ` (retried for ${RETRY_TIMEOUT_SECS} seconds).`
+                : "."),
+            `App: ${this.namespace}/${app.version.name} (${app.id})`,
+            "Pass noAssertSuccess: true if a non-success status is expected.",
+            `Body (truncated): ${body.slice(0, 2000)}`,
+            `App logs (tail): ${appLogs.slice(-3000) || "<empty>"}`,
+          ].join("\n"),
+        );
       }
       return response;
     }
