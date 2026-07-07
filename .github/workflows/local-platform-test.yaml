@@ -71,6 +71,26 @@ jobs:
           ref: ${{ inputs.test_branch }}
           submodules: true
 
+      # GitHub-hosted runners ship ~14GB of preinstalled toolchains and leave
+      # tight headroom for this workload (backend image tar + loaded image,
+      # Edge binary, compiler cache, and Docker layers from 13 remote template
+      # builds). A cold compiler cache is enough to hit ENOSPC mid-suite, so
+      # reclaim the space up front. Skipped on depot runners, which are large
+      # and ephemeral.
+      - name: Reclaim runner disk space
+        if: ${{ !contains(inputs.runner, 'depot') }}
+        run: |
+          set -euo pipefail
+          df -h / | tail -1
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          df -h / | tail -1
+
       - name: Install Wasmer CLI
         uses: wasmerio/setup-wasmer@v2
 
