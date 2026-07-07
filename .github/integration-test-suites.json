@@ -36,6 +36,6 @@
   },
   {
     "id": "stackmachine-sdk",
-    "test_command": "npx jest ./tests/stackmachine/stackmachine-sdk.test.ts"
+    "test_command": "npx jest tests/stackmachine/stackmachine-sdk-"
   }
 ]

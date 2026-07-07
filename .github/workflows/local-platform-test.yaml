@@ -147,8 +147,15 @@ jobs:
             exit 1
           fi
 
+      - name: Skip prepare (exact cache hit)
+        if: ${{ inputs.prepare_only && steps.local-platform-cache.outputs.cache-hit == 'true' }}
+        run: echo "Exact local-platform cache key already exists; skipping the cache-warmup stack boot."
+
+      # Only boot the disposable stack to warm the caches when the exact cache
+      # key is missing. On warm days this turns the ~9-minute prepare gate the
+      # whole suite matrix waits on into a ~1-minute no-op.
       - name: Prepare local platform test environment
-        if: ${{ inputs.prepare_only }}
+        if: ${{ inputs.prepare_only && steps.local-platform-cache.outputs.cache-hit != 'true' }}
         env:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY  }}

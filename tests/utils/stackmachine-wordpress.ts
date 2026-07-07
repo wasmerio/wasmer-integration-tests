@@ -16,10 +16,44 @@ export interface StackMachineWordpressOptions {
   origin?: string;
 }
 
+// WordPress tests must always track the latest WordPress release. Resolved
+// once per jest worker from the canonical wordpress.org version feed; falls
+// back to a known-good release only if the feed is unreachable.
+const FALLBACK_WORDPRESS_VERSION = "6.8.3";
+let latestWordpressVersionPromise: Promise<string> | null = null;
+
+export function latestWordpressVersion(): Promise<string> {
+  latestWordpressVersionPromise ??= (async () => {
+    try {
+      const response = await fetch(
+        "https://api.wordpress.org/core/version-check/1.7/",
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        offers?: { current?: string }[];
+      };
+      const current = data.offers?.[0]?.current;
+      if (!current) {
+        throw new Error("no offers in version-check response");
+      }
+      console.info(`Using latest WordPress release: ${current}`);
+      return current;
+    } catch (error) {
+      console.warn(
+        `Could not resolve the latest WordPress version (${error}); falling back to ${FALLBACK_WORDPRESS_VERSION}`,
+      );
+      return FALLBACK_WORDPRESS_VERSION;
+    }
+  })();
+  return latestWordpressVersionPromise;
+}
+
 /**
  * Deploy the canonical WordPress test app (github.com/wordpress/wordpress at
- * branch 6.8.3, with a managed database) through the StackMachine SDK and
- * record it in the deployed-apps registry.
+ * the latest WordPress release, with a managed database) through the
+ * StackMachine SDK and record it in the deployed-apps registry.
  */
 export async function deployStackMachineWordpress(
   env: TestEnv,
@@ -31,7 +65,7 @@ export async function deployStackMachineWordpress(
     appName,
     owner: env.namespace,
     repoUrl: "https://github.com/wordpress/wordpress",
-    branch: "6.8.3",
+    branch: await latestWordpressVersion(),
     enableDatabase: true,
     ...(options.region ? { region: options.region } : {}),
     extraData: {
