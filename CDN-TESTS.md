@@ -260,13 +260,15 @@ Expected result: shared CDN cache does not store `private` responses.
 
 Steps:
 
-1. Fetch `/cache/no-cache?case=<id>` several times.
-2. Assert Edge does not serve a blindly cached body without revalidation.
+1. Fetch `/cache/no-cache?case=<id>` once and record its validator and token.
+2. Fetch the same URL with a matching conditional request header.
+3. Accept `304 Not Modified`, or a `200 OK` response only when it carries a new
+   origin token rather than the first response body.
 
 Expected result: if Edge has revalidation support, the origin should observe
 conditional requests and may return 304. If revalidation is not implemented yet,
-the conservative expected behavior is miss every time. The fixture must include
-a validator so this can be tested rather than inferred.
+the conservative expected behavior is a fresh miss. The fixture must include a
+validator so this can be tested rather than inferred.
 
 ### 11. Expiry And Revalidation
 
@@ -501,9 +503,11 @@ Steps:
 Expected result: disabling CDN cache prevents new cache hits.
 
 Config tests should first confirm the current registry exposes
-`configureAppCdnCache` and `purgeAppCdnCache`. If local platform or another
-target registry does not expose those mutations yet, skip only the config/purge
-tests with a clear message rather than failing unrelated cache semantics tests.
+`configureAppCdnCache` and `purgeAppCdnCache`. If an explicitly known
+unsupported local platform target does not expose those mutations yet, skip only
+the config/purge tests with a clear message rather than failing unrelated cache
+semantics tests. Default/dev registries should fail when required CDN cache
+mutations are absent.
 
 ## Observability And Debugging
 
