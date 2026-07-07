@@ -1486,10 +1486,28 @@ export class TestEnv {
           response.status >= 300 &&
           response.status < 400;
         if (!redirectExpected) {
+          // While waiting for a fresh deployment, non-OK responses are often
+          // transient (instance cold start, journal replay), so keep retrying
+          // within the same time budget as the version wait. Only a status
+          // that persists past the deadline is a real failure.
+          if (
+            waitForVersionId &&
+            Date.now() - start <= RETRY_TIMEOUT_SECS * 1000
+          ) {
+            console.info(
+              `App returned status ${response.status} while waiting for deployment, retrying after delay...`,
+            );
+            await sleep(1000);
+            continue;
+          }
+
           const body = await response.text().catch(() => "<unreadable body>");
           throw new Error(
             [
-              `Fetching app URL '${url}' returned status ${response.status}.`,
+              `Fetching app URL '${url}' returned status ${response.status}` +
+                (waitForVersionId
+                  ? ` (retried for ${RETRY_TIMEOUT_SECS} seconds).`
+                  : "."),
               `App: ${this.namespace}/${app.version.name} (${app.id})`,
               "Pass noAssertSuccess: true if a non-success status is expected.",
               `Body (truncated): ${body.slice(0, 2000)}`,

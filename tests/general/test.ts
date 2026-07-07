@@ -130,16 +130,28 @@ test.concurrent("app-https-redirect", async () => {
   console.info("Re-deploying app with https redirect disabled...");
 
   spec.appYaml.redirect = { force_https: false };
-  writeAppDefinition(info.dir, spec);
+  await writeAppDefinition(info.dir, spec);
   const info2 = await env.deployAppDir(info.dir);
 
-  const res2 = await env.fetchApp(
-    info2,
-    info2.url.replace("https://", "http://"),
-    { redirect: "manual" },
+  // fetchApp does not wait for the new version when given an absolute URL, so
+  // Edge may briefly keep serving the previous (redirecting) version. Poll
+  // until the redirect-free version answers.
+  await pollUntil(
+    async () => {
+      const res2 = await env.fetchApp(
+        info2,
+        info2.url.replace("https://", "http://"),
+        { redirect: "manual", noAssertSuccess: true },
+      );
+      await res2.body?.cancel();
+      return res2.status === 200;
+    },
+    {
+      timeoutMs: 60_000,
+      intervalMs: 2000,
+      description: "http fetch to return 200 after disabling https redirect",
+    },
   );
-  await res2.body?.cancel();
-  assertEquals(res2.status, 200);
   await env.deleteApp(info);
 });
 
