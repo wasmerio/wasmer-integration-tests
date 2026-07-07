@@ -475,26 +475,40 @@ async function expectNoCacheRequiresRevalidation(
 async function mutationExists(
   env: TestEnv,
   mutationName: string,
-): Promise<boolean> {
-  const response = await env.backend.gqlQuery<{
-    __schema: { mutationType: { fields: { name: string }[] } | null };
-  }>(`
-    query CdnCacheMutationSupport {
-      __schema {
-        mutationType {
-          fields {
-            name
+): Promise<boolean | null> {
+  try {
+    const response = await env.backend.gqlQuery<{
+      __schema: { mutationType: { fields: { name: string }[] } | null };
+    }>(`
+      query CdnCacheMutationSupport {
+        __schema {
+          mutationType {
+            fields {
+              name
+            }
           }
         }
       }
-    }
-  `);
+    `);
 
-  return (
-    response.data?.__schema.mutationType?.fields.some(
-      (field) => field.name === mutationName,
-    ) ?? false
-  );
+    return (
+      response.data?.__schema.mutationType?.fields.some(
+        (field) => field.name === mutationName,
+      ) ?? false
+    );
+  } catch (error) {
+    if (isKnownUnsupportedLocalTarget(env)) {
+      console.warn(
+        `Skipping CDN purge mutation discovery: local registry introspection failed: ${error}`,
+      );
+      return null;
+    }
+
+    throw new Error(
+      `Failed to verify registry ${env.registry} exposes ${mutationName}.`,
+      { cause: error },
+    );
+  }
 }
 
 async function purgeAppCdnCache(env: TestEnv, app: AppInfo): Promise<void> {
@@ -744,7 +758,8 @@ describe("app CDN cache smoke", () => {
       expect(notFound.observations.at(-1)?.status).toBe(404);
       expect(notFound.token).toBeDefined();
 
-      if (!(await mutationExists(env, "purgeAppCdnCache"))) {
+      const hasPurgeMutation = await mutationExists(env, "purgeAppCdnCache");
+      if (!hasPurgeMutation) {
         if (!isKnownUnsupportedLocalTarget(env)) {
           throw new Error(
             `Expected registry ${env.registry} to expose purgeAppCdnCache for CDN purge coverage.`,
