@@ -1398,6 +1398,7 @@ export class TestEnv {
 
     const start = Date.now();
     const RETRY_TIMEOUT_SECS = 60;
+    let fetchRetryUsed = false;
     while (true) {
       const attemptStartedAt = Date.now();
       console.debug(`Fetching URL ${url}`, {
@@ -1418,6 +1419,17 @@ export class TestEnv {
             )
           : await fetch(url, options);
       } catch (error) {
+        // A just-started Edge under heavy instance spin-up load (CI cold
+        // start) can stall a request until the client times out. When waiting
+        // for a deployment, give the (now warmer) Edge one more attempt.
+        if (waitForVersionId && !fetchRetryUsed) {
+          fetchRetryUsed = true;
+          console.warn(
+            `Fetch attempt for '${url}' failed after ${Date.now() - attemptStartedAt}ms (${String(error)}); retrying once...`,
+          );
+          await sleep(1000);
+          continue;
+        }
         throw new Error(
           [
             `Failed to fetch URL '${url}' after ${Date.now() - attemptStartedAt}ms.`,

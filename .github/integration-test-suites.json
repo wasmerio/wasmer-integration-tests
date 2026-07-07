@@ -30,7 +30,7 @@
   },
   {
     "id": "wasmopticon",
-    "test_command": "JEST_MAX_CONCURRENCY=2 npx jest tests/wasmopticon",
+    "test_command": "JEST_MAX_CONCURRENCY=1 npx jest tests/wasmopticon",
     "requires_python": true,
     "python_version": "3.13"
   },
