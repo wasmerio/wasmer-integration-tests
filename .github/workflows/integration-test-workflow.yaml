@@ -72,7 +72,9 @@ jobs:
     name: Run ${{ matrix.display_id || matrix.id }} tests
     needs: test-suite-matrix
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ matrix.timeout_minutes || 15 }}
+    # Default raised from 15: template remote builds alone can consume most
+    # of that budget against the dev environment.
+    timeout-minutes: ${{ matrix.timeout_minutes || 45 }}
     # Unique per ref + registry + suite: a superseding deployment test for the
     # same ref/registry replaces only the matching suite job, nothing else.
     concurrency:
