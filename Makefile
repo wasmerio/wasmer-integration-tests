@@ -1,6 +1,8 @@
-.PHONY: fmt fmt-check check lint test clean all local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs
+.PHONY: fmt fmt-check check lint test clean all local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs local-platform-status
 JSPATHS = ./src ./tests ./bin
 JEST_ARGS ?=
+PYTHON ?= python3
+LOCAL_PLATFORM_CLI = $(PYTHON) ./local-platform/cli.py
 
 setup:
 	@node -v | awk -F. '{ if ($$1 < 22) { print "Node version 22+ is required. Please install it."; exit 1; } }'
@@ -15,6 +17,8 @@ fmt-check: setup
 check: setup
 	pnpm exec tsc --noEmit
 	pnpm exec eslint $(JSPATHS)
+	$(PYTHON) -m compileall -q ./local-platform/cli.py ./local-platform/localplatform
+	$(PYTHON) -m unittest discover -s ./local-platform -p 'test_*.py'
 
 lint: setup fmt-check check
 
@@ -22,16 +26,19 @@ test: setup
 	pnpm exec jest $(JEST_ARGS)
 
 local-test: setup
-	bash ./local-platform/scripts/local-test.sh
+	$(LOCAL_PLATFORM_CLI) local-test
 
 local-platform-prepare:
-	bash ./local-platform/scripts/prepare-test-environment.sh
+	$(LOCAL_PLATFORM_CLI) prepare
 
 local-platform-up:
-	bash ./local-platform/scripts/up.sh
+	$(LOCAL_PLATFORM_CLI) up
 
 local-platform-down:
-	bash ./local-platform/scripts/down.sh
+	$(LOCAL_PLATFORM_CLI) down
 
 local-platform-logs:
-	bash ./local-platform/scripts/print-logs.sh
+	$(LOCAL_PLATFORM_CLI) logs
+
+local-platform-status:
+	$(LOCAL_PLATFORM_CLI) status

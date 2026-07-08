@@ -175,6 +175,46 @@ The reusable workflow `.github/workflows/local-platform-test.yaml` accepts only:
 
 Code QA first warms the shared local-platform caches once, then fans out the suite matrix using the same reusable workflow.
 
+## Implementation
+
+The tooling is dependency-free Python (3.12+, standard library only). The
+entry point is `local-platform/cli.py` (`up`, `down`, `local-test`, `prepare`,
+`logs`, `collect-logs`, `status`), and the make targets are thin wrappers
+around it. One module per phase lives in `local-platform/localplatform/`:
+`resolve`, `fetch`, `bootstrap`, `ensure_compiled`, `up`, `down`, `logs`,
+`status`, `local_test`, with shared plumbing in `lib.py`. The substantial Node
+helpers under `local-platform/scripts/` (`seed-app-templates.mjs`,
+`seed-packages.mjs`, `generate-edge-config.mjs`,
+`persist-relay-queries.mjs`) are invoked by the Python tooling. The only
+remaining bash is `bash -lc` around `LOCAL_TEST_COMMAND`, which is
+contractually a (possibly multi-line) shell snippet from
+`.github/integration-test-suites.json`.
+
+Fresh boots run independent steps concurrently (backend image pull, Edge
+binary download, dependency services, Edge helper-image prebuild; later
+template seeding overlaps the backend start, and package seeding overlaps
+Relay persistence). When concurrent steps stream into CI logs their lines are
+prefixed (`[packages] …`). Per-step wall times land in
+`<run>/diagnostics/timings.json` and the slowest steps are summarized in the
+"Local platform ready" log line.
+
+`make local-platform-status` prints the current run, the resolved Backend and
+Edge versions actually in use (not just floating selectors like
+`resolve_prod`; the Backend line warns if the running container's image
+differs from the resolved one, and the Edge line includes the binary's
+self-reported `--version` when obtainable), per-service container state, and
+live backend/Edge probes (exit 0 only when both serve HTTP).
+
+The same resolved-versions block is part of the access summary printed after
+every successful `up` (so CI logs for both the prepare gate and each suite job
+show what is running), and when `GITHUB_STEP_SUMMARY` is set a markdown
+"Local platform versions" table is appended to the GitHub Actions job page.
+
+Unit tests for the pure logic (env-file scanner, selector/gate semantics,
+package-list builder, token redaction, JWT signing) live in
+`local-platform/localplatform/tests/` and run as part of `make check` via
+`python3 -m unittest discover -s ./local-platform -p 'test_*.py'`.
+
 ## Notes
 
 - The stack intentionally uses the latest dependency images for supporting services.
