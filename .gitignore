@@ -7,3 +7,4 @@ tests/generated-templates.json
 .jest-deployed-apps.jsonl
 local.env
 .local-platform/
+__pycache__/

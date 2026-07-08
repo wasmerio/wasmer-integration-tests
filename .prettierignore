@@ -13,7 +13,7 @@ flake.lock
 Makefile
 pnpm-lock.yaml
 local.env.example
-local-platform/**/*.sh
+local-platform/**/*.py
 local-platform/**/Dockerfile
 local-platform/**/*.toml
 local-platform/**/*.sql
