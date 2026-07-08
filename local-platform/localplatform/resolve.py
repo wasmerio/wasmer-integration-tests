@@ -8,8 +8,10 @@ recorded in `<run>/resolved.env` (shell-sourceable) and `<run>/resolved.json`.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -183,45 +185,94 @@ def _latest_release_tag_with_suffix(releases: list[dict], suffix: str) -> str:
     return matches[-1]["tagName"] if matches else ""
 
 
+# Prod release tags carry no channel suffix: vYYYY-MM-DD_N_<sha>.
+_PROD_TAG_PATTERN = re.compile(r"^v\d{4}-\d{2}-\d{2}_\d+_[0-9a-f]+$")
+
+
+def _latest_prod_release_tags(ctx: Ctx, repo: str, limit: int = 10) -> list[str]:
+    """Newest-first prod release tags (suffix-less), for asset probing."""
+    releases = _gh_release_list(ctx, repo, 100) or []
+    prod = [
+        release
+        for release in releases
+        if isinstance(release.get("tagName"), str)
+        and _PROD_TAG_PATTERN.fullmatch(release["tagName"])
+    ]
+    prod.sort(key=_published_at, reverse=True)
+    return [release["tagName"] for release in prod[:limit]]
+
+
+# Where blessed (release-tagged) backend images are published. Release builds
+# push here; GitHub releases carry no image assets yet (pending backend's
+# `make image-archive` + tf-aws-project deploy.yaml upload).
+DEFAULT_BACKEND_DEV_IMAGE_REPOSITORY = (
+    "376772435488.dkr.ecr.eu-west-3.amazonaws.com/stackmachine"
+)
+
+
+def _release_asset_names(ctx: Ctx, repo: str, tag: str) -> list[str]:
+    output = try_output(
+        ["gh", "api", f"repos/{repo}/releases/tags/{tag}", "--jq", ".assets[].name"],
+        env=ctx.env,
+    )
+    return [line for line in output.splitlines() if line.strip()]
+
+
 def resolve_backend_dev_github_release(ctx: Ctx) -> str:
+    """Latest blessed dev backend: newest `_dev` release tag, preferring a
+    release image asset when one exists (self-contained download), otherwise
+    the tagged image in the dev image repository (needs registry access)."""
     repo = ctx.get("BACKEND_DEV_GITHUB_REPO") or "wasmerio/backend"
-    pattern = ctx.get("BACKEND_DEV_GITHUB_ASSET_PATTERN") or "*image*.tar"
+    pattern = ctx.get("BACKEND_DEV_GITHUB_ASSET_PATTERN") or "*image*.tar*"
     tag = ctx.get("BACKEND_DEV_GITHUB_TAG")
     suffix = ctx.get("BACKEND_DEV_RELEASE_SUFFIX") or "_dev"
 
     if tag:
         log(f"Using explicit Backend dev release tag from BACKEND_DEV_GITHUB_TAG: {tag}")
+    else:
+        log(
+            f"Resolving latest Backend dev release from {repo} "
+            f"(tag suffix: {suffix})"
+        )
+        if shutil.which("gh"):
+            releases = _gh_release_list(
+                ctx,
+                repo,
+                200,
+                error_log=ctx.require_run_dir() / "logs" / "backend-release-list.err",
+            )
+            if releases is not None:
+                tag = _latest_release_tag_with_suffix(releases, suffix)
+        else:
+            log_warn(
+                "GitHub CLI is not installed; cannot resolve latest Backend dev "
+                "release automatically"
+            )
+        if not tag:
+            fail(
+                f"BACKEND_VERSION=resolve_dev could not find a {repo} release "
+                f"ending in {suffix}. Ensure LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has "
+                f"Contents: Read on {repo}, or set BACKEND_DEV_GITHUB_TAG explicitly."
+            )
+        log(f"Resolved Backend dev release tag: {tag}")
+
+    asset_names = _release_asset_names(ctx, repo, tag)
+    if any(fnmatch.fnmatch(name, pattern) for name in asset_names):
+        log(f"Backend dev release {tag} carries an image asset; downloading it")
         return f"github-release:{repo}:{tag}:{pattern}"
 
-    log(
-        f"Resolving latest Backend dev release from {repo} "
-        f"(tag suffix: {suffix}, asset pattern: {pattern})"
+    image_repository = (
+        ctx.get("BACKEND_DEV_IMAGE_REPOSITORY") or DEFAULT_BACKEND_DEV_IMAGE_REPOSITORY
     )
-    if shutil.which("gh"):
-        releases = _gh_release_list(
-            ctx,
-            repo,
-            200,
-            error_log=ctx.require_run_dir() / "logs" / "backend-release-list.err",
-        )
-        if releases is not None:
-            tag = _latest_release_tag_with_suffix(releases, suffix)
-    else:
-        log_warn(
-            "GitHub CLI is not installed; cannot resolve latest Backend dev "
-            "release automatically"
-        )
-
-    if not tag:
-        fail(
-            f"BACKEND_VERSION=resolve_dev could not find a {repo} release ending "
-            f"in {suffix} that carries an image asset matching '{pattern}'. Ensure "
-            f"backend deploys upload the image archive to the release (see "
-            f"tf-aws-project deploy.yaml) and that LOCAL_PLATFORM_ARTIFACT_FETCH_PAT "
-            f"has Contents: Read on {repo}, or set BACKEND_DEV_GITHUB_TAG explicitly."
-        )
-    log(f"Resolved Backend dev release tag: {tag}")
-    return f"github-release:{repo}:{tag}:{pattern}"
+    # The default dev image repository lives in the dev AWS account; give the
+    # registry login the matching profile unless the caller chose one.
+    if image_repository == DEFAULT_BACKEND_DEV_IMAGE_REPOSITORY:
+        ctx.env.setdefault("BACKEND_ECR_AWS_PROFILE", "tf-dev")
+    log(
+        f"Backend dev release {tag} has no image asset matching '{pattern}'; "
+        f"using image {image_repository}:{tag}"
+    )
+    return f"{image_repository}:{tag}"
 
 
 def resolve_backend(ctx: Ctx, selector: str) -> str:
@@ -230,49 +281,80 @@ def resolve_backend(ctx: Ctx, selector: str) -> str:
             return ctx.get("BACKEND_IMAGE_REF")
         if ctx.is_ci():
             repo = ctx.get("BACKEND_PROD_GITHUB_REPO") or "wasmerio/backend"
-            image_repository = (
+            ghcr_repository = (
                 ctx.get("BACKEND_IMAGE_REPOSITORY") or "ghcr.io/wasmerio/backend"
             )
+            pattern = ctx.get("BACKEND_PROD_GITHUB_ASSET_PATTERN") or "*image*.tar*"
             tag = ctx.get("BACKEND_PROD_GITHUB_TAG")
+            candidate_tags = [tag] if tag else []
             if not tag and shutil.which("gh"):
-                tag = try_output(
-                    [
-                        "gh",
-                        "release",
-                        "view",
-                        "--repo",
-                        repo,
-                        "--json",
-                        "tagName",
-                        "--jq",
-                        ".tagName",
-                    ],
-                    env=ctx.env,
-                )
-            if not tag:
+                candidate_tags = _latest_prod_release_tags(ctx, repo)
+                if not candidate_tags:
+                    tag_from_latest = try_output(
+                        [
+                            "gh",
+                            "release",
+                            "view",
+                            "--repo",
+                            repo,
+                            "--json",
+                            "tagName",
+                            "--jq",
+                            ".tagName",
+                        ],
+                        env=ctx.env,
+                    )
+                    if tag_from_latest:
+                        candidate_tags = [tag_from_latest]
+            if not candidate_tags:
                 fail(
                     "BACKEND_VERSION=resolve_prod in CI requires BACKEND_IMAGE_REF, "
                     "BACKEND_PROD_GITHUB_TAG, or GitHub release access to "
                     f"{repo}"
                 )
+            # Prefer the newest prod release with an image asset:
+            # self-contained download, no registry credentials needed on the
+            # runner. Releases whose asset upload lagged are skipped loudly.
+            for candidate in candidate_tags:
+                if any(
+                    fnmatch.fnmatch(name, pattern)
+                    for name in _release_asset_names(ctx, repo, candidate)
+                ):
+                    if candidate != candidate_tags[0]:
+                        log_warn(
+                            f"Backend prod release {candidate_tags[0]} has no image "
+                            f"asset matching '{pattern}'; using older asset-bearing "
+                            f"release {candidate}"
+                        )
+                    log(
+                        f"Backend prod release {candidate} carries an image asset; "
+                        "downloading it"
+                    )
+                    return f"github-release:{repo}:{candidate}:{pattern}"
+            tag = candidate_tags[0]
             bare_tag = tag.removeprefix("v")
             if shutil.which("docker") and (
                 subprocess.run(
-                    ["docker", "manifest", "inspect", f"{image_repository}:{bare_tag}"],
+                    ["docker", "manifest", "inspect", f"{ghcr_repository}:{bare_tag}"],
                     env=dict(ctx.env),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 ).returncode
-                != 0
+                == 0
             ):
-                pattern = ctx.get("BACKEND_PROD_GITHUB_ASSET_PATTERN") or "*image*.tar"
-                log(
-                    f"Backend prod image tag {bare_tag} not found in "
-                    f"{image_repository}; falling back to release asset selector "
-                    f"from {repo}"
-                )
-                return f"github-release:{repo}:{tag}:{pattern}"
-            return f"{image_repository}:{bare_tag}"
+                return f"{ghcr_repository}:{bare_tag}"
+            prod_repository = ctx.get("BACKEND_PROD_IMAGE_REPOSITORY")
+            if prod_repository:
+                log(f"Using Backend prod image {prod_repository}:{tag}")
+                return f"{prod_repository}:{tag}"
+            fail(
+                f"BACKEND_VERSION=resolve_prod in CI: release {tag} of {repo} has "
+                f"no image asset matching '{pattern}', {ghcr_repository}:{bare_tag} "
+                f"is not pullable, and BACKEND_PROD_IMAGE_REPOSITORY is not set. "
+                f"Publish the image archive to the release (backend "
+                f"`make image-archive` + tf-aws-project deploy.yaml upload) or set "
+                f"BACKEND_PROD_IMAGE_REPOSITORY to a registry this runner can pull."
+            )
         if shutil.which("kubectl"):
             # Best-effort (was `configure_prod_kube_context || true`): a
             # failed SSO login or update-kubeconfig must not prevent trying

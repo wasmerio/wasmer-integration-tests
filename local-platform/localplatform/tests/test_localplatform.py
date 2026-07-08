@@ -306,6 +306,21 @@ class TestJwt(TempDirTest):
         self.assertEqual(verify.returncode, 0, verify.stderr)
 
 
+class TestProdTagPattern(unittest.TestCase):
+    def test_prod_tags_have_no_channel_suffix(self) -> None:
+        from localplatform.resolve import _PROD_TAG_PATTERN
+
+        for prod in ("v2026-07-06_0_ff0e329", "v2026-07-02_3_fdd0152"):
+            self.assertIsNotNone(_PROD_TAG_PATTERN.fullmatch(prod), prod)
+        for non_prod in (
+            "v2026-07-07_3_2af698b_dev",
+            "v2026-07-07_2_c8d095c_bugt",
+            "v2026-07-07_5_4cfc7b4_dev1",
+            "latest",
+        ):
+            self.assertIsNone(_PROD_TAG_PATTERN.fullmatch(non_prod), non_prod)
+
+
 class TestDescribeArtifactSource(unittest.TestCase):
     def test_selector_shapes(self) -> None:
         self.assertEqual(

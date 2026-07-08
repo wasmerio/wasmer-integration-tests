@@ -186,7 +186,7 @@ jobs:
           set -euo pipefail
           needs_pat=0
           case "$BACKEND_VERSION" in
-            github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
+            github-artifact:*|artifact:*|github-release:*|resolve_prod|resolve_dev|latest_dev|latest-dev) needs_pat=1 ;;
           esac
           case "$EDGE_VERSION" in
             resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
