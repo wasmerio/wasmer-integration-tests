@@ -20,6 +20,8 @@ wasmer/cli
 wasmer/bash@=1.0.21
 wasmer/bash@=1.0.25
 wasmer/edgejs-quickjs@=0.0.4
+wasmer/edgejs-quickjs@=0.0.7
+wasmer/edgejs-quickjs@=latest
 # Shipit 0.21.5 node preset builds depend on 0.0.6 (templates remote-build tests).
 wasmer/edgejs-quickjs@=0.0.6
 wasmer/pandoc@=0.0.1
