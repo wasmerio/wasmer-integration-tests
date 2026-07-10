@@ -275,6 +275,35 @@ describe("stackmachine sdk", () => {
     await expectAppBody(env, app2, "Hello World v2!");
   });
 
+  test("redeployFromFiles accepts the app's current default domain", async () => {
+    const env = TestEnv.fromEnv();
+    const client = await env.stackmachineSdk();
+    const appName = randomAppName();
+
+    const app1 = await deployInlinePhpApp(
+      client,
+      env,
+      "<html><body><h1>Default domain v1!</h1></body></html>",
+      appName,
+    );
+    cleanupAppIds.push(app1.id);
+
+    const currentDefaultDomain = new URL(app1.url).hostname;
+    const app2 = await deployInlinePhpApp(
+      client,
+      env,
+      "<html><body><h1>Default domain v2!</h1></body></html>",
+      appName,
+      {
+        allowExistingApp: true,
+        domains: [currentDefaultDomain],
+      },
+    );
+
+    expect(app2.id).toBe(app1.id);
+    await expectAppBody(env, app2, "Default domain v2!");
+  });
+
   test("deployPerishable example", async () => {
     const env = TestEnv.fromEnv();
     const client = await env.stackmachineSdk();
