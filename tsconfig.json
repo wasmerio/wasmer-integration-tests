@@ -4,5 +4,5 @@
     "skipLibCheck": true,
     "lib": ["es2023"]
   },
-  "exclude": ["wasmopticon", "wordpress", "node_modules"]
+  "exclude": ["wasmopticon", "node_modules"]
 }

@@ -16,10 +16,6 @@
     "test_command": "npx jest ./tests/app/templates.test.ts"
   },
   {
-    "id": "wordpress",
-    "test_command": "npx jest ./tests/validation/log.test.ts\nnpx jest ./tests/wordpress"
-  },
-  {
     "id": "ssh",
     "test_command": "npx jest ./tests/ssh"
   },

@@ -120,13 +120,6 @@ real reason, e.g. `WASMER_TEST_WORDPRESS_MAX_RETRIES=4 VERBOSE=true`.
   them for passing tests too).
 - Compose/topology/stats snapshots: `.local-platform/current/diagnostics/`.
 
-### Running one test against the already-running stack
-
-```bash
-source .local-platform/current/test-env.sh
-VERBOSE=true pnpm exec jest tests/wordpress/wordpress.test.ts --runInBand
-```
-
 ### Comparing against the dev backend
 
 When a local failure is suspected to be environmental, reproduce it against dev:

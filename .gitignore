@@ -2,7 +2,6 @@ target
 .envrc
 .direnv
 node_modules
-/wordpress
 tests/generated-templates.json
 .jest-deployed-apps.jsonl
 local.env

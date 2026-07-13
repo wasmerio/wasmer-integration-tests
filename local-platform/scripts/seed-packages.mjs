@@ -49,7 +49,7 @@ const directRefNamespaceAllowlist = new Set(
 );
 const scanDirs = (
   process.env.LOCAL_PLATFORM_PACKAGE_SCAN_DIRS ??
-  "tests,wasmopticon,wordpress/wasmer.toml,fixtures,src/app"
+  "tests,wasmopticon,fixtures,src/app"
 )
   .split(",")
   .map((part) => part.trim())
