@@ -151,7 +151,7 @@ jobs:
             .local-platform/package-cache
             .local-platform/cache/edge/compiler_cache
             .local-platform/cache/edge/webc_cache
-          key: local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml', 'wordpress/wasmer.toml') }}
+          key: local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml') }}
           # Prefix fallbacks still help: the package-cache (downloaded webc
           # files) is edge-version-independent, so restoring a neighboring
           # entry saves the package downloads even when compiled artifacts

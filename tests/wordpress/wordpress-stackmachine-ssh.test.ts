@@ -66,7 +66,9 @@ function formatSshResult(result: SshExecResult): string {
 
 function expectSuccessful(result: SshExecResult): void {
   if (result.code !== 0) {
-    throw new Error(`Expected command to exit with 0.\n${formatSshResult(result)}`);
+    throw new Error(
+      `Expected command to exit with 0.\n${formatSshResult(result)}`,
+    );
   }
 }
 
@@ -134,8 +136,6 @@ async function runStep(
   return result;
 }
 
-
-
 let env: TestEnv;
 let app: DeployApp;
 let conn: Client | undefined;
@@ -164,12 +164,16 @@ function assertSetupSucceeded(): void {
     throw error;
   }
   setupErrorReported = true;
-  throw setupError instanceof Error ? setupError : new Error(String(setupError));
+  throw setupError instanceof Error
+    ? setupError
+    : new Error(String(setupError));
 }
 
 function requireId(value: number | undefined, label: string): number {
   if (value === undefined) {
-    throw new Error(`${label} is not set; an earlier WordPress SSH test failed`);
+    throw new Error(
+      `${label} is not set; an earlier WordPress SSH test failed`,
+    );
   }
   return value;
 }
@@ -181,11 +185,12 @@ function wpCliTest(
   options: WpCliTestOptions = {},
 ): void {
   const testName =
-    typeof options.skip === "string" ? `${name} [skipped: ${options.skip}]` : name;
+    typeof options.skip === "string"
+      ? `${name} [skipped: ${options.skip}]`
+      : name;
   const runner = async () => {
     assertSetupSucceeded();
-    const resolvedCommand =
-      typeof command === "function" ? command() : command;
+    const resolvedCommand = typeof command === "function" ? command() : command;
     await runStep(
       runWp,
       name,
@@ -209,9 +214,9 @@ describe(SUITE_NAME, () => {
     try {
       const client = await env.stackmachineSdk();
       app = await deployStackMachineWordpress(env, client, {
-      siteName: "WordPress SSH integration test",
-      origin: SUITE_NAME,
-    });
+        siteName: "WordPress SSH integration test",
+        origin: SUITE_NAME,
+      });
 
       expect(app.adminUrl).toBeTruthy();
       await validateWordpressIsLive(env, app.url);
@@ -274,10 +279,14 @@ describe(SUITE_NAME, () => {
     await env.finalizeAppCleanup(deployAppToAppInfo(app), preserve);
   });
 
-  wpCliTest("wp eval returns JSON", `wp eval 'echo json_encode(["status" => "ok"]);'`, (result) => {
-    expectSuccessful(result);
-    expect(JSON.parse(result.stdout)).toEqual({ status: "ok" });
-  });
+  wpCliTest(
+    "wp eval returns JSON",
+    `wp eval 'echo json_encode(["status" => "ok"]);'`,
+    (result) => {
+      expectSuccessful(result);
+      expect(JSON.parse(result.stdout)).toEqual({ status: "ok" });
+    },
+  );
 
   wpCliTest(
     "wp wasmer liveconfig",
@@ -474,15 +483,23 @@ describe(SUITE_NAME, () => {
     expect(result.stdout.split(/\s+/)).toContain("hello");
   });
 
-  wpCliTest("wp plugin activate hello", "wp plugin activate hello", (result) => {
-    expectSuccessful(result);
-    expect(result.stdout).toMatch(/Success:|already active/i);
-  });
+  wpCliTest(
+    "wp plugin activate hello",
+    "wp plugin activate hello",
+    (result) => {
+      expectSuccessful(result);
+      expect(result.stdout).toMatch(/Success:|already active/i);
+    },
+  );
 
-  wpCliTest("wp plugin deactivate hello", "wp plugin deactivate hello", (result) => {
-    expectSuccessful(result);
-    expect(result.stdout).toMatch(/Success:|already inactive/i);
-  });
+  wpCliTest(
+    "wp plugin deactivate hello",
+    "wp plugin deactivate hello",
+    (result) => {
+      expectSuccessful(result);
+      expect(result.stdout).toMatch(/Success:|already inactive/i);
+    },
+  );
 
   wpCliTest("wp theme list", "wp theme list --field=name", (result) => {
     expectSuccessful(result);
