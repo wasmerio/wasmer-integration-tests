@@ -12,8 +12,34 @@
     "test_command": "npx jest ./tests/app/app_banning.test.ts"
   },
   {
-    "id": "templates",
-    "test_command": "npx jest ./tests/app/templates.test.ts"
+    "id": "templates-1-of-6",
+    "display_id": "templates (1/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=1 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "templates-2-of-6",
+    "display_id": "templates (2/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=2 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "templates-3-of-6",
+    "display_id": "templates (3/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=3 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "templates-4-of-6",
+    "display_id": "templates (4/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=4 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "templates-5-of-6",
+    "display_id": "templates (5/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=5 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
+  },
+  {
+    "id": "templates-6-of-6",
+    "display_id": "templates (6/6)",
+    "test_command": "TEMPLATE_SHARD_INDEX=6 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
   },
   {
     "id": "ssh",

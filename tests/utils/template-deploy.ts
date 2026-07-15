@@ -46,6 +46,47 @@ export function filterTemplates(
   return filtered;
 }
 
+export function shardTemplates(
+  templates: AppTemplate[],
+  rawShardIndex?: string,
+  rawShardCount?: string,
+): AppTemplate[] {
+  if (rawShardIndex === undefined && rawShardCount === undefined) {
+    return templates;
+  }
+  if (rawShardIndex === undefined || rawShardCount === undefined) {
+    throw new Error(
+      "TEMPLATE_SHARD_INDEX and TEMPLATE_SHARD_COUNT must be set together",
+    );
+  }
+
+  const shardIndex = parsePositiveInteger(
+    rawShardIndex,
+    "TEMPLATE_SHARD_INDEX",
+  );
+  const shardCount = parsePositiveInteger(
+    rawShardCount,
+    "TEMPLATE_SHARD_COUNT",
+  );
+  if (shardIndex > shardCount) {
+    throw new Error(
+      `TEMPLATE_SHARD_INDEX (${shardIndex}) must not exceed TEMPLATE_SHARD_COUNT (${shardCount})`,
+    );
+  }
+
+  return [...templates]
+    .sort((left, right) => left.slug.localeCompare(right.slug))
+    .filter((_, index) => index % shardCount === shardIndex - 1);
+}
+
+function parsePositiveInteger(raw: string, name: string): number {
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${name} must be a positive integer, got '${raw}'`);
+  }
+  return parsed;
+}
+
 export async function deployAndValidateTemplate(
   env: TestEnv,
   tpl: AppTemplate,
