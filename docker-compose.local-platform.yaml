@@ -159,7 +159,10 @@ services:
       - loki_data:/loki
 
   vector:
-    image: timberio/vector:latest-alpine
+    # Pinned: 0.57.0 rejects the instance_logs_to_loki label templates
+    # (template confinement check added in 0.57). Bumping past 0.56.x
+    # requires dangerously_allow_unconfined_template_resolution on the sink.
+    image: timberio/vector:0.56.0-alpine
     command: ["--config", "/etc/vector/vector.toml"]
     ports:
       - "127.0.0.1:${VECTOR_HTTP_PORT:-19089}:9089"
