@@ -43,6 +43,10 @@ You need `npm`, `node` and `pnpm`.
 
 Validate it's OK by running `make setup`
 
+### WordPress load test
+
+See the [WordPress load-test documentation](./loadtest/wordpress/README.md).
+
 ### Test target environment
 
 Tests are executed against a given test environment, and will create apps in a
