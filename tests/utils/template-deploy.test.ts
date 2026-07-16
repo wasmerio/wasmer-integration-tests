@@ -1,6 +1,7 @@
-import type { AppTemplate } from "../../src/backend";
+import type { AppInfo, AppTemplate } from "../../src/backend";
+import type { TestEnv } from "../../src/index";
 
-import { shardTemplates } from "./template-deploy";
+import { deployAndValidateTemplate, shardTemplates } from "./template-deploy";
 
 function templates(...slugs: string[]): AppTemplate[] {
   return slugs.map((slug) => ({ name: slug, slug }));
@@ -57,4 +58,105 @@ describe("shardTemplates", () => {
       );
     },
   );
+});
+
+// Cleanup contract for deployAndValidateTemplate: an app that exists
+// server-side when a step fails must flow through the preserve-aware
+// env.deleteApp() queue, never an unconditional `wasmer app delete`.
+// Deleting such an app destroys the evidence needed to investigate
+// deploy-then-unreachable failures (QA-599).
+describe("deployAndValidateTemplate cleanup", () => {
+  const template: AppTemplate = { name: "demo", slug: "demo" };
+
+  interface StubOptions {
+    deployFails?: boolean;
+    appGetFails?: boolean;
+  }
+
+  interface StubCalls {
+    rawDeletes: string[][];
+    queuedDeletes: AppInfo[];
+    recorded: unknown[];
+  }
+
+  function stubEnv(options: StubOptions): { env: TestEnv; calls: StubCalls } {
+    const calls: StubCalls = {
+      rawDeletes: [],
+      queuedDeletes: [],
+      recorded: [],
+    };
+    const env = {
+      namespace: "test-namespace",
+      edgeServer: undefined,
+      runWasmerCommand: async ({ args }: { args: string[] }) => {
+        const command = args.slice(0, 2).join(" ");
+        if (command.startsWith("deploy") && options.deployFails) {
+          throw new Error("App still not reachable after 5 minutes...");
+        }
+        if (command === "app get") {
+          if (options.appGetFails) {
+            throw new Error("Unable to query app");
+          }
+          return {
+            stdout: JSON.stringify({
+              id: "da_stub",
+              name: args[2].split("/")[1],
+              url: "https://stub.wasmer.app",
+              active_version: { id: "dav_stub" },
+            }),
+          };
+        }
+        if (command === "app delete") {
+          calls.rawDeletes.push(args);
+        }
+        return { stdout: "" };
+      },
+      deleteApp: async (app: AppInfo) => {
+        calls.queuedDeletes.push(app);
+      },
+      recordDeployedApp: async (input: unknown) => {
+        calls.recorded.push(input);
+      },
+      fetchApp: async () => ({ status: 200, body: null }),
+    };
+    return { env: env as unknown as TestEnv, calls };
+  }
+
+  test("passing deploy routes cleanup through the preserve-aware queue", async () => {
+    const { env, calls } = stubEnv({});
+
+    await deployAndValidateTemplate(env, template);
+
+    expect(calls.queuedDeletes).toHaveLength(1);
+    expect(calls.rawDeletes).toHaveLength(0);
+  });
+
+  test("unreachable-after-deploy failure preserves the created app", async () => {
+    const { env, calls } = stubEnv({ deployFails: true });
+
+    await expect(deployAndValidateTemplate(env, template)).rejects.toThrow(
+      "not reachable",
+    );
+
+    // The app exists server-side, so it must be recovered, recorded for the
+    // failure report, and queued (where a failed test preserves it) — never
+    // deleted directly.
+    expect(calls.queuedDeletes).toHaveLength(1);
+    expect(calls.queuedDeletes[0].id).toBe("da_stub");
+    expect(calls.recorded).toHaveLength(1);
+    expect(calls.rawDeletes).toHaveLength(0);
+  });
+
+  test("app invisible to `app get` after failure is swept up directly", async () => {
+    const { env, calls } = stubEnv({ deployFails: true, appGetFails: true });
+
+    await expect(deployAndValidateTemplate(env, template)).rejects.toThrow(
+      "not reachable",
+    );
+
+    expect(calls.queuedDeletes).toHaveLength(0);
+    expect(calls.recorded).toHaveLength(0);
+    expect(calls.rawDeletes).toHaveLength(1);
+    expect(calls.rawDeletes[0][2]).toMatch(/^test-namespace\/t-/);
+  });
 });
