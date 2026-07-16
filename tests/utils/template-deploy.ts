@@ -175,17 +175,34 @@ export async function deployAndValidateTemplate(
       );
     }
   } catch (err) {
-    if (appInfo) {
-      markCurrentJestTestFailed();
-    }
+    markCurrentJestTestFailed();
     if (options?.formatFailureOutput) {
       throw formatTemplateCommandError(err);
     }
     throw err;
   } finally {
+    if (!appInfo && appCreated) {
+      // A step between `app create` and `app get` threw (e.g. deploy exiting
+      // with "app still not reachable after 5 minutes"), so the app may exist
+      // server-side without a loaded appInfo. Recover it here: deleting it
+      // outright would destroy the one artifact needed to distinguish a
+      // platform routing bug from an app that never existed.
+      appInfo = await loadTemplateAppInfo(
+        env,
+        appName,
+        tempDir,
+        tpl.slug,
+      ).catch(() => null);
+      if (appInfo) {
+        await recordTemplateApp(env, appInfo).catch(() => {});
+      }
+    }
+
     if (appInfo) {
       await env.deleteApp(appInfo);
     } else if (appCreated) {
+      // `app get` cannot see the app, so there is nothing to preserve; sweep
+      // up whatever half-created remnant the backend may still hold.
       await env.runWasmerCommand({
         args: ["app", "delete", `${env.namespace}/${appName}`],
         noAssertSuccess: true,
