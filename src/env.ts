@@ -1698,9 +1698,14 @@ async function fetchWithHostOverride(
             }
             responseHeaders.set(key, normalizedValue);
           }
+          const status = res.statusCode ?? 500;
+          // The Response constructor rejects a body for null-body statuses
+          // (204/205/304), which Edge legitimately returns for cache
+          // revalidation and empty responses.
+          const isNullBodyStatus = [204, 205, 304].includes(status);
           resolve(
-            new Response(Buffer.concat(chunks), {
-              status: res.statusCode ?? 500,
+            new Response(isNullBodyStatus ? null : Buffer.concat(chunks), {
+              status,
               statusText: res.statusMessage ?? "",
               headers: responseHeaders,
             }),
