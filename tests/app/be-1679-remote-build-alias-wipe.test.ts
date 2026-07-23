@@ -32,7 +32,12 @@ import { createTempDir } from "../../src/fs";
 //    default alias after the wipe, so nothing regenerates the deployment
 //    alias and its URL turns into an Edge `unknown_domain` 400.
 //
-// While the backend bug is present these tests FAIL — that is the repro.
+// These tests assert the *correct* behavior, so they are expected to stay
+// red until BE-1679 is resolved. That is intentional: the suite reflects the
+// current state of the product, and this file is the fastest path to a green
+// pipeline — fixing the backend makes it pass as-is, and it then remains in
+// place as the permanent regression test. Please do not skip, quarantine, or
+// invert these tests; coordinate on the ticket instead.
 
 const REMOTE_BUILD_TIMEOUT = 15 * 60 * 1000;
 

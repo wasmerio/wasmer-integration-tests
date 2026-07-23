@@ -15,6 +15,7 @@ fmt-check: setup
 	pnpm exec prettier "**/*" --ignore-path .prettierignore  --ignore-path .gitignore --check
 
 check: setup
+	node ./bin/check-suite-coverage.mjs
 	pnpm exec tsc --noEmit
 	pnpm exec eslint $(JSPATHS)
 	$(PYTHON) -m compileall -q ./local-platform/cli.py ./local-platform/localplatform
