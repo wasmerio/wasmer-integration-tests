@@ -60,4 +60,4 @@ Notes:
 - Errors: Throw Error with actionable context (inputs, ids). Don’t swallow errors. For command/fetch helpers, use noAssertSuccess to opt out of default assertions.
 - Async: Prefer async/await. Avoid unhandled promises. Respect jest timeouts (default 180s) and use provided sleep util for polling.
 - Logging: Use console.debug/info sparingly. Never log secrets/tokens. Honor VERBOSE and MAX_LINE_PRINT_LENGTH.
-- Tests: Always use TestEnv helpers for CLI calls and HTTP to Edge to respect env/registry/namespace. Place tests under tests/<domain>.
+- Tests: Always use TestEnv helpers for CLI calls and HTTP to Edge to respect env/registry/namespace. Place tests under tests/<domain>. When adding or changing tests, follow the `add-integration-test` skill (.agents/skills/add-integration-test/SKILL.md).

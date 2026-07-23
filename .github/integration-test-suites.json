@@ -1,7 +1,7 @@
 [
   {
     "id": "general",
-    "test_command": "npx jest ./tests/general/"
+    "test_command": "npx jest ./tests/general/ ./tests/utils/"
   },
   {
     "id": "jobs",
@@ -9,7 +9,7 @@
   },
   {
     "id": "apps",
-    "test_command": "npx jest ./tests/app/app_banning.test.ts"
+    "test_command": "npx jest ./tests/app/ --testPathIgnorePatterns=tests/app/templates"
   },
   {
     "id": "templates-1-of-6",
@@ -42,6 +42,11 @@
     "test_command": "TEMPLATE_SHARD_INDEX=6 TEMPLATE_SHARD_COUNT=6 npx jest ./tests/app/templates.test.ts"
   },
   {
+    "id": "wordpress",
+    "display_id": "wordpress (stackmachine)",
+    "test_command": "npx jest ./tests/wordpress"
+  },
+  {
     "id": "ssh",
     "test_command": "npx jest ./tests/ssh"
   },
@@ -58,6 +63,6 @@
   },
   {
     "id": "stackmachine-sdk",
-    "test_command": "npx jest tests/stackmachine/stackmachine-sdk-"
+    "test_command": "npx jest tests/stackmachine/"
   }
 ]
