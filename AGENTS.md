@@ -32,6 +32,16 @@ Notes:
 - Run tests by name: npx jest -t "partial test name"
 - Increase logging: VERBOSE=true npx jest … (command/env output is truncated unless VERBOSE=true)
 
+### Failure reproductions (ass)
+
+- `ass` is the declarative failure-reproduction harness (`ass/`, design in `docs/anti-slop-shield-v1.md`). Invoke it as `./bin/ass …` or `pnpm ass …` (`pnpm run` prints a preamble that breaks the harness's single-voice output; `./bin/ass` avoids it).
+- Check the machine: `./bin/ass doctor` — per-capability pass/fail with remediation; missing optional tools degrade one capability each. First-time setup: `make ass` hands the setup contract (`ass/bootstrap/SETUP.md`) to your agent harness.
+- Drafts live in `experiments/<slug>/` and run with `./bin/ass try <slug>`; persisted reproductions live in `repros/<slug>/` and run with `./bin/ass run <slug>`. `./bin/ass promote <slug>` graduates a draft, pinning it to what its last recorded run resolved.
+- Overrides are the same on both (D12): `--env`, `--cpus`, `--executor`, `--component <name>=<selector>`, with `--edge`/`--backend` as sugar. Overriding a component is how a fix is verified; it never edits the declaration.
+- Workloads run through one of `jest`, `artillery-http` or `raw-wasmer`; `verdict.baseline` additionally runs the same probe on a native engine (`python3`, `node`, `go`, `cargo`, `binary`) so a reproduction claim is a measured divergence, not an assertion. A self-verdicting probe states its result in one `ASS-VERDICT: reproduced|not-reproduced|inconclusive [detail]` line on a declared channel.
+- Only `edge` and `backend` need the local stack. A scenario with neither (nor an app fixture, perturbation or `edge`/`backend` log predicate) runs without booting anything — `./bin/ass run wax-603` takes ~30s.
+- Remote targets: `--env dev|bugtopia|prod` runs through the standard `TestEnv` identity flow (token from `WASMER_TOKEN` or `~/.wasmer/wasmer.toml`). The harness deploys `package:` probe fixtures as apps on demand, reads verdicts off the D14-windowed app logs and the HTTP body, and tears them down — `./bin/ass run wax-603 --env dev --executor artillery-http` is the reference. Perturbations are ignored remotely (loud warning); declared `edge`/`backend` pins derive a floating-mode run. Production additionally requires `--i-know-this-is-prod`, an interactive confirmation, and fixed non-overridable load caps; stress profiles and `jest` workloads refuse prod outright.
+
 ### Local platform test flow
 
 - Full disposable local stack + tests: make local-test
@@ -53,6 +63,7 @@ Notes:
 ## Code style guidelines
 
 - Modules/imports: ESM only. Order: node builtins (prefer node: specifier) → third‑party → local (src/…). Use named imports when possible.
+- Dependencies: standard library first. Prefer node: builtins to their fullest extent (util.parseArgs for flat flag parsing, node:fs, node:crypto) before reaching for a package; add a third-party dependency only when the stdlib genuinely cannot cover the need. Sanctioned exception: commander for CLI subcommand routing, which util.parseArgs does not provide (see worklog D16).
 - Formatting: Prettier (see .prettierignore). Do not hand-format; run make fmt.
 - Linting: ESLint 9 + typescript-eslint recommended config. Fix only issues in changed lines.
 - Types: Avoid any. Prefer unknown + zod parsing where needed. Add explicit return types for exported functions. Use interfaces/types for shapes.

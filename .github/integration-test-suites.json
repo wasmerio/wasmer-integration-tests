@@ -1,7 +1,7 @@
 [
   {
     "id": "general",
-    "test_command": "npx jest ./tests/general/ ./tests/utils/"
+    "test_command": "npx jest ./tests/general/ ./tests/utils/ ./tests/ass/"
   },
   {
     "id": "jobs",

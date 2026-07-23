@@ -9,3 +9,6 @@ jest-output.log
 local.env
 .local-platform/
 __pycache__/
+*.ass-bak
+*.ass-absent
+.ass/

@@ -178,6 +178,14 @@ class Ctx:
             )
         )
 
+    def backend_archive_cache_dir(self) -> Path:
+        return Path(
+            self.default_env(
+                "LOCAL_PLATFORM_BACKEND_ARCHIVE_CACHE_DIR",
+                str(self.local_platform_dir / "cache" / "backend-archives"),
+            )
+        )
+
     def set_default_ports(self) -> None:
         for var, (default, _service) in PORT_DEFAULTS.items():
             self.default_env(var, str(default))

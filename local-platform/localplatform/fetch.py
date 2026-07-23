@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 from .lib import (
@@ -44,9 +45,151 @@ def _fetch_env(ctx: Ctx) -> dict[str, str]:
     return {**ctx.env, **_PLAIN_OUTPUT_ENV}
 
 
+# ECR account -> AWS profile, mirroring wasmer/backend's Makefile
+# (`ACCOUNT_<env>` + `AWS_PROFILE := tf-<env>`, both set from the tf-aws root).
+# An ECR hostname carries the owning account, so the right profile follows from
+# the image ref itself rather than per-machine configuration.
+ECR_ACCOUNT_PROFILES = {
+    "376772435488": "tf-dev",
+    "864723396604": "tf-bugt",
+    "658661676544": "tf-prod",
+}
+
+_ECR_REGISTRY_PATTERN = re.compile(
+    r"^(\d{12})\.dkr\.ecr\.([^.]+)\.amazonaws\.com$"
+)
+
+
+def parse_ecr_registry(registry: str) -> tuple[str, str] | None:
+    """(owning account, region) for an ECR registry host, else None."""
+    match = _ECR_REGISTRY_PATTERN.match(registry)
+    return (match.group(1), match.group(2)) if match else None
+
+
+def select_ecr_profile(
+    registry_account: str,
+    configured: str | None,
+    account_of: Callable[[str | None], str | None],
+) -> tuple[str | None, str | None]:
+    """Pick the AWS profile that actually authenticates to the account owning
+    the registry. `None` means ambient credentials (CI's assumed role).
+
+    A profile for the wrong account still logs in successfully — it mints a
+    valid token for *its* account — and only fails much later at `docker pull`
+    with an opaque 403. So the account is verified up front instead.
+
+    Returns (profile, warning).
+    """
+    derived = ECR_ACCOUNT_PROFILES.get(registry_account)
+    candidates: list[str | None] = []
+    for candidate in (configured, derived, None):
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    for candidate in candidates:
+        if account_of(candidate) != registry_account:
+            continue
+        if configured is not None and candidate != configured:
+            return candidate, (
+                f"configured AWS profile {configured} authenticates to a "
+                f"different account than ECR registry account "
+                f"{registry_account}; using "
+                + (f"profile {candidate}" if candidate else "ambient credentials")
+                + " instead (set BACKEND_ECR_AWS_PROFILE to silence this)"
+            )
+        return candidate, None
+
+    fallback = configured or derived
+    return fallback, (
+        f"no AWS profile authenticates to ECR registry account "
+        f"{registry_account} (tried: "
+        + ", ".join(c or "<ambient credentials>" for c in candidates)
+        + f"); proceeding with "
+        + (f"profile {fallback}" if fallback else "ambient credentials")
+        + " — a pull may fail with 'not authorized to perform: ecr:BatchGetImage'"
+    )
+
+
 def edge_cache_path(ctx: Ctx) -> Path:
     key = hashlib.sha256(ctx.get("EDGE_RESOLVED").encode()).hexdigest()
     return ctx.edge_cache_dir() / key
+
+
+def backend_archive_cache_path(ctx: Ctx, source: str) -> Path:
+    key = hashlib.sha256(source.encode()).hexdigest()
+    return ctx.backend_archive_cache_dir() / key
+
+
+def is_immutable_artifact_source(resolved: str) -> bool:
+    """True only for selectors whose content can never change under the same
+    string: a run-id-pinned CI artifact or a concrete-tag release asset.
+    path:/url:/latest selectors may float and must never be cached."""
+    if resolved.startswith("artifact:"):
+        return True
+    if resolved.startswith("github-release:"):
+        repo, _, rest = resolved.removeprefix("github-release:").partition(":")
+        tag, _, pattern = rest.partition(":")
+        return bool(repo and pattern) and tag != "latest"
+    return False
+
+
+def _link_or_copy(source: Path, destination: Path) -> None:
+    """Hardlink when possible (cache and run dirs share .local-platform, and
+    the archive is only ever read); fall back to a copy."""
+    remove_path_if_exists(destination)
+    try:
+        os.link(source, destination)
+    except OSError:
+        shutil.copyfile(source, destination)
+
+
+def materialize_backend_archive(ctx: Ctx, source: str, archive: Path) -> None:
+    """Fetch the backend image archive through a content-addressed cache for
+    immutable sources, mirroring the Edge binary cache: a pinned repro or
+    bisection run must not re-download an unchanged ~1GB tar every boot.
+    No eviction; entries accumulate per pinned version under
+    cache/backend-archives — prune manually if disk matters."""
+    if not is_immutable_artifact_source(source):
+        log(f"Fetching Backend image archive from {source}")
+        fetch_to_file(ctx, source, archive, "backend-image")
+        return
+    cache_path = backend_archive_cache_path(ctx, source)
+    if cache_path.is_file():
+        log(f"Using cached Backend image archive: {cache_path}")
+        _link_or_copy(cache_path, archive)
+        return
+    log(f"Fetching Backend image archive from {source}")
+    fetch_to_file(ctx, source, archive, "backend-image")
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    # Populate atomically so a parallel/interrupted run never sees a
+    # half-written archive as a cache hit.
+    cache_tmp = cache_path.with_name(cache_path.name + ".tmp")
+    _link_or_copy(archive, cache_tmp)
+    os.replace(cache_tmp, cache_path)
+    log(f"Cached Backend image archive: {cache_path}")
+
+
+def _aws_account(ctx: Ctx, profile: str | None) -> str | None:
+    """Read-only probe: which AWS account does `profile` authenticate to?
+    None when unknown (profile absent, SSO expired, offline)."""
+    env = {**_fetch_env(ctx)}
+    if profile:
+        env["AWS_PROFILE"] = profile
+    else:
+        env.pop("AWS_PROFILE", None)
+    try:
+        result = subprocess.run(
+            ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.decode(errors="replace").strip() or None
 
 
 def maybe_login_backend_registry(ctx: Ctx, image_ref: str) -> None:
@@ -73,21 +216,32 @@ def maybe_login_backend_registry(ctx: Ctx, image_ref: str) -> None:
         )
         return
 
-    ecr_match = re.search(r"\.dkr\.ecr\.([^.]*)\.amazonaws\.com", registry)
-    if not ecr_match:
+    parsed = parse_ecr_registry(registry)
+    if parsed is None:
         return
     if not shutil.which("aws"):
         return
+    registry_account, registry_region = parsed
 
-    region = ecr_match.group(1) or ctx.get("BACKEND_PROD_AWS_REGION") or "us-east-1"
-    profile = (
-        ctx.get("BACKEND_ECR_AWS_PROFILE")
-        or ctx.get("BACKEND_PROD_AWS_PROFILE")
-        or "tf-prod"
+    region = registry_region or ctx.get("BACKEND_PROD_AWS_REGION") or "us-east-1"
+    configured = (
+        ctx.get("BACKEND_ECR_AWS_PROFILE") or ctx.get("BACKEND_PROD_AWS_PROFILE") or None
     )
-    log(f"Authenticating Docker to ECR registry {registry} using AWS profile {profile}")
+    profile, warning = select_ecr_profile(
+        registry_account, configured, lambda candidate: _aws_account(ctx, candidate)
+    )
+    if warning:
+        log_warn(warning)
+    log(
+        f"Authenticating Docker to ECR registry {registry} "
+        + (f"using AWS profile {profile}" if profile else "using ambient credentials")
+    )
 
-    aws_env = {**_fetch_env(ctx), "AWS_PROFILE": profile}
+    aws_env = {**_fetch_env(ctx)}
+    if profile:
+        aws_env["AWS_PROFILE"] = profile
+    else:
+        aws_env.pop("AWS_PROFILE", None)
 
     def ecr_docker_login() -> bool:
         password = subprocess.run(
@@ -110,6 +264,12 @@ def maybe_login_backend_registry(ctx: Ctx, image_ref: str) -> None:
         return
     if ctx.is_ci():
         fail(f"Failed to authenticate Docker to ECR registry {registry}")
+    if not profile:
+        fail(
+            f"Failed to authenticate Docker to ECR registry {registry} with "
+            "ambient credentials and no AWS profile authenticates to account "
+            f"{registry_account}"
+        )
     log(f"AWS profile {profile} may need SSO login; attempting aws sso login")
     run(["aws", "sso", "login"], env=aws_env)  # interactive; inherits stdio
     if not ecr_docker_login():
@@ -318,9 +478,8 @@ def fetch_backend_image(ctx: Ctx) -> None:
     backend_image_ref = ctx.get("BACKEND_IMAGE_REF")
     backend_image_source = ctx.get("BACKEND_IMAGE_SOURCE")
     if backend_image_source:
-        log(f"Fetching Backend image archive from {backend_image_source}")
         archive = run_dir / "artifacts" / "backend-image.tar"
-        fetch_to_file(ctx, backend_image_source, archive, "backend-image")
+        materialize_backend_archive(ctx, backend_image_source, archive)
         load_backend_image_archive(ctx, archive, backend_image_ref)
         return
 

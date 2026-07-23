@@ -137,7 +137,18 @@ def run_matrix():
     lines.append(
         f"verdict: {'REPRODUCED - ' + str(fails) + ' primitive(s) broken' if fails else 'all primitives OK'}"
     )
+    # ASS probe contract (D11): one marker line the harness reads off a
+    # declared channel. It rides in the body so a deployed probe reports over
+    # HTTP, and is repeated on stderr for process runs; identical repeats are
+    # one logical verdict, so both may be seen at once.
+    lines.append(ass_verdict(fails))
     return "\n".join(lines) + "\n"
+
+
+def ass_verdict(fails):
+    if fails:
+        return f"ASS-VERDICT: reproduced {fails} primitive(s) broken"
+    return "ASS-VERDICT: not-reproduced all primitives ok"
 
 
 def serve(port):
@@ -149,6 +160,14 @@ def serve(port):
                 body = b"ok\n"
             else:
                 body = run_matrix().encode()
+                # Mirror the ASS-VERDICT line to stderr so the deployed
+                # probe's {type: log} channel (Vector->Loki app logs)
+                # carries the same verdict as the HTTP body.
+                print(
+                    body.decode().rstrip("\n").rsplit("\n", 1)[-1],
+                    file=sys.stderr,
+                    flush=True,
+                )
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(body)))
@@ -165,6 +184,10 @@ def serve(port):
 if __name__ == "__main__":
     # Default is HTTP mode (Edge does not set PORT; it routes to 8080).
     if "--once" in sys.argv:
-        print(run_matrix(), end="", flush=True)
+        report = run_matrix()
+        print(report, end="", flush=True)
+        # stderr is the {type: log} channel: stdout is where a wrapper is
+        # most likely to interleave or swallow output.
+        print(report.rstrip("\n").rsplit("\n", 1)[-1], file=sys.stderr, flush=True)
     else:
         serve(int(os.environ.get("PORT", "8080")))

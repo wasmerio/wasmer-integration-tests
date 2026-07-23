@@ -1,5 +1,5 @@
-.PHONY: fmt fmt-check check lint test clean all local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs local-platform-status
-JSPATHS = ./src ./tests ./bin
+.PHONY: fmt fmt-check check lint test clean all ass local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs local-platform-status
+JSPATHS = ./src ./tests ./bin ./ass
 JEST_ARGS ?=
 PYTHON ?= python3
 LOCAL_PLATFORM_CLI = $(PYTHON) ./local-platform/cli.py
@@ -25,6 +25,12 @@ lint: setup fmt-check check
 
 test: setup
 	pnpm exec jest $(JEST_ARGS)
+
+# Zero-config bootstrap: detects the agentic harness in use and hands it the
+# setup contract. Deliberately not dependent on `setup` — it runs before the
+# toolchain exists.
+ass:
+	@sh ./ass/bootstrap/detect.sh
 
 local-test: setup
 	$(LOCAL_PLATFORM_CLI) local-test

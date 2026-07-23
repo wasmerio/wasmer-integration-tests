@@ -1,0 +1,140 @@
+# Reusable ASS pipeline (QA-642): run one committed persisted reproduction
+# and alert on the *assessment*, never the raw verdict fact (D6/D15). An
+# `open` scenario reproducing on its pins exits 0 and stays quiet; a `fixed`
+# scenario reproducing on floating selectors exits 2 and fails the job.
+#
+# Drafts never run here: `ass run` resolves slugs against `repros/` only, so
+# an experiments/ slug fails validation (exit 1) before anything executes.
+# Production is deliberately not an offered environment: its interactive
+# confirmation gate cannot be given by CI.
+#
+# Scheduling note (D5): no cron entries exist, here or elsewhere, and none
+# may target Bugtopia with stress profiles until QA-643 qualifies it as the
+# approved stress environment. Dispatch- and call-triggered runs only —
+# plus one TEMPORARY push trigger below.
+name: ASS run
+
+on:
+  # TEMPORARY (QA-642 validation, PR #181): every push to the ASS branch
+  # runs the reference reproduction (wax-603, local) through this pipeline
+  # so its wiring is proven before merge. Remove once the run is green —
+  # push events carry no inputs, so the run falls back to the defaults.
+  push:
+    branches: [qa-634-anti-slop-shield-foundation]
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Persisted scenario slug under repros/ (e.g. wax-603)"
+        required: true
+        type: string
+      env:
+        description: "Target environment"
+        required: false
+        default: dev
+        type: choice
+        options: [local, dev, bugtopia]
+      executor:
+        description: "Load profile to run (defaults to the declared one)"
+        required: false
+        default: ""
+        type: string
+      fail_threshold:
+        description: >-
+          Strictness: "alert" fails only on an alerting assessment (exit 2);
+          "inconclusive" additionally fails on inconclusive (exit 3).
+          Setup failures (exit 4) always fail.
+        required: false
+        default: alert
+        type: choice
+        options: [alert, inconclusive]
+  workflow_call:
+    inputs:
+      scenario:
+        required: true
+        type: string
+      env:
+        required: false
+        default: dev
+        type: string
+      executor:
+        required: false
+        default: ""
+        type: string
+      fail_threshold:
+        required: false
+        default: alert
+        type: string
+    secrets:
+      wasmer_token:
+        description: "Registry token override for remote targets"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: ass run ${{ inputs.scenario || 'wax-603' }} (${{ inputs.env || 'local' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Add pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup project
+        shell: bash
+        run: make setup
+
+      - name: Install wasmer CLI
+        # raw-wasmer scenarios run the guest locally on the runner.
+        shell: bash
+        run: |
+          curl https://get.wasmer.io -sSfL | sh
+          echo "$HOME/.wasmer/bin" >> "$GITHUB_PATH"
+
+      - name: Run the scenario
+        id: run
+        shell: bash
+        # Inputs go through env so a crafted value cannot splice into the
+        # script. Identity: an explicit workflow_call secret wins, then the
+        # target's CI user token (same secrets the integration suites use).
+        env:
+          WASMER_TOKEN: ${{ secrets.wasmer_token || (inputs.env == 'bugtopia' && secrets.BUGT_BACKEND_CIUSER_TOKEN) || secrets.DEV_BACKEND_CIUSER_TOKEN }}
+          SCENARIO: ${{ inputs.scenario || 'wax-603' }}
+          TARGET_ENV: ${{ inputs.env || 'local' }}
+          EXECUTOR: ${{ inputs.executor }}
+          FAIL_THRESHOLD: ${{ inputs.fail_threshold || 'alert' }}
+        run: |
+          set +e
+          args=(run "$SCENARIO" --env "$TARGET_ENV")
+          if [[ -n "$EXECUTOR" ]]; then
+            args+=(--executor "$EXECUTOR")
+          fi
+          ./bin/ass "${args[@]}"
+          code=$?
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          # D15: 0 expected/informational (incl. candidate-fix), 1 usage,
+          # 2 alerting assessment, 3 inconclusive, 4 setup-failed.
+          case "$code" in
+            0) exit 0 ;;
+            3) [[ "$FAIL_THRESHOLD" == "alert" ]] && exit 0 || exit 3 ;;
+            *) exit "$code" ;;
+          esac
+
+      - name: Upload run report
+        # The report is the reviewable artifact; a run that cannot produce
+        # one must be visibly broken, never quietly green (if-no-files-found).
+        if: always() && steps.run.outputs.exit-code != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ass-report-${{ inputs.scenario || 'wax-603' }}-${{ inputs.env || 'local' }}
+          path: |
+            .local-platform/ass/runs/*/report.json
+            .local-platform/ass/*-setup-failed.json
+            .local-platform/runs/*/ass/report.json
+          if-no-files-found: error
