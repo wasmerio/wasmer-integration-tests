@@ -272,6 +272,55 @@ export function buildPhpApp(
   return spec;
 }
 
+const PERSISTENT_COUNTER_FIXTURE_PATH = pathModule.join(
+  __dirname,
+  "..",
+  "..",
+  "fixtures",
+  "php",
+  "durable-counter.php",
+);
+
+export function buildPersistentCounterApp(
+  additionalAppYamlSettings?: Record<string, unknown>,
+): AppDefinition {
+  return buildPhpApp(
+    fs.readFileSync(PERSISTENT_COUNTER_FIXTURE_PATH, "utf-8"),
+    {
+      volumes: [{ name: "data", mount: "/data" }],
+      ...additionalAppYamlSettings,
+    },
+  );
+}
+
+function persistentCounterPathFor(name: string): string {
+  if (!/^[a-z-]+$/.test(name)) {
+    throw new Error(
+      `Persistent counter name must contain only lowercase letters and hyphens: ${name}`,
+    );
+  }
+  return name;
+}
+
+/**
+ * Returns the durable counter endpoint: GET reads it and POST increments it.
+ * The default counter is `/inc`; named counters are `/inc/<name>`.
+ */
+export function persistentCounterPath(name = "counter"): string {
+  if (name === "counter") {
+    return "/inc";
+  }
+  return `/inc/${persistentCounterPathFor(name)}`;
+}
+
+export function persistentCounterIncrementPath(name = "counter"): string {
+  return persistentCounterPath(name);
+}
+
+export function persistentCounterIncrementCommand(name = "counter"): string {
+  return `require '/src/index.php'; incrementPersistentCounter('${persistentCounterPathFor(name)}');`;
+}
+
 export function buildPythonApp(
   pyCode: string,
   additionalAppYamlSettings?: Record<string, unknown>,

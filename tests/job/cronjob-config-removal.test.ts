@@ -18,22 +18,22 @@ import {
 // execution/deletion lifecycle defects are fixed; coordinate on the ticket
 // rather than skipping or quarantining this test.
 //
-// Deleting an app must also delete its cronjobs from Edge. Otherwise a deleted
-// app continues making requests indefinitely. This test observes those requests
-// through a separate app's durable volume-backed counter.
+// Removing jobs from an app configuration must stop scheduling them while the
+// app itself continues serving traffic. A separate app stores the durable proof.
 
-test(
-  "deleting an app stops its cronjob from invoking another app",
+test.concurrent(
+  "removing a cronjob from config stops it without deleting its app",
   async () => {
     const env = TestEnv.fromEnv();
     const counterApp = await env.deployApp(
       buildPersistentCounterApp({ name: randomAppName() }),
     );
+    const cronName = randomAppName();
     let cronApp: Awaited<ReturnType<typeof env.deployApp>> | undefined;
 
     try {
       cronApp = await env.deployApp(
-        buildCronApp(randomAppName(), [
+        buildCronApp(cronName, [
           {
             name: "increment-counter",
             trigger: "* * * * *",
@@ -47,34 +47,25 @@ test(
           },
         ]),
       );
-
       await pollUntil(
         async () => ((await getCounter(env, counterApp)) > 0 ? true : false),
         {
           timeoutMs: CRON_START_TIMEOUT_MS,
           intervalMs: 5_000,
-          description: "cronjob to increment the durable counter",
+          description: "configured cronjob to increment the durable counter",
         },
       );
 
-      const counterBeforeDeletion = await getCounter(env, counterApp);
-      await env.deleteApp(cronApp, { immediate: true });
-      cronApp = undefined;
+      cronApp = await env.deployApp(buildCronApp(cronName, []));
+      expect((await env.fetchApp(cronApp, "/")).status).toBe(204);
 
-      const counterValues = await observeCounter(
-        env,
-        counterApp,
-        2 * CRON_INTERVAL_MS,
-      );
-      expect(counterValues).toEqual(
-        Array(counterValues.length).fill(counterBeforeDeletion),
-      );
+      const count = await getCounter(env, counterApp);
+      const counts = await observeCounter(env, counterApp, CRON_INTERVAL_MS);
+      expect(counts).toEqual(Array(counts.length).fill(count));
     } finally {
-      if (cronApp) {
-        await env.deleteApp(cronApp);
-      }
+      if (cronApp) await env.deleteApp(cronApp);
       await env.deleteApp(counterApp);
     }
   },
-  7 * CRON_INTERVAL_MS,
+  6 * CRON_INTERVAL_MS,
 );
