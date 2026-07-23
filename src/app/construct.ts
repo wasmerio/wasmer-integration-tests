@@ -53,6 +53,7 @@ export const FetchJob = z.object({
   fetch: z.object({
     path: z.string(),
     timeout: z.string(),
+    method: z.string().optional(),
   }),
 });
 

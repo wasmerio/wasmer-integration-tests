@@ -324,7 +324,7 @@ jobs:
   enabled: true
   storage: in_memory
   cronjobs:
-    enabled: false
+    enabled: true
     max_concurrency_per_node: 2
     minimum_interval: 1s
   fetch_allow_invalid_certs: false
