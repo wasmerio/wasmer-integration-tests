@@ -66,9 +66,14 @@ test(
         counterApp,
         2 * CRON_INTERVAL_MS,
       );
-      expect(counterValues).toEqual(
-        Array(counterValues.length).fill(counterBeforeDeletion),
+      const changedCounter = counterValues.find(
+        (value) => value !== counterBeforeDeletion,
       );
+      if (changedCounter !== undefined) {
+        throw new Error(
+          `Cronjob invocation detected after app deletion: expected every counter observation to remain ${counterBeforeDeletion}, but observed ${changedCounter}. All observations: [${counterValues.join(", ")}]`,
+        );
+      }
     } finally {
       if (cronApp) {
         await env.deleteApp(cronApp);
