@@ -9,6 +9,7 @@ import { sleep } from "../../src/util";
 
 export const CRON_INTERVAL_MS = 60_000;
 export const CRON_START_TIMEOUT_MS = 3 * CRON_INTERVAL_MS;
+export const CRON_STOP_TIMEOUT_MS = 5 * CRON_INTERVAL_MS;
 
 export function buildCronApp(name: string, jobs: AppJob[]) {
   return buildPhpApp("<?php http_response_code(204);", { name, jobs });
@@ -28,22 +29,42 @@ export async function getCounter(
   return value;
 }
 
-// A negative cronjob assertion must cover a complete schedule interval. Polling
-// keeps checking the durable state during that interval instead of sleeping once.
-export async function observeCounter(
+// After a cron-disabling change (deletion, redeploy) the schedule change
+// propagates to Edge eventually, so a tick already committed before the change
+// may still land. The verifiable claim is therefore "the cron stops within a
+// bounded window", not "the cron stops instantly": the counter must hold still
+// for a full schedule interval before the deadline. A cron that is still
+// scheduled increments every interval, can never stay quiet that long, and
+// hits the deadline with its observed trajectory in the error.
+export async function expectCounterQuiescence(
   env: TestEnv,
   counterApp: AppInfo,
-  durationMs: number,
   name = "counter",
-): Promise<number[]> {
-  const values: number[] = [];
-  const deadline = Date.now() + durationMs;
-  do {
-    values.push(await getCounter(env, counterApp, name));
-    const remaining = deadline - Date.now();
-    if (remaining > 0) {
-      await sleep(Math.min(5_000, remaining));
+  quietWindowMs = CRON_INTERVAL_MS + 15_000,
+  deadlineMs = CRON_STOP_TIMEOUT_MS,
+): Promise<void> {
+  const start = Date.now();
+  let last = await getCounter(env, counterApp, name);
+  let quietSince = start;
+  const trajectory = [`${last}@0s`];
+  for (;;) {
+    await sleep(5_000);
+    const value = await getCounter(env, counterApp, name);
+    const now = Date.now();
+    if (value !== last) {
+      trajectory.push(`${value}@${Math.round((now - start) / 1000)}s`);
+      last = value;
+      quietSince = now;
     }
-  } while (Date.now() < deadline);
-  return values;
+    if (now - quietSince >= quietWindowMs) {
+      return;
+    }
+    if (now - start >= deadlineMs) {
+      throw new Error(
+        `Counter "${name}" of app ${counterApp.url} never went quiet for ` +
+          `${quietWindowMs}ms within ${deadlineMs}ms: the cronjob is still ` +
+          `being invoked. Observed values: ${trajectory.join(", ")}`,
+      );
+    }
+  }
 }

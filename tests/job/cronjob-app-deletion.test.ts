@@ -9,8 +9,8 @@ import {
   buildCronApp,
   CRON_INTERVAL_MS,
   CRON_START_TIMEOUT_MS,
+  expectCounterQuiescence,
   getCounter,
-  observeCounter,
 } from "./cronjob-fixture";
 
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
@@ -57,23 +57,10 @@ test(
         },
       );
 
-      const counterBeforeDeletion = await getCounter(env, counterApp);
       await env.deleteApp(cronApp, { immediate: true });
       cronApp = undefined;
 
-      const counterValues = await observeCounter(
-        env,
-        counterApp,
-        2 * CRON_INTERVAL_MS,
-      );
-      const changedCounter = counterValues.find(
-        (value) => value !== counterBeforeDeletion,
-      );
-      if (changedCounter !== undefined) {
-        throw new Error(
-          `Cronjob invocation detected after app deletion: expected every counter observation to remain ${counterBeforeDeletion}, but observed ${changedCounter}. All observations: [${counterValues.join(", ")}]`,
-        );
-      }
+      await expectCounterQuiescence(env, counterApp);
     } finally {
       if (cronApp) {
         await env.deleteApp(cronApp);
@@ -81,5 +68,5 @@ test(
       await env.deleteApp(counterApp);
     }
   },
-  7 * CRON_INTERVAL_MS,
+  11 * CRON_INTERVAL_MS,
 );

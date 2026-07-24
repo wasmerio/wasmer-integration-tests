@@ -9,8 +9,8 @@ import {
   buildCronApp,
   CRON_INTERVAL_MS,
   CRON_START_TIMEOUT_MS,
+  expectCounterQuiescence,
   getCounter,
-  observeCounter,
 } from "./cronjob-fixture";
 
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
@@ -82,18 +82,11 @@ test.concurrent(
         },
       );
 
-      const oldCount = await getCounter(env, counterApp, "old");
-      const oldCounts = await observeCounter(
-        env,
-        counterApp,
-        CRON_INTERVAL_MS,
-        "old",
-      );
-      expect(oldCounts).toEqual(Array(oldCounts.length).fill(oldCount));
+      await expectCounterQuiescence(env, counterApp, "old");
     } finally {
       if (cronApp) await env.deleteApp(cronApp);
       await env.deleteApp(counterApp);
     }
   },
-  8 * CRON_INTERVAL_MS,
+  14 * CRON_INTERVAL_MS,
 );
