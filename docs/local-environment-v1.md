@@ -85,8 +85,8 @@ local platform **Edge listens on isolated host ports** (HTTP `19080`, HTTPS
 directly routable on the host.
 
 Tests must reach apps through the `TestEnv` Edge helpers, which send the request
-to `EDGE_SERVER` with the app host as the `Host` header and rewrite redirect
-`Location`s that point at the in-container `:9443` port:
+to `EDGE_SERVER` with the app host as the `Host` header and normalize local
+redirect `Location`s:
 
 - `env.fetchApp(app, path, opts)` — preferred; also waits for the deployed
   version unless `noWait: true`.
