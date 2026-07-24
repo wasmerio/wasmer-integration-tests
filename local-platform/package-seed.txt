@@ -25,6 +25,8 @@ wasmer/edgejs-quickjs@=0.0.7
 wasmer/edgejs-quickjs@=0.0.6
 wasmer/edgejs-quickjs@=0.1.0
 wasmer/pandoc@=0.0.1
+phpix/phpix-83-32bit@=0.3.0-rc.3
+# Note: the following PHP may not be needed anymore, please recheck
 phpix/phpix-83-32bit@=0.3.0-rc.2
 php/php-32@=8.3.2102
 php/php-32@=8.3.2101-rc.1
