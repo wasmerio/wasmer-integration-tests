@@ -1,0 +1,5 @@
+name: fh-repro-temp
+owner: wasmer
+package: .
+kind: wasmer.io/App.v0
+app_id: da_R9EIBt1UV4WN

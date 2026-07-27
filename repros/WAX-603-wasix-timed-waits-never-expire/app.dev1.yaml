@@ -1,0 +1,5 @@
+name: fh-repro-temp
+owner: lorentz-dev
+package: .
+kind: wasmer.io/App.v0
+app_id: da_RMMIrt4Uv0dg
