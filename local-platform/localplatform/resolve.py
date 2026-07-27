@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -126,44 +127,57 @@ def kubectl_get_backend_image(ctx: Ctx) -> str:
     return image
 
 
+_GH_RELEASE_LIST_ATTEMPTS = 3
+_GH_RELEASE_LIST_RETRY_DELAYS = (5, 15)
+
+
 def _gh_release_list(
     ctx: Ctx, repo: str, limit: int, error_log: Path | None = None
 ) -> list[dict] | None:
     """`gh release list --json tagName,publishedAt`, newest first, or None on
-    failure (logging a summary of gh's stderr)."""
-    result = subprocess.run(
-        [
-            "gh",
-            "release",
-            "list",
-            "--repo",
-            repo,
-            "--limit",
-            str(limit),
-            "--order",
-            "desc",
-            "--json",
-            "tagName,publishedAt",
-        ],
-        env=dict(ctx.env),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode != 0:
+    failure (logging a summary of gh's stderr). Failures are retried: GitHub's
+    API intermittently 5xxes (e.g. 504 Gateway Timeout), and a transient error
+    here must not masquerade as "no matching release exists"."""
+    for attempt in range(_GH_RELEASE_LIST_ATTEMPTS):
+        result = subprocess.run(
+            [
+                "gh",
+                "release",
+                "list",
+                "--repo",
+                repo,
+                "--limit",
+                str(limit),
+                "--order",
+                "desc",
+                "--json",
+                "tagName,publishedAt",
+            ],
+            env=dict(ctx.env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            try:
+                return json.loads(result.stdout or b"[]")
+            except json.JSONDecodeError as error:
+                log_warn(
+                    f"Could not parse gh release list output for {repo}: {error}"
+                )
+                return None
         stderr = result.stderr.decode(errors="replace")
         if error_log is not None:
             error_log.parent.mkdir(parents=True, exist_ok=True)
             error_log.write_text(stderr)
-        summary = " ".join(stderr.splitlines()[:5]).strip()
+        summary = " ".join(stderr.splitlines()[:5]).strip()[:300]
         log_warn(
-            f"Failed to list releases from {repo}: {summary or 'unknown gh error'}"
+            f"Failed to list releases from {repo} "
+            f"(attempt {attempt + 1}/{_GH_RELEASE_LIST_ATTEMPTS}): "
+            f"{summary or 'unknown gh error'}"
         )
-        return None
-    try:
-        return json.loads(result.stdout or b"[]")
-    except json.JSONDecodeError as error:
-        log_warn(f"Could not parse gh release list output for {repo}: {error}")
-        return None
+        if attempt < _GH_RELEASE_LIST_ATTEMPTS - 1:
+            time.sleep(_GH_RELEASE_LIST_RETRY_DELAYS[attempt])
+    return None
 
 
 def _published_at(release: dict) -> datetime:
@@ -234,6 +248,7 @@ def resolve_backend_dev_github_release(ctx: Ctx) -> str:
             f"Resolving latest Backend dev release from {repo} "
             f"(tag suffix: {suffix})"
         )
+        releases = None
         if shutil.which("gh"):
             releases = _gh_release_list(
                 ctx,
@@ -249,10 +264,19 @@ def resolve_backend_dev_github_release(ctx: Ctx) -> str:
                 "release automatically"
             )
         if not tag:
+            if releases is None:
+                fail(
+                    f"BACKEND_VERSION=resolve_dev could not list {repo} releases "
+                    f"(GitHub API error or missing access; see "
+                    f"logs/backend-release-list.err). This is usually transient "
+                    f"— retry, or set BACKEND_DEV_GITHUB_TAG explicitly. Ensure "
+                    f"LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on "
+                    f"{repo}."
+                )
             fail(
-                f"BACKEND_VERSION=resolve_dev could not find a {repo} release "
-                f"ending in {suffix}. Ensure LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has "
-                f"Contents: Read on {repo}, or set BACKEND_DEV_GITHUB_TAG explicitly."
+                f"BACKEND_VERSION=resolve_dev listed {len(releases)} {repo} "
+                f"releases but none end in {suffix}. Wait for a dev release or "
+                f"set BACKEND_DEV_GITHUB_TAG explicitly."
             )
         log(f"Resolved Backend dev release tag: {tag}")
 
@@ -420,6 +444,7 @@ def resolve_edge_dev_github_release(ctx: Ctx) -> str:
         f"Resolving latest Edge dev release from {repo} "
         f"(tag suffix: {suffix}, asset pattern: {pattern})"
     )
+    releases = None
     if shutil.which("gh"):
         releases = _gh_release_list(
             ctx,
@@ -445,11 +470,19 @@ def resolve_edge_dev_github_release(ctx: Ctx) -> str:
         )
 
     if not tag:
+        if releases is None:
+            fail(
+                f"EDGE_VERSION=resolve_dev could not list {repo} releases "
+                f"(GitHub API error or missing access; see "
+                f"logs/edge-release-list.err). This is usually transient — "
+                f"retry, or set EDGE_DEV_GITHUB_TAG explicitly. Ensure "
+                f"LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on "
+                f"{repo}."
+            )
         fail(
-            f"EDGE_VERSION=resolve_dev could not find a {repo} release ending in "
-            f"{suffix}. If recent releases are only bugt/prod, wait for a dev "
-            f"release or set EDGE_DEV_GITHUB_TAG explicitly. Ensure "
-            f"LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on {repo}."
+            f"EDGE_VERSION=resolve_dev listed {len(releases)} {repo} releases "
+            f"but none end in {suffix}. If recent releases are only bugt/prod, "
+            f"wait for a dev release or set EDGE_DEV_GITHUB_TAG explicitly."
         )
     log(f"Resolved Edge dev release tag: {tag}")
     return f"github-release:{repo}:{tag}:{pattern}"
