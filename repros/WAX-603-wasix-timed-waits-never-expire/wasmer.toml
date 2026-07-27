@@ -1,0 +1,14 @@
+[dependencies]
+"python/python" = "=3.13.5"
+
+[fs]
+"/app" = "."
+
+[[command]]
+name = "script"
+module = "python/python:python"
+runner = "wasi"
+
+[command.annotations.wasi]
+main-args = ["/app/repro.py"]
+env = ["PYTHONEXECUTABLE=/bin/python"]
