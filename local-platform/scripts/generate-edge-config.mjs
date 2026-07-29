@@ -325,8 +325,8 @@ jobs:
   storage: in_memory
   cronjobs:
     enabled: true
-    max_concurrency_per_node: 2
-    minimum_interval: 1s
+    max_concurrency_per_node: 10
+    minimum_interval: 60s
   # Local app domains use Edge's self-signed development certificate.
   fetch_allow_invalid_certs: true
 
