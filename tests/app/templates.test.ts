@@ -19,6 +19,12 @@ describe("app templates deploy", () => {
     process.env.TEMPLATE_SHARD_COUNT,
   );
 
+  // Registries with few templates (e.g. bugt) can leave a shard empty; Jest
+  // fails a suite that registers zero tests, so put in a skipped placeholder.
+  if (selectedTemplates.length === 0) {
+    test.skip("no templates assigned to this shard", () => {});
+  }
+
   for (const tpl of selectedTemplates) {
     test.concurrent("Template remote build: " + tpl.slug, async () => {
       const env = TestEnv.fromEnv();
