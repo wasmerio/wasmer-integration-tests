@@ -451,7 +451,7 @@ async function expectNoCacheRequiresRevalidation(
   app: AppInfo,
   path: string,
 ): Promise<void> {
-  const initial = await fetchText(env, app, path);
+  const initial = await fetchText(env, app, path, { rawHttp: true });
   expect(initial.status).toBe(200);
   expect(initial.json?.token).toBeDefined();
 
@@ -460,6 +460,7 @@ async function expectNoCacheRequiresRevalidation(
 
   const revalidated = await fetchText(env, app, path, {
     headers: { "if-none-match": etag ?? "" },
+    rawHttp: true,
   });
 
   if (revalidated.status === 304) {
@@ -661,31 +662,38 @@ describe("app CDN cache smoke", () => {
       expect(englishAgain.json?.requestHeaders["accept-language"]).toBe("en");
 
       const etagPath = uniquePath("/cache/etag");
-      const etagInitial = await fetchText(env, app, etagPath);
+      const etagInitial = await fetchText(env, app, etagPath, {
+        rawHttp: true,
+      });
       expect(etagInitial.status).toBe(200);
       const etag = etagInitial.headers.get("etag");
       expect(etag).toBe('"fixture-etag"');
 
       const etagMatched = await fetchText(env, app, etagPath, {
         headers: { "if-none-match": etag ?? "" },
+        rawHttp: true,
       });
       expect(etagMatched.status).toBe(304);
       expect(etagMatched.body).toBe("");
 
       const etagMiss = await fetchText(env, app, etagPath, {
         headers: { "if-none-match": '"not-the-fixture-etag"' },
+        rawHttp: true,
       });
       expect(etagMiss.status).toBe(200);
       expect(etagMiss.json?.token).toBeDefined();
 
       const lastModifiedPath = uniquePath("/cache/last-modified");
-      const lastModifiedInitial = await fetchText(env, app, lastModifiedPath);
+      const lastModifiedInitial = await fetchText(env, app, lastModifiedPath, {
+        rawHttp: true,
+      });
       expect(lastModifiedInitial.status).toBe(200);
       const lastModified = lastModifiedInitial.headers.get("last-modified");
       expect(lastModified).toBe("Wed, 21 Oct 2015 07:28:00 GMT");
 
       const lastModifiedMatched = await fetchText(env, app, lastModifiedPath, {
         headers: { "if-modified-since": lastModified ?? "" },
+        rawHttp: true,
       });
       expect(lastModifiedMatched.status).toBe(304);
       expect(lastModifiedMatched.body).toBe("");
