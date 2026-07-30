@@ -47,6 +47,10 @@ Validate it's OK by running `make setup`
 
 See the [WordPress load-test documentation](./loadtest/wordpress/README.md).
 
+### Next.js/edgejs load test
+
+See the [Next.js load-test documentation](./loadtest/nextjs/README.md).
+
 ### Test target environment
 
 Tests are executed against a given test environment, and will create apps in a
