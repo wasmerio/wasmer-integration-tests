@@ -169,7 +169,8 @@ http_proxy:
   overload_backoff: null
   package_compilation_timeout: 900s
   cdn_cache:
-    enabled: false
+    enabled: true
+    require_router_capability: true
     directory: /data/edge-cdn-cache
     max_disk_usage: 128Mb
     max_object_size: 10Mb
