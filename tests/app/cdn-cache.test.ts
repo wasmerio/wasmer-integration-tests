@@ -82,11 +82,13 @@ async function jsonResponse(request, route, init = {}) {
     payload.body = body;
   }
 
-  return new Response(request.method === "HEAD" ? null : JSON.stringify(payload), {
+  const responseBody = JSON.stringify(payload);
+  return new Response(request.method === "HEAD" ? null : responseBody, {
     status: init.status ?? 200,
     headers: {
       "content-type": "application/json",
       ...init.headers,
+      "content-length": String(new TextEncoder().encode(responseBody).byteLength),
     },
   });
 }
