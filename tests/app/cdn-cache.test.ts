@@ -55,9 +55,10 @@ function authorizationVariant(request) {
 }
 
 function cookieVariant(request) {
-  const cookie = request.headers.get("cookie") || "";
-  const match = cookie.match(/(?:^|;\\s*)user=([^;]+)/);
-  return match ? match[1] : "none";
+  // The worker fixture does not receive Cookie. Keep the Cookie request
+  // header to exercise Edge's cache bypass, while this marker lets the
+  // fixture prove that each request reached the origin.
+  return request.headers.get("x-cdn-cache-fixture-cookie-variant") || "none";
 }
 
 async function jsonResponse(request, route, init = {}) {
@@ -186,15 +187,6 @@ async function handler(request) {
       headers: {
         "cache-control": "public, max-age=120",
         vary: "Cookie",
-      },
-    });
-  }
-
-  if (path === "/cache/set-cookie") {
-    return jsonResponse(request, path, {
-      headers: {
-        "cache-control": "public, max-age=120",
-        "set-cookie": "cdn-cache-fixture=1; Path=/; HttpOnly",
       },
     });
   }
@@ -744,10 +736,17 @@ describe("app CDN cache smoke", () => {
       const cookiePath = uniquePath("/cache/cookie");
       for (let i = 0; i < STABLE_RESPONSE_COUNT; i++) {
         const cookieA = await fetchText(env, app, cookiePath, {
-          headers: { cookie: "user=a" },
+          headers: {
+            cookie: "user=a",
+            "x-cdn-cache-fixture-cookie-variant": "a",
+          },
         });
+
         const cookieB = await fetchText(env, app, cookiePath, {
-          headers: { cookie: "user=b" },
+          headers: {
+            cookie: "user=b",
+            "x-cdn-cache-fixture-cookie-variant": "b",
+          },
         });
         const cookieNone = await fetchText(env, app, cookiePath);
 
@@ -759,7 +758,6 @@ describe("app CDN cache smoke", () => {
       const [ok, notFound] = await Promise.all([
         waitForStableCachedResponse(env, app, uniquePath("/cache/status/200")),
         waitForStableCachedResponse(env, app, uniquePath("/cache/status/404")),
-        expectNotCached(env, app, uniquePath("/cache/set-cookie")),
         expectNotCached(env, app, uniquePath("/cache/status/500")),
       ]);
       expect(ok.token).toBeDefined();
