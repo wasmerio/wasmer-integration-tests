@@ -1,0 +1,17 @@
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Exists purely so /api/hit exercises Prisma's wasm-bindgen query compiler
+// once per request - see loadtest/nextjs/nextjs-load-test-local.ts.
+model PageView {
+  id        Int      @id @default(autoincrement())
+  path      String
+  createdAt DateTime @default(now())
+}

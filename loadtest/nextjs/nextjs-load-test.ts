@@ -9,54 +9,29 @@
  * fixtures/nextjs/blog-load-test/lib/posts.ts), so there is no crawl phase -
  * the route list is imported directly instead of discovered from HTML.
  *
+ * See also nextjs-load-test-local.ts, which runs the same fixture locally via
+ * `wasmer run` instead of deploying it, so it can read the process's own
+ * memory usage directly.
+ *
  * Run `pnpm run loadtest:nextjs --help` for CLI details.
  */
 
-import path from "node:path";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import process from "node:process";
-
-import { execa } from "execa";
-import { dump } from "js-yaml";
 
 import { TestEnv, flushPendingAppCleanups } from "../../src/env";
 import type { AppInfo } from "../../src/backend";
 import { copyPackageAnonymous } from "../../src/package";
 import { randomAppName } from "../../src/app/construct";
 import { resolveOwner } from "../../src/wasmer_cli";
-import { POSTS } from "../../fixtures/nextjs/blog-load-test/lib/posts";
-
-const DEFAULT_CONCURRENCY = 10;
-const DEFAULT_COUNT = 1;
-const CACHE_CONTROL_HEADER = "no-cache, no-store, max-age=0";
-
-// Run via `pnpm run loadtest:nextjs`, which always executes from the repo
-// root, so process.cwd() is a reliable anchor here (this file is real ESM at
-// runtime - no __dirname - unlike CommonJS-scoped code under src/).
-const FIXTURE_DIR = path.join(
-  process.cwd(),
-  "fixtures",
-  "nextjs",
-  "blog-load-test",
-);
-
-function positiveInteger(
-  name: string,
-  value: string | undefined,
-  defaultValue: number,
-): number {
-  if (!value) {
-    return defaultValue;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error(`${name} must be a positive integer, received: ${value}`);
-  }
-
-  return parsed;
-}
+import {
+  DEFAULT_CONCURRENCY,
+  DEFAULT_COUNT,
+  FIXTURE_DIR,
+  positiveInteger,
+  routeCount,
+  routePaths,
+  runArtillery,
+} from "./shared";
 
 interface ParsedArguments {
   help?: boolean;
@@ -104,8 +79,8 @@ function printUsage(): void {
   console.info(`Usage: nextjs-load-test.ts [options]
 
 Deploys fixtures/nextjs/blog-load-test to Wasmer Edge, load-tests every
-route (the home page plus ${POSTS.length} post pages), and deletes the app
-afterward.
+route (the home page plus ${routeCount() - 1} post pages), and deletes the
+app afterward.
 
 Options:
   --concurrency <number>   Concurrent Artillery virtual users (default: ${DEFAULT_CONCURRENCY})
@@ -114,66 +89,6 @@ Options:
   -h, --help               Show this help message
 
 Set KEEP_APPS=1 to preserve the deployed app instead of deleting it.`);
-}
-
-function routePaths(): string[] {
-  return ["/", ...POSTS.map((post) => `/posts/${post.slug}`)];
-}
-
-async function runArtillery(
-  routes: string[],
-  concurrency: number,
-  count: number,
-  target: URL,
-): Promise<void> {
-  const workDir = await mkdtemp(path.join(tmpdir(), "nextjs-load-test-"));
-  const configPath = path.join(workDir, "artillery.yml");
-  const requests = routes.map((route) => ({ get: { url: route } }));
-
-  await writeFile(
-    configPath,
-    dump({
-      config: {
-        target: target.origin,
-        http: {
-          defaults: {
-            headers: {
-              "cache-control": CACHE_CONTROL_HEADER,
-            },
-          },
-        },
-        phases: [
-          {
-            name: `Load every route with ${concurrency} virtual users`,
-            duration: 1,
-            arrivalCount: concurrency,
-            maxVusers: concurrency,
-          },
-        ],
-        plugins: {
-          "metrics-by-endpoint": {},
-        },
-      },
-      scenarios: [
-        {
-          name: "Load the Next.js blog fixture",
-          flow: [
-            {
-              loop: requests,
-              count,
-            },
-          ],
-        },
-      ],
-    }),
-  );
-
-  console.info(
-    `Load-testing ${routes.length} routes; Artillery input: ${workDir}`,
-  );
-  await execa("pnpm", ["exec", "artillery", "run", configPath], {
-    stdio: "inherit",
-  });
 }
 
 async function main(): Promise<void> {
