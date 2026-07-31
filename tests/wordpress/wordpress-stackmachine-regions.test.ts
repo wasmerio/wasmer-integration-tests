@@ -57,6 +57,14 @@ describe("stackmachine wordpress regions", () => {
       try {
         expect(app.adminUrl).toBeTruthy();
         await validateWordpressIsLive(env, app.url);
+        // User PostgreSQL v1 compatibility commitment: WordPress apps are
+        // hard-locked to MySQL, `enableDatabase: true` alone is not enough
+        // evidence of the provisioned engine.
+        const databases = (await env.backend.getAppDatabases(app.id)).filter(
+          (db) => !db.deletedAt,
+        );
+        expect(databases).toHaveLength(1);
+        expect(databases[0].engine).toBe("MYSQL");
       } catch (error) {
         throw new Error(
           `StackMachine WordPress app '${app.id}' did not validate in region '${regionName}' (${app.url})`,

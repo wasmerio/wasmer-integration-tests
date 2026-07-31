@@ -99,6 +99,44 @@ export type ApiAppTemplates = {
   templates: AppTemplate[];
 };
 
+// Contract from `sm_be_gql/src/apps/db.rs` (BE-1659): generated names are
+// `db_<8hex>` / `user_<8hex>`, `engine` renders MYSQL for pre-engine rows,
+// `phpmyadminUrl` is null for PostgreSQL databases.
+const appDatabaseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  username: z.string(),
+  engine: z.enum(["MYSQL", "POSTGRES", "SQLITE"]),
+  host: z.string(),
+  port: z.string(),
+  phpmyadminUrl: z.string().nullable(),
+  dbExplorerUrl: z.string().nullable(),
+  deletedAt: z.string().nullable(),
+});
+
+export type AppDatabase = z.infer<typeof appDatabaseSchema>;
+
+const appDatabaseWithPasswordSchema = z.object({
+  database: appDatabaseSchema,
+  password: z.string(),
+});
+
+export type AppDatabaseWithPassword = z.infer<
+  typeof appDatabaseWithPasswordSchema
+>;
+
+const APP_DATABASE_FIELDS = `
+  id
+  name
+  username
+  engine
+  host
+  port
+  phpmyadminUrl
+  dbExplorerUrl
+  deletedAt
+`;
+
 export class BackendClient {
   url: string;
   token: string | null;
@@ -440,5 +478,167 @@ query($after:String) {
       after = page.pageInfo.endCursor;
     }
     return allTemplates;
+  }
+
+  // List the active databases linked to an app. Deliberately excludes the
+  // password field so response payloads stay free of secrets; use
+  // `getAppDatabasePassword` when a test needs to authenticate.
+  async getAppDatabases(appId: string): Promise<AppDatabase[]> {
+    const responseSchema = z.object({
+      node: z.object({
+        databases: z.object({
+          edges: z.array(z.object({ node: appDatabaseSchema })),
+        }),
+      }),
+    });
+
+    const query = `
+      query($id:ID!) {
+        node(id:$id) {
+          ... on DeployApp {
+            databases(first:10) {
+              edges {
+                node {
+                  ${APP_DATABASE_FIELDS}
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { id: appId });
+    const parsed = responseSchema.parse(res.data);
+    return parsed.node.databases.edges.map((edge) => edge.node);
+  }
+
+  async getAppDatabasePassword(appId: string): Promise<string | null> {
+    const responseSchema = z.object({
+      node: z.object({
+        databases: z.object({
+          edges: z.array(
+            z.object({ node: z.object({ password: z.string().nullable() }) }),
+          ),
+        }),
+      }),
+    });
+
+    const query = `
+      query($id:ID!) {
+        node(id:$id) {
+          ... on DeployApp {
+            databases(first:1) {
+              edges {
+                node {
+                  password
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { id: appId });
+    const parsed = responseSchema.parse(res.data);
+    return parsed.node.databases.edges[0]?.node.password ?? null;
+  }
+
+  // Engine-aware database provisioning (`createDatabaseAndLinkToApp`).
+  // `engine` must be the GraphQL enum value: MYSQL | POSTGRES | SQLITE.
+  async createDatabaseForApp(
+    appId: string,
+    engine: "MYSQL" | "POSTGRES" | "SQLITE",
+    name?: string,
+  ): Promise<AppDatabaseWithPassword> {
+    const responseSchema = z.object({
+      createDatabaseAndLinkToApp: appDatabaseWithPasswordSchema,
+    });
+
+    const query = `
+      mutation($appId:ID!, $dbEngine:DatabaseEngine!, $name:String) {
+        createDatabaseAndLinkToApp(input:{appId:$appId, dbEngine:$dbEngine, name:$name}) {
+          database {
+            ${APP_DATABASE_FIELDS}
+          }
+          password
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { appId, dbEngine: engine, name });
+    return responseSchema.parse(res.data).createDatabaseAndLinkToApp;
+  }
+
+  // Legacy engine-less provisioning (`createAppDb`); must keep defaulting to
+  // MySQL.
+  async createAppDbLegacy(
+    appId: string,
+    name?: string,
+  ): Promise<AppDatabaseWithPassword> {
+    const responseSchema = z.object({
+      createAppDb: appDatabaseWithPasswordSchema,
+    });
+
+    const query = `
+      mutation($id:ID!, $name:String) {
+        createAppDb(input:{id:$id, name:$name}) {
+          database {
+            ${APP_DATABASE_FIELDS}
+          }
+          password
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { id: appId, name });
+    return responseSchema.parse(res.data).createAppDb;
+  }
+
+  // Rotate the credentials of an app database. Changes both username and
+  // password without creating a new app version.
+  async rotateAppDbCredentials(
+    databaseId: string,
+  ): Promise<AppDatabaseWithPassword> {
+    const responseSchema = z.object({
+      rotateCredentialsForAppDb: appDatabaseWithPasswordSchema,
+    });
+
+    const query = `
+      mutation($id:ID!) {
+        rotateCredentialsForAppDb(input:{id:$id}) {
+          database {
+            ${APP_DATABASE_FIELDS}
+          }
+          password
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { id: databaseId });
+    return responseSchema.parse(res.data).rotateCredentialsForAppDb;
+  }
+
+  async deleteAppDb(databaseId: string): Promise<void> {
+    const responseSchema = z.object({
+      deleteAppDb: z.object({
+        success: z.boolean(),
+      }),
+    });
+
+    const query = `
+      mutation($id:ID!) {
+        deleteAppDb(input:{id:$id}) {
+          success
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery(query, { id: databaseId });
+    const success = responseSchema.parse(res.data).deleteAppDb.success;
+    if (!success) {
+      throw new Error(`Failed to delete app database: ${databaseId}`);
+    }
   }
 }
