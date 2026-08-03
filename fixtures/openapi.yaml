@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: Integration Test Fixture Contract
+  version: 1.0.0
+  description: |
+    Language-agnostic functional contract for the integration-test fixture
+    app. Implementations of this spec are generated as stubs for each
+    supported language; every implementation must behave identically so
+    the integration tests can validate the Wasmer virtualization backend
+    across all deployment targets — the local platform, Edge, and Edge in
+    the cloud — independently of the language the fixture is written in.
+
+    Capabilities covered: instance liveness, environment introspection for
+    managed databases, database connectivity, durable state via persistent
+    counters, outbound HTTP (blocking and non-blocking), and a catch-all
+    path echo with request logging.
+servers:
+  - url: "{appUrl}"
+    description: >-
+      Per-deployment base URL assigned when the fixture app is deployed to
+      the target under test (local platform, Edge, or cloud Edge).
+    variables:
+      appUrl:
+        default: http://localhost
+security: []
+tags:
+  - name: liveness
+    description: Prove the instance is up and serving requests.
+  - name: database-environment
+    description: >-
+      Introspect the managed-database environment variables injected into
+      the app, without opening a database connection.
+  - name: database-connectivity
+    description: >-
+      Open a real connection to the managed database using the injected
+      credentials.
+  - name: durable-state
+    description: >-
+      Persistent counters backed by the app's durable volume, proving
+      state survives across requests, instances, and restarts.
+  - name: outbound-http
+    description: >-
+      Perform outbound HTTP requests from inside the instance, in both
+      blocking and non-blocking mode, with a caller-controlled timeout.
+  - name: catch-all
+    description: >-
+      Any path not matched by another endpoint: echo the request path and
+      emit a log line, for routing and log-collection validation.
+paths:
+  /:
+    get:
+      tags: [liveness]
+      operationId: liveness
+      summary: Liveness greeting
+      description: Confirms the instance is running and can serve a response.
+      responses:
+        "200":
+          description: Fixed greeting payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    const: Hello World
+                required: [message]
+  /db-env:
+    get:
+      tags: [database-environment]
+      operationId: getDbEnvReport
+      summary: Report which managed-database env vars are injected
+      description: >-
+        Engine-agnostic: must never open a database connection, so it works
+        for any managed database engine. Non-secret values are echoed back;
+        the password is only reported as a presence boolean and must never
+        be included in the response.
+      responses:
+        "200":
+          description: Database environment report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbEnvReport"
+  /results:
+    get:
+      tags: [database-connectivity]
+      operationId: checkDbConnection
+      summary: Check database connectivity using the injected credentials
+      description: >-
+        Opens a connection to the managed database using the injected
+        `DB_*` environment variables and reports the outcome. Returns the
+        plain-text body `OK` on success. On failure the body names the
+        missing environment variables or describes the connection error.
+      responses:
+        "200":
+          description: Connectivity result (`OK` or an error description)
+          content:
+            text/plain:
+              schema:
+                type: string
+                examples: ["OK"]
+  /inc:
+    get:
+      tags: [durable-state]
+      operationId: readDefaultCounter
+      summary: Read the default counter without incrementing
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterValue"
+        "500":
+          $ref: "#/components/responses/CounterFailure"
+    post:
+      tags: [durable-state]
+      operationId: incrementDefaultCounter
+      summary: Increment the default counter and return the new value
+      description: >-
+        Increments must be atomic under concurrent requests (e.g. guarded
+        by a file lock or equivalent), so parallel increments never lose
+        updates.
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterValue"
+        "500":
+          $ref: "#/components/responses/CounterFailure"
+  /inc/{name}:
+    parameters:
+      - $ref: "#/components/parameters/CounterName"
+    get:
+      tags: [durable-state]
+      operationId: readNamedCounter
+      summary: Read a named counter without incrementing
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterValue"
+        "404":
+          description: Counter name does not match `^[a-z-]+$`
+        "500":
+          $ref: "#/components/responses/CounterFailure"
+    post:
+      tags: [durable-state]
+      operationId: incrementNamedCounter
+      summary: Increment a named counter and return the new value
+      description: >-
+        Same atomicity requirement as the default counter. A counter that
+        has never been written reads as `0`.
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterValue"
+        "404":
+          description: Counter name does not match `^[a-z-]+$`
+        "500":
+          $ref: "#/components/responses/CounterFailure"
+  /async:
+    post:
+      tags: [outbound-http]
+      operationId: proxyRequestNonBlocking
+      summary: Perform an outbound HTTP request using non-blocking I/O
+      description: >-
+        Issues the requested outbound HTTP call using the implementation
+        language's non-blocking / asynchronous I/O mechanism.
+      requestBody:
+        $ref: "#/components/requestBodies/ProxyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProxyResult"
+  /sync:
+    post:
+      tags: [outbound-http]
+      operationId: proxyRequestBlocking
+      summary: Perform an outbound HTTP request using blocking I/O
+      description: >-
+        Issues the requested outbound HTTP call using the implementation
+        language's blocking / synchronous I/O mechanism.
+      requestBody:
+        $ref: "#/components/requestBodies/ProxyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProxyResult"
+  /{path}:
+    get:
+      tags: [catch-all]
+      operationId: echoPath
+      summary: Echo the request path and log the request
+      description: >-
+        Handles every path not matched by another endpoint. The response
+        echoes the request path (leading and trailing slashes stripped)
+        together with the instance's unique deployment hash, which tests
+        use to distinguish deployments and bust caches. In addition, each
+        request emits a `YYYY-mm-dd HH:ii:ss - <path>` line to both stdout
+        and stderr so log-collection tests can assert on it.
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Any request path not matched by another endpoint
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Path echo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  echo:
+                    type: string
+                    description: Request path with surrounding slashes stripped
+                  unique_hash:
+                    type: string
+                    description: Per-deployment unique value injected at deploy time
+                required: [echo, unique_hash]
+components:
+  parameters:
+    CounterName:
+      name: name
+      in: path
+      required: true
+      description: Counter name; must match `^[a-z-]+$` (default counter is `counter`)
+      schema:
+        type: string
+        pattern: "^[a-z-]+$"
+  requestBodies:
+    ProxyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              method:
+                type: string
+                description: HTTP method for the outbound request
+              target:
+                type: string
+                format: uri
+                description: URL to request
+              timeout_ms:
+                type: number
+                description: Request timeout in milliseconds
+            required: [method, target, timeout_ms]
+  responses:
+    CounterValue:
+      description: Current counter value
+      content:
+        text/plain:
+          schema:
+            type: integer
+    CounterFailure:
+      description: Failed to access the durable counter storage
+    ProxyResult:
+      description: >-
+        Outcome of the outbound request. Errors (including timeouts) are
+        reported in-band with HTTP 200 and an `error` field, so tests can
+        always read the elapsed time.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                properties:
+                  body:
+                    type: string
+                    description: Response body of the outbound request
+                  status_code:
+                    type: integer
+                    description: Status code of the outbound request
+                  elapsed_time_ms:
+                    type: integer
+                    description: Wall-clock duration of the outbound request
+                required: [body, status_code, elapsed_time_ms]
+              - type: object
+                properties:
+                  error:
+                    type: string
+                    description: Human-readable failure reason
+                  status_code:
+                    type: integer
+                    const: 500
+                  elapsed_time_ms:
+                    type: integer
+                    description: Wall-clock duration until the failure
+                required: [error, status_code, elapsed_time_ms]
+  schemas:
+    DbEnvReport:
+      type: object
+      properties:
+        present:
+          type: array
+          items:
+            type: string
+          description: Required `DB_*` vars that are set
+        missing:
+          type: array
+          items:
+            type: string
+          description: Required `DB_*` vars that are absent
+        host:
+          type: [string, "null"]
+        port:
+          type: [string, "null"]
+        name:
+          type: [string, "null"]
+        username:
+          type: [string, "null"]
+        hasPassword:
+          type: boolean
+          description: Whether `DB_PASSWORD` is set (value never echoed)
+        hasDatabaseUrl:
+          type: boolean
+          description: Whether `DATABASE_URL` is set
+        hasDbEngine:
+          type: boolean
+          description: Whether `DB_ENGINE` is set
+      required:
+        - present
+        - missing
+        - host
+        - port
+        - name
+        - username
+        - hasPassword
+        - hasDatabaseUrl
+        - hasDbEngine
