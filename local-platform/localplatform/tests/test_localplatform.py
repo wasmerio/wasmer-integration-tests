@@ -222,6 +222,10 @@ class TestPackageList(TempDirTest):
                     "resolved": [
                         {"resolvedName": "wasmer/pkg-a", "resolvedVersion": "1.0.0"},
                         {"resolvedName": "wasmer/pkg-a", "resolvedVersion": "1.0.0"},
+                        {
+                            "resolvedName": "curl/curl",
+                            "resolvedVersion": "8.4.0+build.05",
+                        },
                         {"resolvedName": None, "resolvedVersion": "2.0"},
                     ]
                 }
@@ -230,15 +234,25 @@ class TestPackageList(TempDirTest):
         extra = self.write(
             "extra.txt",
             "# a comment\n"
-            "wasmer/pkg-b@=2.0.0  # pinned for tests\n"
+            "wasmer/pkg-b@2.0.0  # pinned for tests\n"
             "\n"
-            "wasmer/pkg-a@=1.0.0\n",
+            "wasmer/pkg-a@1.0.0\n",
         )
         output = self.tmp / "resolved.txt"
         packages = _build_package_list(seed, extra, output)
-        self.assertEqual(packages, ["wasmer/pkg-a@=1.0.0", "wasmer/pkg-b@=2.0.0"])
         self.assertEqual(
-            output.read_text(), "wasmer/pkg-a@=1.0.0\nwasmer/pkg-b@=2.0.0\n"
+            packages,
+            [
+                "wasmer/pkg-a@1.0.0",
+                "curl/curl@8.4.0+build.05",
+                "wasmer/pkg-b@2.0.0",
+            ],
+        )
+        self.assertEqual(
+            output.read_text(),
+            "wasmer/pkg-a@1.0.0\n"
+            "curl/curl@8.4.0+build.05\n"
+            "wasmer/pkg-b@2.0.0\n",
         )
 
     def test_missing_inputs_give_empty_list(self) -> None:

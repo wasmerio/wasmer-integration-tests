@@ -44,7 +44,10 @@ def _build_package_list(
             name = (package or {}).get("resolvedName")
             version = (package or {}).get("resolvedVersion")
             if name and version:
-                add(f"{name}@={version}")
+                # Edge's PackageSource syntax uses an exact package identifier here,
+                # not a semver requirement. This also preserves build metadata,
+                # which requirement parsing intentionally rejects.
+                add(f"{name}@{version}")
 
     if extra_list_path.exists():
         for line in extra_list_path.read_text().splitlines():
