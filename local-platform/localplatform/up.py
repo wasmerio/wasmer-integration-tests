@@ -237,6 +237,7 @@ def print_access_summary(ctx: Ctx) -> None:
 {cyan}│{reset} {dim}Vector{reset}         {green}http://127.0.0.1:{port('VECTOR_HTTP_PORT')}{reset}
 {cyan}│{reset} {dim}ClickHouse{reset}     {green}http://localhost:{port('CLICKHOUSE_HTTP_PORT')}{reset} {dim}(db={yellow}edge_metrics_local{reset}{dim} user={yellow}default{reset}{dim} password={yellow}root{reset}{dim}){reset}
 {cyan}│{reset} {dim}Postgres{reset}       localhost:{port('POSTGRES_PORT')} {dim}(db={yellow}wapm{reset}{dim} user={yellow}postgres{reset}{dim} password={yellow}postgres{reset}{dim}){reset}
+{cyan}│{reset} {dim}Postgres app DB{reset} localhost:{port('POSTGRES_APP_DB_PORT')} {dim}(db={yellow}postgres{reset}{dim} user={yellow}postgres{reset}{dim} password={yellow}postgres{reset}{dim}){reset}
 {cyan}│{reset} {dim}Redis{reset}          localhost:{port('REDIS_PORT')}
 {cyan}│{reset} {dim}MySQL app DB{reset}   localhost:{port('MYSQL_APP_DB_1_PORT')} {dim}(user={yellow}root{reset}{dim} password={yellow}root{reset}{dim}){reset}
 {cyan}└{rule}{reset}

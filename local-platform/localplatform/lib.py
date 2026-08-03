@@ -49,6 +49,7 @@ PORT_DEFAULTS: dict[str, tuple[int, str]] = {
     "EDGE_SSH_PORT": (19022, "Edge SSH/SFTP"),
     "EDGE_DNS_PORT": (19053, "Edge DNS"),
     "POSTGRES_PORT": (15432, "Postgres"),
+    "POSTGRES_APP_DB_PORT": (15434, "Postgres app DB"),
     "REDIS_PORT": (16379, "Redis"),
     "MYSQL_APP_DB_1_PORT": (13306, "MySQL app DB 1"),
     "MYSQL_APP_DB_2_PORT": (13307, "MySQL app DB 2"),

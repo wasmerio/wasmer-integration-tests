@@ -197,13 +197,18 @@ class TestResolvedJson(TempDirTest):
                     "compose_project_name": "wit_x",
                     "docker_cli_path": "/usr/bin/docker",
                     "docker_buildx_path": "/usr/libexec/docker/cli-plugins/docker-buildx",
-                    "ports": {"backend_http": "18000", "mysql_app_db_1": "13306"},
+                    "ports": {
+                        "backend_http": "18000",
+                        "postgres_app_db": "15434",
+                        "mysql_app_db_1": "13306",
+                    },
                 }
             ),
         )
         flat = read_resolved_json(path)
         self.assertEqual(flat["BACKEND_VERSION"], "resolve_prod")
         self.assertEqual(flat["BACKEND_HTTP_PORT"], "18000")
+        self.assertEqual(flat["POSTGRES_APP_DB_PORT"], "15434")
         self.assertEqual(flat["MYSQL_APP_DB_1_PORT"], "13306")
         self.assertEqual(flat["LOCAL_TEST_COMMAND"], "pnpm exec jest")
 
