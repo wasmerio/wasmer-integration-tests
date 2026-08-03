@@ -14,6 +14,7 @@ SERVICES = (
     "redis",
     "mysql_app_db_1",
     "mysql_app_db_2",
+    "postgres_app_db_1",
     "minio_persistent",
     "clickhouse",
     "loki",

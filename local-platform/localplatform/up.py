@@ -53,6 +53,7 @@ DEPENDENCY_SERVICES = (
     "redis",
     "mysql_app_db_1",
     "mysql_app_db_2",
+    "postgres_app_db_1",
     "minio_persistent",
     "minio_persistent_init",
     "clickhouse",
@@ -239,6 +240,7 @@ def print_access_summary(ctx: Ctx) -> None:
 {cyan}│{reset} {dim}Postgres{reset}       localhost:{port('POSTGRES_PORT')} {dim}(db={yellow}wapm{reset}{dim} user={yellow}postgres{reset}{dim} password={yellow}postgres{reset}{dim}){reset}
 {cyan}│{reset} {dim}Redis{reset}          localhost:{port('REDIS_PORT')}
 {cyan}│{reset} {dim}MySQL app DB{reset}   localhost:{port('MYSQL_APP_DB_1_PORT')} {dim}(user={yellow}root{reset}{dim} password={yellow}root{reset}{dim}){reset}
+{cyan}│{reset} {dim}Psql app DB{reset}    localhost:{port('POSTGRES_APP_DB_1_PORT')} {dim}(user={yellow}postgres{reset}{dim} password={yellow}postgres{reset}{dim}){reset}
 {cyan}└{rule}{reset}
 
 """

@@ -26,7 +26,11 @@ from .lib import (
 )
 
 
-def _detect_mysql_app_host(ctx: Ctx) -> str:
+def _detect_app_db_host(ctx: Ctx) -> str:
+    """Host the backend container uses to reach the app-database instances
+    (MySQL and Postgres). They publish ports on the host, so the docker
+    bridge gateway reaches them from any container. The override keeps its
+    historical MySQL-flavored name for compatibility."""
     host = ctx.get("LOCAL_PLATFORM_MYSQL_APP_HOST")
     if host:
         return host
@@ -68,16 +72,10 @@ def _smbe_dev_env_subcommand(ctx: Ctx, image_ref: str) -> list[str]:
     return ["develop", "local-dev-env"] if probe.returncode == 0 else ["local-dev-env"]
 
 
-def _skip_templates_args(ctx: Ctx, image_ref: str, dev_env_cmd: list[str]) -> list[str]:
-    """Template seeding is done by this repo's own tooling (up runs
-    seed-app-templates.mjs) instead of the seeder embedded in the backend
-    image. The embedded seeder hardcodes a GraphQL query against the public
-    registry, so registry schema drift breaks bootstrap for every already-built
-    backend image. Skip it whenever the image supports --skip-templates; set
-    LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1 to opt back in."""
-    if ctx.truthy("LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER"):
-        return []
-    help_output = try_output(
+def _dev_env_help_output(ctx: Ctx, image_ref: str, dev_env_cmd: list[str]) -> str:
+    """Help text of the image's local-dev-env command, used to feature-probe
+    optional flags that only newer backend images understand."""
+    return try_output(
         [
             "docker",
             "run",
@@ -91,6 +89,38 @@ def _skip_templates_args(ctx: Ctx, image_ref: str, dev_env_cmd: list[str]) -> li
         env=ctx.env,
         timeout=300,
     )
+
+
+def _app_postgres_args(ctx: Ctx, help_output: str, app_db_host: str) -> list[str]:
+    """Point the backend's Postgres app-database instance at the compose-run
+    postgres_app_db_1 container. Backend 8a2fdaff5 ("feat(BE-1659): Add psql
+    support", 2026-07) seeds a postgres deploy_appdatabaseconfig defaulting to
+    127.0.0.1:5434, which inside the backend container is the backend itself —
+    every postgres app-database provisioning then fails with ECONNREFUSED.
+    Older images predate psql support and reject the flags, so probe first."""
+    if "--app-postgres-host" not in help_output:
+        log_warn(
+            "Backend image does not support --app-postgres-host; "
+            "postgres app-database tests will fail against this image"
+        )
+        return []
+    return [
+        "--app-postgres-host",
+        app_db_host,
+        "--app-postgres-port",
+        ctx.get("POSTGRES_APP_DB_1_PORT"),
+    ]
+
+
+def _skip_templates_args(ctx: Ctx, help_output: str) -> list[str]:
+    """Template seeding is done by this repo's own tooling (up runs
+    seed-app-templates.mjs) instead of the seeder embedded in the backend
+    image. The embedded seeder hardcodes a GraphQL query against the public
+    registry, so registry schema drift breaks bootstrap for every already-built
+    backend image. Skip it whenever the image supports --skip-templates; set
+    LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER=1 to opt back in."""
+    if ctx.truthy("LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER"):
+        return []
     if "--skip-templates" in help_output:
         log(
             "Skipping embedded template seeder (repo-owned "
@@ -161,11 +191,13 @@ def bootstrap(ctx: Ctx) -> None:
     log("Generating backend/test env with smbe local-dev-env")
     bootstrap_log = run_dir / "logs" / "bootstrap.log"
     bootstrap_raw = run_dir / ".bootstrap.raw.log"
-    mysql_app_host = _detect_mysql_app_host(ctx)
+    app_db_host = _detect_app_db_host(ctx)
 
     dev_env_cmd = _smbe_dev_env_subcommand(ctx, image_ref)
     log(f"Using smbe subcommand: {' '.join(dev_env_cmd)}")
-    skip_templates_args = _skip_templates_args(ctx, image_ref, dev_env_cmd)
+    help_output = _dev_env_help_output(ctx, image_ref, dev_env_cmd)
+    skip_templates_args = _skip_templates_args(ctx, help_output)
+    app_postgres_args = _app_postgres_args(ctx, help_output, app_db_host)
 
     bootstrap_cmd = [
         "docker",
@@ -225,7 +257,7 @@ def bootstrap(ctx: Ctx) -> None:
         "--edge-dns-server",
         f"127.0.0.1:{ctx.get('EDGE_DNS_PORT')}",
         "--mysql-host",
-        mysql_app_host,
+        app_db_host,
         "--mysql-port",
         ctx.get("MYSQL_APP_DB_1_PORT"),
         "--mysql-secondary-port",
@@ -234,6 +266,7 @@ def bootstrap(ctx: Ctx) -> None:
         "root",
         "--mysql-password",
         "root",
+        *app_postgres_args,
         "--loki-uri",
         "http://loki:3100",
         "--metrics-clickhouse-host",

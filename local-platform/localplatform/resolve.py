@@ -606,6 +606,7 @@ def resolve(ctx: Ctx) -> None:
                         "REDIS_PORT",
                         "MYSQL_APP_DB_1_PORT",
                         "MYSQL_APP_DB_2_PORT",
+                        "POSTGRES_APP_DB_1_PORT",
                         "MINIO_PERSISTENT_API_PORT",
                         "MINIO_PERSISTENT_CONSOLE_PORT",
                         "CLICKHOUSE_HTTP_PORT",

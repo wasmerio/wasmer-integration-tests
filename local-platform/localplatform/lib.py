@@ -52,6 +52,7 @@ PORT_DEFAULTS: dict[str, tuple[int, str]] = {
     "REDIS_PORT": (16379, "Redis"),
     "MYSQL_APP_DB_1_PORT": (13306, "MySQL app DB 1"),
     "MYSQL_APP_DB_2_PORT": (13307, "MySQL app DB 2"),
+    "POSTGRES_APP_DB_1_PORT": (15434, "Postgres app DB 1"),
     "MINIO_PERSISTENT_API_PORT": (19100, "MinIO persistent API"),
     "MINIO_PERSISTENT_CONSOLE_PORT": (19101, "MinIO persistent console"),
     "CLICKHOUSE_HTTP_PORT": (18123, "ClickHouse HTTP"),

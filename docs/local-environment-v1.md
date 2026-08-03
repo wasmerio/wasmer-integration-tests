@@ -113,7 +113,8 @@ real reason, e.g. `WASMER_TEST_WORDPRESS_MAX_RETRIES=4 VERBOSE=true`.
 
 - Per-suite test output: `.local-platform/current/logs/tests.log`
 - Per-service container logs: `.local-platform/current/logs/<service>.log`
-  (backend, edge, postgres, mysql_app_db_1/2, clickhouse, loki, vector, …) —
+  (backend, edge, postgres, mysql_app_db_1/2, postgres_app_db_1, clickhouse,
+  loki, vector, …) —
   regenerate with `make local-platform-logs`.
 - App (instance) logs are surfaced inline in `tests.log` for failing tests
   (apps for failing tests are preserved by default; use `KEEP_APPS=1` to keep
