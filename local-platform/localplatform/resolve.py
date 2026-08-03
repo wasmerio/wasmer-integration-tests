@@ -603,6 +603,7 @@ def resolve(ctx: Ctx) -> None:
                         "EDGE_SSH_PORT",
                         "EDGE_DNS_PORT",
                         "POSTGRES_PORT",
+                        "POSTGRES_APP_DB_PORT",
                         "REDIS_PORT",
                         "MYSQL_APP_DB_1_PORT",
                         "MYSQL_APP_DB_2_PORT",
