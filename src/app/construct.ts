@@ -27,7 +27,9 @@ export const SshCapability = z.object({
 export const AppCapabilities = z.object({
   database: z
     .object({
-      engine: z.string(),
+      // Omitted engine is a supported legacy form: the backend provisions
+      // MySQL for `capabilities.database: {}`.
+      engine: z.string().optional(),
     })
     .optional(),
   instaboot: z

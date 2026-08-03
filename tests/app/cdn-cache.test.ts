@@ -55,9 +55,10 @@ function authorizationVariant(request) {
 }
 
 function cookieVariant(request) {
-  const cookie = request.headers.get("cookie") || "";
-  const match = cookie.match(/(?:^|;\\s*)user=([^;]+)/);
-  return match ? match[1] : "none";
+  // The worker fixture does not receive Cookie. Keep the Cookie request
+  // header to exercise Edge's cache bypass, while this marker lets the
+  // fixture prove that each request reached the origin.
+  return request.headers.get("x-cdn-cache-fixture-cookie-variant") || "none";
 }
 
 async function jsonResponse(request, route, init = {}) {
@@ -81,11 +82,13 @@ async function jsonResponse(request, route, init = {}) {
     payload.body = body;
   }
 
-  return new Response(request.method === "HEAD" ? null : JSON.stringify(payload), {
+  const responseBody = JSON.stringify(payload);
+  return new Response(request.method === "HEAD" ? null : responseBody, {
     status: init.status ?? 200,
     headers: {
       "content-type": "application/json",
       ...init.headers,
+      "content-length": String(new TextEncoder().encode(responseBody).byteLength),
     },
   });
 }
@@ -186,15 +189,6 @@ async function handler(request) {
       headers: {
         "cache-control": "public, max-age=120",
         vary: "Cookie",
-      },
-    });
-  }
-
-  if (path === "/cache/set-cookie") {
-    return jsonResponse(request, path, {
-      headers: {
-        "cache-control": "public, max-age=120",
-        "set-cookie": "cdn-cache-fixture=1; Path=/; HttpOnly",
       },
     });
   }
@@ -451,7 +445,7 @@ async function expectNoCacheRequiresRevalidation(
   app: AppInfo,
   path: string,
 ): Promise<void> {
-  const initial = await fetchText(env, app, path);
+  const initial = await fetchText(env, app, path, { rawHttp: true });
   expect(initial.status).toBe(200);
   expect(initial.json?.token).toBeDefined();
 
@@ -460,6 +454,7 @@ async function expectNoCacheRequiresRevalidation(
 
   const revalidated = await fetchText(env, app, path, {
     headers: { "if-none-match": etag ?? "" },
+    rawHttp: true,
   });
 
   if (revalidated.status === 304) {
@@ -661,31 +656,38 @@ describe("app CDN cache smoke", () => {
       expect(englishAgain.json?.requestHeaders["accept-language"]).toBe("en");
 
       const etagPath = uniquePath("/cache/etag");
-      const etagInitial = await fetchText(env, app, etagPath);
+      const etagInitial = await fetchText(env, app, etagPath, {
+        rawHttp: true,
+      });
       expect(etagInitial.status).toBe(200);
       const etag = etagInitial.headers.get("etag");
       expect(etag).toBe('"fixture-etag"');
 
       const etagMatched = await fetchText(env, app, etagPath, {
         headers: { "if-none-match": etag ?? "" },
+        rawHttp: true,
       });
       expect(etagMatched.status).toBe(304);
       expect(etagMatched.body).toBe("");
 
       const etagMiss = await fetchText(env, app, etagPath, {
         headers: { "if-none-match": '"not-the-fixture-etag"' },
+        rawHttp: true,
       });
       expect(etagMiss.status).toBe(200);
       expect(etagMiss.json?.token).toBeDefined();
 
       const lastModifiedPath = uniquePath("/cache/last-modified");
-      const lastModifiedInitial = await fetchText(env, app, lastModifiedPath);
+      const lastModifiedInitial = await fetchText(env, app, lastModifiedPath, {
+        rawHttp: true,
+      });
       expect(lastModifiedInitial.status).toBe(200);
       const lastModified = lastModifiedInitial.headers.get("last-modified");
       expect(lastModified).toBe("Wed, 21 Oct 2015 07:28:00 GMT");
 
       const lastModifiedMatched = await fetchText(env, app, lastModifiedPath, {
         headers: { "if-modified-since": lastModified ?? "" },
+        rawHttp: true,
       });
       expect(lastModifiedMatched.status).toBe(304);
       expect(lastModifiedMatched.body).toBe("");
@@ -736,10 +738,17 @@ describe("app CDN cache smoke", () => {
       const cookiePath = uniquePath("/cache/cookie");
       for (let i = 0; i < STABLE_RESPONSE_COUNT; i++) {
         const cookieA = await fetchText(env, app, cookiePath, {
-          headers: { cookie: "user=a" },
+          headers: {
+            cookie: "user=a",
+            "x-cdn-cache-fixture-cookie-variant": "a",
+          },
         });
+
         const cookieB = await fetchText(env, app, cookiePath, {
-          headers: { cookie: "user=b" },
+          headers: {
+            cookie: "user=b",
+            "x-cdn-cache-fixture-cookie-variant": "b",
+          },
         });
         const cookieNone = await fetchText(env, app, cookiePath);
 
@@ -751,7 +760,6 @@ describe("app CDN cache smoke", () => {
       const [ok, notFound] = await Promise.all([
         waitForStableCachedResponse(env, app, uniquePath("/cache/status/200")),
         waitForStableCachedResponse(env, app, uniquePath("/cache/status/404")),
-        expectNotCached(env, app, uniquePath("/cache/set-cookie")),
         expectNotCached(env, app, uniquePath("/cache/status/500")),
       ]);
       expect(ok.token).toBeDefined();

@@ -44,10 +44,13 @@ def _build_package_list(
             name = (package or {}).get("resolvedName")
             version = (package or {}).get("resolvedVersion")
             if name and version:
-                # Edge's PackageSource syntax uses an exact package identifier here,
-                # not a semver requirement. This also preserves build metadata,
-                # which requirement parsing intentionally rejects.
-                add(f"{name}@{version}")
+                # A published version may carry SemVer build metadata (e.g.
+                # `8.4.0+build.05`), but a version *requirement* may not: metadata is
+                # excluded from precedence, so `=8.4.0+build.05` cannot select that
+                # specific build. Edge rejects such requirements outright (wasmer#6815);
+                # older builds silently ignored the suffix. Stripping it is lossless —
+                # `=8.4.0` matches exactly what the metadata form would have.
+                add(f"{name}@={version.split('+', 1)[0]}")
 
     if extra_list_path.exists():
         for line in extra_list_path.read_text().splitlines():

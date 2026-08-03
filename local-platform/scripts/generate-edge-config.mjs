@@ -169,7 +169,8 @@ http_proxy:
   overload_backoff: null
   package_compilation_timeout: 900s
   cdn_cache:
-    enabled: false
+    enabled: true
+    require_router_capability: true
     directory: /data/edge-cdn-cache
     max_disk_usage: 128Mb
     max_object_size: 10Mb
@@ -325,8 +326,8 @@ jobs:
   storage: in_memory
   cronjobs:
     enabled: true
-    max_concurrency_per_node: 2
-    minimum_interval: 1s
+    max_concurrency_per_node: 10
+    minimum_interval: 60s
   # Local app domains use Edge's self-signed development certificate.
   fetch_allow_invalid_certs: true
 

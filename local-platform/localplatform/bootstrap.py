@@ -304,6 +304,9 @@ def bootstrap(ctx: Ctx) -> None:
             'export EDGE_GRPC_ENDPOINT="edge:9051"\n'
             'export EDGE_GRPC_USE_INSECURE_CHANNEL="1"\n'
             f'export EDGE_GRPC_TOKEN="{edge_grpc_token}"\n'
+            "# Production runs WordPress builds with phpix enabled; keep parity\n"
+            "# so the suite exercises the SHIPIT_PHPIX injection path.\n"
+            'export SM_APPS_PHP_USE_PHPIX="true"\n'
         )
 
     # Ensure the generated test env contains the isolated integration-test

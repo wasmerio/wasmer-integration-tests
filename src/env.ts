@@ -712,6 +712,9 @@ function formatCommandFailure(params: {
 }
 
 export interface AppFetchOptions extends RequestInit {
+  // Use Node's raw HTTP client instead of Fetch, which may rewrite conditional
+  // request headers as part of its client-side HTTP cache semantics.
+  rawHttp?: boolean;
   // Ignore non-success status codes.
   noAssertSuccess?: boolean;
   // Discard the response body.
@@ -1410,14 +1413,15 @@ export class TestEnv {
       });
       let response: Response;
       try {
-        response = edgeHostOverride
-          ? await fetchWithHostOverride(
-              url,
-              options,
-              edgeHostOverride,
-              edgeForwardedProto,
-            )
-          : await fetch(url, options);
+        response =
+          edgeHostOverride || options.rawHttp
+            ? await fetchWithHostOverride(
+                url,
+                options,
+                edgeHostOverride ?? new URL(url).host,
+                edgeForwardedProto,
+              )
+            : await fetch(url, options);
       } catch (error) {
         // A just-started Edge under heavy instance spin-up load (CI cold
         // start) can stall a request until the client times out. When waiting
