@@ -315,28 +315,44 @@ async function graphql(registry, token, query, variables) {
     headers.authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(registry, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-  const body = await response.text();
-  let data;
-  try {
-    data = JSON.parse(body);
-  } catch (err) {
-    throw new Error(
-      `GraphQL response from ${registry} was not JSON (${response.status}): ${body.slice(0, 500)}: ${err}`,
-    );
-  }
+  // The source registry intermittently fails requests under load ("failed to
+  // load package", "Connection pool timed out"), so retry with backoff before
+  // giving up on the whole seeding run.
+  const MAX_ATTEMPTS = 5;
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetch(registry, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query, variables }),
+    });
+    const body = await response.text();
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch (err) {
+      throw new Error(
+        `GraphQL response from ${registry} was not JSON (${response.status}): ${body.slice(0, 500)}: ${err}`,
+      );
+    }
 
-  if (!response.ok || data.errors?.length) {
+    if (response.ok && !data.errors?.length) {
+      return data.data;
+    }
+
     const message =
       data.errors?.map((error) => error.message).join("; ") ?? body;
-    throw new Error(`GraphQL request to ${registry} failed: ${message}`);
+    lastError = new Error(
+      `GraphQL request to ${registry} failed: ${message} (variables: ${JSON.stringify(variables)})`,
+    );
+    if (attempt < MAX_ATTEMPTS) {
+      debug(
+        `GraphQL attempt ${attempt}/${MAX_ATTEMPTS} failed (${message}); retrying`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
   }
-
-  return data.data;
+  throw lastError;
 }
 
 const tinyPngBytes = Uint8Array.from([

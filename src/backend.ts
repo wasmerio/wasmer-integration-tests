@@ -374,6 +374,33 @@ mutation($id:ID!) {
     return id;
   }
 
+  async unbanApp({ appId }: { appId: string }): Promise<string> {
+    const Input = z.object({
+      unbanApp: z.object({
+        app: z.object({ id: z.string() }),
+      }),
+    });
+    type Input = z.infer<typeof Input>;
+
+    const query = `
+      mutation($appId:ID!) {
+        unbanApp(input:{appId:$appId}) {
+          app {
+            id
+          }
+        }
+      }
+    `;
+
+    const res = await this.gqlQuery<Input>(query, { appId });
+
+    const id = res.data?.unbanApp?.app?.id;
+    if (!id) {
+      throw new Error("unbanApp mutation did not return an app id");
+    }
+    return id;
+  }
+
   async getAppRegions(
     filters: AppRegionFilters = {},
     after: string | null = null,
