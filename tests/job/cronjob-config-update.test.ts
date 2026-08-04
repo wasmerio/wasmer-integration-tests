@@ -14,13 +14,7 @@ import {
 } from "./cronjob-fixture";
 
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
-// This asserts correct behavior, which is known-broken by cron
-// execution/deletion lifecycle defects. Marked test.failing so the suite
-// stays green while the defect persists; it turns red the moment the
-// behavior starts passing — remove .failing then.
-//
-// Redeploying a changed cronjob must replace its prior action. Separate durable
-// counters make both the new action and the absence of the old action observable.
+// Consistently failing on dev and prod; remove .failing once the fix lands.
 
 test.failing(
   "a cronjob config update replaces its prior fetch action",

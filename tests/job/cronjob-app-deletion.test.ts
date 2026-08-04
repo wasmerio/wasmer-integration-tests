@@ -14,16 +14,9 @@ import {
 } from "./cronjob-fixture";
 
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
-// This asserts correct behavior, which is known-broken by cron
-// execution/deletion lifecycle defects. Marked test.failing so the suite
-// stays green while the defect persists; it turns red the moment the
-// behavior starts passing — remove .failing then.
-//
-// Deleting an app must also delete its cronjobs from Edge. Otherwise a deleted
-// app continues making requests indefinitely. This test observes those requests
-// through a separate app's durable volume-backed counter.
+// Known-flaky on dev and prod; red is expected until the defect is fixed.
 
-test.failing(
+test.concurrent(
   "deleting an app stops its cronjob from invoking another app",
   async () => {
     const env = TestEnv.fromEnv();

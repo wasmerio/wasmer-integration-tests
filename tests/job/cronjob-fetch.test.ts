@@ -12,14 +12,9 @@ import {
 } from "./cronjob-fixture";
 
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
-// This asserts correct behavior and may remain red until known cron
-// execution/deletion lifecycle defects are fixed; coordinate on the ticket
-// rather than skipping or quarantining this test.
-//
-// A scheduled fetch must reach its target. The target records requests in a
-// volume-backed counter so the assertion survives process and log delivery.
+// Known-flaky on dev and prod; red is expected until the defect is fixed.
 
-test.failing(
+test.concurrent(
   "a cronjob fetch increments a durable counter in its target app",
   async () => {
     const env = TestEnv.fromEnv();

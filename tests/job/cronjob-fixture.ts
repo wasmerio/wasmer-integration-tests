@@ -29,13 +29,8 @@ export async function getCounter(
   return value;
 }
 
-// After a cron-disabling change (deletion, redeploy) the schedule change
-// propagates to Edge eventually, so a tick already committed before the change
-// may still land. The verifiable claim is therefore "the cron stops within a
-// bounded window", not "the cron stops instantly": the counter must hold still
-// for a full schedule interval before the deadline. A cron that is still
-// scheduled increments every interval, can never stay quiet that long, and
-// hits the deadline with its observed trajectory in the error.
+// Schedule changes propagate to Edge eventually, so the claim is "stops within
+// a bounded window": the counter must hold still for a full interval.
 export async function expectCounterQuiescence(
   env: TestEnv,
   counterApp: AppInfo,
