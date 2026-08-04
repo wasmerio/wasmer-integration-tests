@@ -38,4 +38,6 @@ jobs:
       registry: wasmer.io
     secrets:
       token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
-      test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
+      # Disabled for now due to spam. Too many failing tests for too long. Alert fatigue!
+      # Tracked in https://linear.app/wasmer/issue/QA-669/re-enable-prod-integ-test-failures-in-dev
+      # test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
