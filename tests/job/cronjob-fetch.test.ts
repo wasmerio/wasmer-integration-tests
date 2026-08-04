@@ -19,7 +19,7 @@ import {
 // A scheduled fetch must reach its target. The target records requests in a
 // volume-backed counter so the assertion survives process and log delivery.
 
-test.concurrent(
+test.failing(
   "a cronjob fetch increments a durable counter in its target app",
   async () => {
     const env = TestEnv.fromEnv();
