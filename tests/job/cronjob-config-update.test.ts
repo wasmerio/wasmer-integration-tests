@@ -16,7 +16,7 @@ import {
 // EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
 // Consistently failing on dev and prod; remove .failing once the fix lands.
 
-test.failing(
+test(
   "a cronjob config update replaces its prior fetch action",
   async () => {
     const env = TestEnv.fromEnv();

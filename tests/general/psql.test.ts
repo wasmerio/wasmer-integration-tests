@@ -234,34 +234,21 @@ test.concurrent("psql-full-lifecycle", async () => {
     expect(rotated.database.username).not.toBe(db.username);
     expect(rotated.password).toBeTruthy();
 
-    // Documented contract: rotation propagates to the app env without a new
-    // deployment. BE-1692: it currently never does — even fresh instances
-    // keep the revoked credentials until a redeploy. Soft-checked here so the
-    // rest of the PostgreSQL lifecycle stays release-gating; the hard
-    // expected-fail coverage for BE-1692 lives in
-    // `mysql-legacy-createappdb-mutation` (same propagation mechanism).
-    try {
-      await pollUntil(
-        async () => {
-          const rotatedReport = await fetchDbEnvReport(env, info, {
-            freshInstance: true,
-          });
-          return rotatedReport.username === rotated.database.username;
-        },
-        {
-          timeoutMs: 60_000,
-          intervalMs: 5_000,
-          description: "rotated DB_USERNAME visible inside the app",
-        },
-      );
-      console.log(
-        "Rotated credentials propagated to the app — BE-1692 may be fixed; make this assertion hard again.",
-      );
-    } catch {
-      console.warn(
-        "KNOWN ISSUE BE-1692: rotated credentials did not reach the app; it keeps running with the revoked role until redeployed.",
-      );
-    }
+    // Rotation propagates to the app env without a new deployment — visible
+    // on a fresh instance. Currently red everywhere: BE-1692.
+    await pollUntil(
+      async () => {
+        const rotatedReport = await fetchDbEnvReport(env, info, {
+          freshInstance: true,
+        });
+        return rotatedReport.username === rotated.database.username;
+      },
+      {
+        timeoutMs: 180_000,
+        intervalMs: 5_000,
+        description: "rotated DB_USERNAME visible inside the app (BE-1692)",
+      },
+    );
 
     if (reachable && oldCreds) {
       const newCreds: PostgresCredentials = {
@@ -406,11 +393,9 @@ test.concurrent("mysql-legacy-omitted-engine-defaults-to-mysql", async () => {
   }
 });
 
-// Expected-fail until BE-1692 lands: post-deploy `DB_*` injection never
-// reaches the app (engine-independent; rotation is affected the same way).
-// When jest reports this test as unexpectedly passing, BE-1692 is fixed —
-// drop the `.failing` marker and re-harden the lifecycle rotation check.
-test.failing("mysql-legacy-createappdb-mutation", async () => {
+// Post-deploy `DB_*` injection must reach the app without a redeploy.
+// Currently red everywhere (engine-independent): BE-1692.
+test.concurrent("mysql-legacy-createappdb-mutation", async () => {
   const env = TestEnv.fromEnv();
 
   console.log("== Deploying app without database, then legacy createAppDb ==");
