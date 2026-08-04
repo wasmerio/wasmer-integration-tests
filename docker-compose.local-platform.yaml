@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: public.ecr.aws/docker/library/postgres:16-alpine
     command:
       - postgres
       - -c
@@ -24,7 +24,7 @@ services:
       retries: 20
 
   postgres_app_db_1:
-    image: postgres:16-alpine
+    image: public.ecr.aws/docker/library/postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -44,7 +44,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: public.ecr.aws/docker/library/redis:7-alpine
     ports:
       - "${REDIS_PORT:-16379}:6379"
     healthcheck:
@@ -54,7 +54,7 @@ services:
       retries: 20
 
   mysql_app_db_1:
-    image: mysql:8.0
+    image: public.ecr.aws/docker/library/mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: admin
@@ -79,7 +79,7 @@ services:
       retries: 30
 
   mysql_app_db_2:
-    image: mysql:8.0
+    image: public.ecr.aws/docker/library/mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: admin
@@ -104,7 +104,7 @@ services:
       retries: 30
 
   minio_persistent:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -125,7 +125,7 @@ services:
       retries: 20
 
   minio_persistent_init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       minio_persistent:
         condition: service_healthy
@@ -151,7 +151,7 @@ services:
       "
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: public.ecr.aws/docker/library/clickhouse:latest
     environment:
       CLICKHOUSE_PASSWORD: root
     ports:
