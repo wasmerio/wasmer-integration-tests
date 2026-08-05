@@ -1,0 +1,12 @@
+allowBuilds:
+  sharp: false
+  prisma: true
+  "@prisma/engines": true
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+# pnpm's default symlinked/isolated node_modules structure confuses Next's
+# file tracer when copying standalone/next-bundle output (mkdir ENOENT on
+# nested .pnpm/*/node_modules paths, seen with @prisma/adapter-pg's own pg
+# dependency). A flat, hoisted layout avoids it.
+nodeLinker: hoisted
