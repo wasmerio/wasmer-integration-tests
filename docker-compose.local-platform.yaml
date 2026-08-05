@@ -151,7 +151,8 @@ services:
       "
 
   clickhouse:
-    image: public.ecr.aws/docker/library/clickhouse:latest
+    # not on ECR Public; Hub-direct like loki/vector
+    image: clickhouse/clickhouse-server:latest
     environment:
       CLICKHOUSE_PASSWORD: root
     ports:
