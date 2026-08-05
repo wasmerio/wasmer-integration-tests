@@ -24,7 +24,9 @@ wasmer/edgejs-quickjs@=0.0.7
 # Shipit 0.21.5 node preset builds depend on 0.0.6 (templates remote-build tests).
 wasmer/edgejs-quickjs@=0.0.6
 wasmer/edgejs-quickjs@=0.1.0
+wasmer/edgejs-quickjs@=0.1.4
 wasmer/pandoc@=0.0.1
+phpix/phpix-83-32bit@=0.3.0-rc.4
 phpix/phpix-83-32bit@=0.3.0-rc.3
 # Note: the following PHP may not be needed anymore, please recheck
 phpix/phpix-83-32bit@=0.3.0-rc.2
