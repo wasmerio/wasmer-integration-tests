@@ -1,0 +1,17 @@
+{
+  "name": "wasmer-integ-tests-node-toolbox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node implementation of the fixture contract in fixtures/openapi.yaml",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "pg": "^8.13.0"
+  }
+}
