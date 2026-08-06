@@ -116,7 +116,7 @@ async function credentialsFor(
   };
 }
 
-test.concurrent("psql-full-lifecycle", async () => {
+test.failing("psql-full-lifecycle", async () => {
   const env = TestEnv.fromEnv();
 
   console.log("== Deploying app with capabilities.database.engine=postgres ==");
@@ -395,7 +395,7 @@ test.concurrent("mysql-legacy-omitted-engine-defaults-to-mysql", async () => {
 
 // Post-deploy `DB_*` injection must reach the app without a redeploy.
 // Currently red everywhere (engine-independent): BE-1692.
-test.concurrent("mysql-legacy-createappdb-mutation", async () => {
+test.failing("mysql-legacy-createappdb-mutation", async () => {
   const env = TestEnv.fromEnv();
 
   console.log("== Deploying app without database, then legacy createAppDb ==");

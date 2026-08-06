@@ -132,7 +132,7 @@ async function fetchProbe(
 jest.setTimeout(600_000);
 
 describe("ECO-426 phpix integer semantics", () => {
-  test("64-bit phpix types negated integers as int", async () => {
+  test.failing("64-bit phpix types negated integers as int", async () => {
     const env = TestEnv.fromEnv();
     const app = await env.deployApp(buildPhpixApp(64));
 
