@@ -165,12 +165,12 @@ describe("ECO-426 phpix integer semantics", () => {
 
       // Compile-time: an `int` parameter must accept a negative default, and
       // on a 64-bit build a literal spanning the full int range.
-      expect(await fetchProbe(env, app, "int-default-negative-literal.php")).toContain(
-        "negative-literal-ok:-1",
-      );
-      expect(await fetchProbe(env, app, "int-default-64bit-literal.php")).toContain(
-        "large-literal-ok:9223372036854775807",
-      );
+      expect(
+        await fetchProbe(env, app, "int-default-negative-literal.php"),
+      ).toContain("negative-literal-ok:-1");
+      expect(
+        await fetchProbe(env, app, "int-default-64bit-literal.php"),
+      ).toContain("large-literal-ok:9223372036854775807");
     } finally {
       await env.deleteApp(app);
     }
@@ -194,9 +194,9 @@ describe("ECO-426 phpix integer semantics", () => {
       expect(report.negative_literal_type).toBe("integer");
       expect(report.negated_variable_type).toBe("integer");
 
-      expect(await fetchProbe(env, app, "int-default-negative-literal.php")).toContain(
-        "negative-literal-ok:-1",
-      );
+      expect(
+        await fetchProbe(env, app, "int-default-negative-literal.php"),
+      ).toContain("negative-literal-ok:-1");
     } finally {
       await env.deleteApp(app);
     }
