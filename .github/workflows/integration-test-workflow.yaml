@@ -168,8 +168,10 @@ jobs:
             ]);
             // Reusable-workflow jobs are named "<caller job> / <name>".
             const bare = name => name.split(' / ').pop();
-            // 180 * 5s = 15 minutes
-            for (let i = 0; i < 180; i++) {
+            // 600 * 5s = 50 minutes — must outlast the 45-minute suite
+            // timeout, or Barmin reports a run its slowest suite is
+            // still writing.
+            for (let i = 0; i < 600; i++) {
               const res = await github.rest.actions.listJobsForWorkflowRun({
                 owner: context.repo.owner, repo: context.repo.repo,
                 run_id: context.runId, per_page: 100,
