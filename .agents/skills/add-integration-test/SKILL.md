@@ -91,6 +91,9 @@ the radar until it ships fixed. Follow the BE-1679 pattern
 - Link the test file from the ticket, and give the owning team a heads-up
   before merging — a red suite affects everyone's merges, so it should
   arrive as a known, agreed signal with a clear owner, not a surprise.
+- Register the test in `known-issues.jsonc` (see the `file-known-issue`
+  skill) so the reporter and Barmin flag the failure as KNOWN with the
+  ticket link instead of an UNTRACKED failure.
 
 ## Workflow
 

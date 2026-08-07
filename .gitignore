@@ -4,6 +4,8 @@ target
 node_modules
 tests/generated-templates.json
 .jest-deployed-apps.jsonl
+.jest-run-summary.jsonl
+jest-output.log
 local.env
 .local-platform/
 __pycache__/

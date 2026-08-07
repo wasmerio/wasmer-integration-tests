@@ -115,22 +115,25 @@ jobs:
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
+        # Brace group so multi-line test_command values pipe every command's
+        # output; pipefail keeps the jest exit code through tee.
         run: |
-          ${{ matrix.test_command }}
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          text="Integration tests for ${{ matrix.id }} failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
-          payload=$(jq -n --arg text "$text" '{text: $text}')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "$payload" \
-            ${TEST_FAILURE_WEBHOOK}
+          set -euo pipefail
+          {
+            ${{ matrix.test_command }}
+          } 2>&1 | tee jest-output.log
+      # Full run info for debugging + the machine summary Barmin aggregates.
+      - name: Upload test run artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-run-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            jest-output.log
+            .jest-run-summary.jsonl
+            .jest-deployed-apps.jsonl
 
   provide-quality-assessment:
     name: Provide quality assessment
@@ -190,6 +193,80 @@ jobs:
                 id: j.id, name: j.name, url: j.html_url
               }))
             ));
+      # Runs after all test jobs completed (the wait above), so every
+      # test-run-* artifact that will exist is already uploaded.
+      - name: Download test run summaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-run-*
+          path: test-runs
+      - name: Classify failures against known issues
+        id: classify
+        env:
+          FAILED_JOBS_JSON: ${{ steps.fail.outputs.jobs }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const known = [], untracked = [], fixed = [];
+            const root = 'test-runs';
+            const dirs = fs.existsSync(root) ? fs.readdirSync(root) : [];
+            for (const dir of dirs) {
+              const suite = dir.replace(/^test-run-/, '');
+              const file = path.join(root, dir, '.jest-run-summary.jsonl');
+              if (!fs.existsSync(file)) continue;
+              const lines = fs.readFileSync(file, 'utf-8')
+                .split('\n').filter(Boolean);
+              for (const line of lines) {
+                let run;
+                try { run = JSON.parse(line); } catch { continue; }
+                for (const t of run.tests || []) {
+                  const entry = {
+                    suite, name: t.fullName, file: t.file,
+                    ticket: t.knownIssue?.ticket, url: t.knownIssue?.url,
+                  };
+                  if (t.status === 'failed') {
+                    (t.knownIssue ? known : untracked).push(entry);
+                  } else if (t.status === 'passed' && t.knownIssue) {
+                    fixed.push(entry);
+                  }
+                }
+                for (const s of run.suiteErrors || []) {
+                  (s.knownIssue ? known : untracked).push({
+                    suite, name: `suite failed to run (${s.file})`,
+                    file: s.file,
+                    ticket: s.knownIssue?.ticket, url: s.knownIssue?.url,
+                  });
+                }
+              }
+            }
+            const failedJobs = JSON.parse(
+              process.env.FAILED_JOBS_JSON || '[]'
+            );
+            const suitesWithFailures = new Set(
+              [...known, ...untracked].map(e => e.suite)
+            );
+            const unexplained = Math.max(
+              0, failedJobs.length - suitesWithFailures.size
+            );
+            const knownLine = e =>
+              `• <${e.url}|${e.ticket}> ${e.name} _(${e.suite})_`;
+            const untrackedLine = e =>
+              `• ${e.name} — ${e.file} _(${e.suite})_`;
+            const fixedLine = e =>
+              `• <${e.url}|${e.ticket}> ${e.name} _(${e.suite})_`;
+            core.setOutput('known', known.map(knownLine).join('\n'));
+            core.setOutput('known_count', String(known.length));
+            core.setOutput('untracked',
+              untracked.map(untrackedLine).join('\n'));
+            core.setOutput('untracked_count', String(untracked.length));
+            core.setOutput('fixed', fixed.map(fixedLine).join('\n'));
+            core.setOutput('infra_line', unexplained > 0
+              ? `:construction: ${unexplained} failed job(s) produced no ` +
+                'test-level data (bring-up/infra failure?) — check the job ' +
+                'logs and test-run-* artifacts.'
+              : '');
       - name: Get commit info
         id: ci
         uses: actions/github-script@v8
@@ -262,6 +339,12 @@ jobs:
           MERGED_PR_TITLE: ${{ steps.ci.outputs.merged_pr_title }}
           MERGED_PR_URL: ${{ steps.ci.outputs.merged_pr_url }}
           RELEASE_URL: ${{ inputs.release_url || github.event.release.html_url || '' }}
+          KNOWN_LINES: ${{ steps.classify.outputs.known }}
+          KNOWN_COUNT: ${{ steps.classify.outputs.known_count }}
+          UNTRACKED_LINES: ${{ steps.classify.outputs.untracked }}
+          UNTRACKED_COUNT: ${{ steps.classify.outputs.untracked_count }}
+          FIXED_LINES: ${{ steps.classify.outputs.fixed }}
+          INFRA_LINE: ${{ steps.classify.outputs.infra_line }}
         run: |
           set -euo pipefail
           short_sha="${SHA:0:7}"
@@ -296,6 +379,12 @@ jobs:
               "${MESSAGE}"
               '```'
             )
+            if [ -n "${FIXED_LINES:-}" ]; then
+              msg_lines+=('' '*Known issues now passing — consider removing from known-issues.jsonc:*')
+              while IFS= read -r line; do
+                [ -n "$line" ] && msg_lines+=("$line")
+              done <<< "${FIXED_LINES}"
+            fi
             printf -v text '%s\n' "${msg_lines[@]}"
             conclusion="success"
           else
@@ -339,6 +428,31 @@ jobs:
               '```'
               "${MESSAGE}"
               '```'
+            )
+            if [ -n "${UNTRACKED_LINES:-}" ]; then
+              msg_lines+=('' ":fire: *UNTRACKED failures (${UNTRACKED_COUNT}) — no Linear ticket on record:*")
+              while IFS= read -r line; do
+                [ -n "$line" ] && msg_lines+=("$line")
+              done <<< "${UNTRACKED_LINES}"
+            fi
+            if [ -n "${KNOWN_LINES:-}" ]; then
+              msg_lines+=('' "*Known issues (${KNOWN_COUNT}):*")
+              while IFS= read -r line; do
+                [ -n "$line" ] && msg_lines+=("$line")
+              done <<< "${KNOWN_LINES}"
+            fi
+            if [ -n "${INFRA_LINE:-}" ]; then
+              msg_lines+=('' "${INFRA_LINE}")
+            fi
+            if [ -n "${FIXED_LINES:-}" ]; then
+              msg_lines+=('' '*Known issues now passing — consider removing from known-issues.jsonc:*')
+              while IFS= read -r line; do
+                [ -n "$line" ] && msg_lines+=("$line")
+              done <<< "${FIXED_LINES}"
+            fi
+            msg_lines+=(
+              ''
+              "Full jest output + deployed-app registry per suite: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts|test-run-* artifacts>"
               'Recommendation: Re-run the failing pipeline in case of flaky test/flaky functionality.'
             )
             printf -v text '%s\n' "${msg_lines[@]}"

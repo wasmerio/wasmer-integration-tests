@@ -8,6 +8,9 @@ function isVerboseEnabled() {
 }
 
 const REGISTRY_PATH = path.join(process.cwd(), ".jest-deployed-apps.jsonl");
+const KNOWN_ISSUES_PATH = path.join(process.cwd(), "known-issues.jsonc");
+const RUN_SUMMARY_PATH = path.join(process.cwd(), ".jest-run-summary.jsonl");
+const LINEAR_ISSUE_URL_BASE = "https://linear.app/wasmer/issue";
 const CONSOLE_TEST_MARKER_RE = /^\[\[wasmer-test:([^\]]+)\]\]\s?/;
 
 function color(code, value) {
@@ -15,6 +18,118 @@ function color(code, value) {
     return value;
   }
   return `\u001b[${code}m${value}\u001b[0m`;
+}
+
+let knownIssuesCache;
+function loadKnownIssues() {
+  if (knownIssuesCache !== undefined) {
+    return knownIssuesCache;
+  }
+  knownIssuesCache = [];
+  try {
+    if (fs.existsSync(KNOWN_ISSUES_PATH)) {
+      // Full-line comments only; trailing comments would corrupt values
+      // containing "//" (URLs). Prettier formats .jsonc with trailing
+      // commas, which JSON.parse rejects — strip those too.
+      const raw = fs
+        .readFileSync(KNOWN_ISSUES_PATH, "utf-8")
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("//"))
+        .join("\n")
+        .replace(/,(\s*[}\]])/g, "$1");
+      knownIssuesCache = Object.entries(JSON.parse(raw)).map(([key, value]) => {
+        const separator = key.indexOf("::");
+        const file = separator === -1 ? key : key.slice(0, separator);
+        const name = separator === -1 ? null : key.slice(separator + 2);
+        return {
+          file: path.normalize(file),
+          name,
+          ticket: value.ticket,
+          note: value.note ?? null,
+          url: `${LINEAR_ISSUE_URL_BASE}/${value.ticket}`,
+        };
+      });
+    }
+  } catch (error) {
+    process.stderr.write(
+      `failures-only-reporter: could not parse ${KNOWN_ISSUES_PATH}: ${error}\n`,
+    );
+  }
+  return knownIssuesCache;
+}
+
+// fullName === null matches only file-level entries (suite load errors).
+function findKnownIssue(testFilePath, fullName) {
+  const relativePath = path.normalize(
+    path.relative(process.cwd(), testFilePath),
+  );
+  for (const entry of loadKnownIssues()) {
+    if (entry.file !== relativePath) {
+      continue;
+    }
+    if (entry.name === null) {
+      return entry;
+    }
+    if (
+      fullName !== null &&
+      (fullName === entry.name || fullName.startsWith(`${entry.name} `))
+    ) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function knownIssueSummaryFields(entry) {
+  return {
+    ticket: entry.ticket,
+    url: entry.url,
+    ...(entry.note ? { note: entry.note } : {}),
+  };
+}
+
+function knownIssueBannerLines(testResult) {
+  const lines = [];
+  for (const result of testResult.testResults ?? []) {
+    const fullName = [...result.ancestorTitles, result.title].join(" ");
+    const known = findKnownIssue(testResult.testFilePath, fullName);
+    if (result.status === "failed") {
+      if (known) {
+        lines.push(
+          color("33", `⚠ KNOWN ISSUE ${known.ticket} — ${fullName}`),
+          `  ${known.url}`,
+          ...(known.note ? [`  ${known.note}`] : []),
+        );
+      } else {
+        lines.push(
+          color("31", `🔥 UNTRACKED FAILURE — ${fullName}`),
+          "  No Linear ticket on record. If this is a product bug, file one (linear-ticket skill) and register it in known-issues.jsonc (file-known-issue skill).",
+        );
+      }
+    } else if (result.status === "passed" && known) {
+      lines.push(
+        color(
+          "32",
+          `✔ ${known.ticket} is listed in known-issues.jsonc but "${fullName}" passed — the issue may be fixed; consider removing the entry`,
+        ),
+      );
+    }
+  }
+  if (testResult.testExecError) {
+    const known = findKnownIssue(testResult.testFilePath, null);
+    if (known) {
+      lines.push(
+        color("33", `⚠ KNOWN ISSUE ${known.ticket} — suite failed to run`),
+        `  ${known.url}`,
+      );
+    } else {
+      lines.push(
+        color("31", "🔥 UNTRACKED SUITE FAILURE — suite failed to run"),
+        "  No Linear ticket on record for this file in known-issues.jsonc.",
+      );
+    }
+  }
+  return lines;
 }
 
 function matchesFailingTest(record, failingTestNames) {
@@ -253,7 +368,59 @@ class FailuresOnlyReporter {
       );
     }
 
+    const bannerLines = knownIssueBannerLines(testResult);
+    if (bannerLines.length > 0) {
+      process.stderr.write(`\n${bannerLines.join("\n")}\n`);
+    }
+
     testResult.console = undefined;
+  }
+
+  // Appends one machine-readable record per jest invocation for CI (Barmin)
+  // to aggregate. CI workspaces are fresh; local files may accumulate records
+  // from earlier runs — each carries its own timestamps.
+  onRunComplete(_contexts, results) {
+    try {
+      const record = {
+        startedAt: new Date(results.startTime).toISOString(),
+        completedAt: new Date().toISOString(),
+        numTotalTests: results.numTotalTests,
+        numPassedTests: results.numPassedTests,
+        numFailedTests: results.numFailedTests,
+        numPendingTests: results.numPendingTests,
+        suiteErrors: [],
+        tests: [],
+      };
+      for (const suite of results.testResults ?? []) {
+        const file = path.relative(process.cwd(), suite.testFilePath);
+        if (suite.testExecError) {
+          const known = findKnownIssue(suite.testFilePath, null);
+          record.suiteErrors.push({
+            file,
+            message: String(
+              suite.testExecError.message ?? suite.testExecError,
+            ).slice(0, 2000),
+            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+          });
+        }
+        for (const result of suite.testResults ?? []) {
+          const fullName = [...result.ancestorTitles, result.title].join(" ");
+          const known = findKnownIssue(suite.testFilePath, fullName);
+          record.tests.push({
+            file,
+            fullName,
+            status: result.status,
+            durationMs: result.duration ?? null,
+            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+          });
+        }
+      }
+      fs.appendFileSync(RUN_SUMMARY_PATH, `${JSON.stringify(record)}\n`);
+    } catch (error) {
+      process.stderr.write(
+        `failures-only-reporter: failed to write ${RUN_SUMMARY_PATH}: ${error}\n`,
+      );
+    }
   }
 }
 

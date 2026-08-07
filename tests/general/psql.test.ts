@@ -116,7 +116,8 @@ async function credentialsFor(
   };
 }
 
-test.failing("psql-full-lifecycle", async () => {
+// Known issue BE-1692 — tracked in known-issues.jsonc, expected red.
+test.concurrent("psql-full-lifecycle", async () => {
   const env = TestEnv.fromEnv();
 
   console.log("== Deploying app with capabilities.database.engine=postgres ==");
@@ -394,8 +395,8 @@ test.concurrent("mysql-legacy-omitted-engine-defaults-to-mysql", async () => {
 });
 
 // Post-deploy `DB_*` injection must reach the app without a redeploy.
-// Currently red everywhere (engine-independent): BE-1692.
-test.failing("mysql-legacy-createappdb-mutation", async () => {
+// Known issue BE-1692 — tracked in known-issues.jsonc, expected red.
+test.concurrent("mysql-legacy-createappdb-mutation", async () => {
   const env = TestEnv.fromEnv();
 
   console.log("== Deploying app without database, then legacy createAppDb ==");

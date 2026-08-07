@@ -18,6 +18,8 @@
 wasmer/s3-server
 wasmer/cli
 wasmer/bash@=1.0.21
+phpix/phpix-83-32bit
+phpix/phpix-83-64bit
 wasmer/bash@=1.0.25
 wasmer/edgejs-quickjs@=0.0.4
 wasmer/edgejs-quickjs@=0.0.7
