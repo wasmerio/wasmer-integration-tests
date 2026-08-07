@@ -32,4 +32,16 @@
     "ticket": "BE-1705",
     "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
   },
+  "tests/app/app_ban_unban_roundtrip.test.ts::app-ban-unban-roundtrip": {
+    "ticket": "BE-1695",
+    "note": "fix ac3a329 merged 2026-08-03 but no prod backend release since; prod and the prod-mirror local platform still 400 unknown_domain",
+  },
+  "tests/app/eco-419-php-clean-url-routing.test.ts::ECO-419 php clean-url routing clean URL is routed through the docroot index.php": {
+    "ticket": "ECO-419",
+    "note": "phpix overwrite fix live on dev only; prod and the local platform still 404 on clean URLs",
+  },
+  "tests/app/node-fixture-contract.test.ts::node-fixture-contract-endpoints": {
+    "ticket": "WAX-607",
+    "note": "local platform only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27, Edge serves an HTML error page",
+  },
 }
