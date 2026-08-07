@@ -428,6 +428,15 @@ function composeMessage(
       `Debug: full jest output + deployed-app registry per suite in the <${runUrl}#artifacts|test-run-* artifacts>.`,
     );
   }
+  if (untracked.length > 0) {
+    lines.push(
+      "",
+      "*Investigate agentically — paste this into your hivemind agent:*",
+      "```",
+      `Investigate the wasmer integration test failures in ${runUrl} (load your integration-test-failure skill): download the test-run-* artifacts, root-cause each UNTRACKED failure, and for confirmed product bugs file a Linear ticket and register the test in known-issues.jsonc (file-known-issue skill).`,
+      "```",
+    );
+  }
 
   return { text: lines.join("\n"), failed };
 }
