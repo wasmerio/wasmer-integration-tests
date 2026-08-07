@@ -1,0 +1,22 @@
+# TEMPORARY — e2e debugging of the Barmin known-issue reporting system.
+#
+# Runs the full integration test workflow on every push to
+# fixup-local-integ-tests and posts the Barmin quality assessment to the
+# bugtopia Slack webhook (#releases-bugt). Delete this file once the
+# known-issue pipeline is validated.
+name: Debug Barmin (temporary)
+
+on:
+  push:
+    branches:
+      - fixup-local-integ-tests
+
+jobs:
+  barmin-debug:
+    uses: ./.github/workflows/integration-test-workflow.yaml
+    with:
+      test_branch: ${{ github.ref_name }}
+      provide_quality_assessment: true
+    secrets:
+      token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
+      test_failure_webhook: ${{ secrets.SLACK_BUGT_ENV_FAILURE_WEBHOOK }}
