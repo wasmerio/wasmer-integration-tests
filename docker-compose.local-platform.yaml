@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: public.ecr.aws/docker/library/postgres:16-alpine
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/library/postgres:16-alpine
     command:
       - postgres
       - -c
@@ -24,7 +24,7 @@ services:
       retries: 20
 
   postgres_app_db_1:
-    image: public.ecr.aws/docker/library/postgres:16-alpine
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/library/postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -44,7 +44,7 @@ services:
       retries: 20
 
   redis:
-    image: public.ecr.aws/docker/library/redis:7-alpine
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/library/redis:7-alpine
     ports:
       - "${REDIS_PORT:-16379}:6379"
     healthcheck:
@@ -54,7 +54,7 @@ services:
       retries: 20
 
   mysql_app_db_1:
-    image: public.ecr.aws/docker/library/mysql:8.0
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/library/mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: admin
@@ -79,7 +79,7 @@ services:
       retries: 30
 
   mysql_app_db_2:
-    image: public.ecr.aws/docker/library/mysql:8.0
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/library/mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: admin
@@ -104,7 +104,7 @@ services:
       retries: 30
 
   minio_persistent:
-    image: quay.io/minio/minio:latest
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -125,7 +125,7 @@ services:
       retries: 20
 
   minio_persistent_init:
-    image: quay.io/minio/mc:latest
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/minio/mc:latest
     depends_on:
       minio_persistent:
         condition: service_healthy
@@ -250,6 +250,8 @@ services:
   edge:
     build:
       context: ./local-platform/edge-runtime
+      args:
+        IMAGE_MIRROR: ${CI_DOCKER_HUB_MIRROR:-docker.io}
     user: "0:0"
     entrypoint: ["/bin/sh", "-lc"]
     command:

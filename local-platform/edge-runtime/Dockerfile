@@ -1,6 +1,10 @@
-FROM public.ecr.aws/docker/library/alpine:3.20 AS certs
+# Off-fleet this resolves to Docker Hub; the fleet passes its pull-through
+# mirror so CI never hits the anonymous per-IP cap behind one NAT address.
+ARG IMAGE_MIRROR=docker.io
 
-FROM public.ecr.aws/docker/library/debian:bookworm-slim
+FROM ${IMAGE_MIRROR}/library/alpine:3.20 AS certs
+
+FROM ${IMAGE_MIRROR}/library/debian:bookworm-slim
 
 # apt via https: CI egress is :443-only; slim ships no trust store
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
