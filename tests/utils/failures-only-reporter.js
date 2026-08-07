@@ -458,6 +458,17 @@ function runSummaryLines(failures) {
       );
     }
   }
+  if (untracked.length === 0) {
+    lines.push(
+      "",
+      color(
+        "32",
+        "✓ All failures are known issues — you didn't regress anything.",
+      ),
+      "",
+    );
+    return lines;
+  }
   lines.push(
     "",
     color(
