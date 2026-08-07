@@ -97,6 +97,10 @@ jobs:
       - name: Log Wasmer CLI version
         run: wasmer --version
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -197,6 +201,35 @@ jobs:
             echo "Create repository/org secret LOCAL_PLATFORM_ARTIFACT_FETCH_PAT and make sure it is available to this repository/event."
             exit 1
           fi
+
+      # The dind sidecar resolves bind-mount sources in its own filesystem, where
+      # the runner's docker CLI paths do not exist and become empty dirs instead.
+      # Only paths under _work (RUNNER_TEMP) are identical in both.
+      - name: Stage docker CLI on the dind-shared path (aux fleet only)
+        run: |
+          set -euo pipefail
+          if [ -z "${CI_ECR_REGISTRY:-}" ]; then
+            echo "Not the aux fleet; leaving docker CLI resolution to defaults."
+            exit 0
+          fi
+          dest="$RUNNER_TEMP/docker-cli"
+          mkdir -p "$dest"
+          cp "$(command -v docker)" "$dest/docker"
+          for candidate in \
+            /usr/libexec/docker/cli-plugins/docker-buildx \
+            /usr/lib/docker/cli-plugins/docker-buildx
+          do
+            if [ -x "$candidate" ]; then
+              cp "$candidate" "$dest/docker-buildx"
+              break
+            fi
+          done
+          if [ ! -x "$dest/docker-buildx" ]; then
+            echo "::error::docker-buildx plugin not found on the runner"
+            exit 1
+          fi
+          echo "LOCAL_PLATFORM_DOCKER_CLI_PATH=$dest/docker" >> "$GITHUB_ENV"
+          echo "LOCAL_PLATFORM_DOCKER_BUILDX_PATH=$dest/docker-buildx" >> "$GITHUB_ENV"
 
       - name: Skip prepare (exact cache hit)
         if: ${{ inputs.prepare_only && steps.local-platform-cache.outputs.cache-hit == 'true' }}
