@@ -13,8 +13,9 @@ import {
   getCounter,
 } from "./cronjob-fixture";
 
-// EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
-// Consistently failing on dev and prod; remove .failing once the fix lands.
+// The first cron fire can lag the deploy by minutes (scheduler config
+// sync); CRON_START_TIMEOUT_MS in cronjob-fixture.ts absorbs that — this
+// test pays the wait twice (original action, then the replacement).
 
 test(
   "a cronjob config update replaces its prior fetch action",
@@ -83,5 +84,7 @@ test(
       await env.deleteApp(counterApp);
     }
   },
-  14 * CRON_INTERVAL_MS,
+  // Two start windows (original + replaced action) + the quiescence deadline,
+  // with margin for deploys and polling.
+  2 * CRON_START_TIMEOUT_MS + 10 * CRON_INTERVAL_MS,
 );

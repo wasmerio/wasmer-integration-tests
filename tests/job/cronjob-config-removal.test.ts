@@ -13,8 +13,8 @@ import {
   getCounter,
 } from "./cronjob-fixture";
 
-// EDGE-1818: https://linear.app/wasmer/issue/EDGE-1818/add-integration-test-for-cronjobs-on-the-backend
-// Known-flaky on dev and prod; red is expected until the defect is fixed.
+// The first cron fire can lag the deploy by minutes (scheduler config
+// sync); CRON_START_TIMEOUT_MS in cronjob-fixture.ts absorbs that.
 
 test.concurrent(
   "removing a cronjob from config stops it without deleting its app",

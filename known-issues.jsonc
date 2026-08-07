@@ -16,14 +16,6 @@
 // use test.failing for a product bug: it hides the failure and turns red
 // the moment the bug is fixed.
 {
-  "tests/app/app_ban_unban_roundtrip.test.ts::app-ban-unban-roundtrip": {
-    "ticket": "BE-1695",
-    "note": "non-blackhole ban tombstones the Edge router; fix merged (backend#2978) but absent from backend v2026-08-03_1",
-  },
-  "tests/app/phpix-64bit-int-semantics.test.ts::ECO-426 phpix integer semantics 64-bit phpix types negated integers as int": {
-    "ticket": "ECO-426",
-    "note": "phpix 0.3.0-rc.4 64-bit build folds unary negation to float",
-  },
   "tests/general/psql.test.ts::psql-full-lifecycle": {
     "ticket": "BE-1692",
     "note": "post-deploy DB_* injection never reaches the app without a redeploy",
