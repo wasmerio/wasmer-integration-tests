@@ -1,0 +1,27 @@
+// Known product issues currently reproduced by integration tests.
+//
+// Key: "<test file relative to repo root>::<jest fullName>" — fullName is all
+// describe titles plus the test title, joined with single spaces. A key
+// without the "::<name>" part covers every failure in the file, including
+// suite-level load errors. A key naming a describe block covers every test
+// nested under it.
+//
+// The failures-only reporter flags matching failures as KNOWN ISSUE locally
+// and in CI job logs, and bakes the ticket into .jest-run-summary.jsonl so
+// Barmin can split Slack reports into known vs UNTRACKED failures. When a
+// listed test passes, the reporter nudges you to remove the entry.
+//
+// Full-line comments only — no trailing comments. File tickets with the
+// linear-ticket skill; wire entries with the file-known-issue skill. Never
+// use test.failing for a product bug: it hides the failure and turns red
+// the moment the bug is fixed.
+{
+  "tests/general/psql.test.ts::psql-full-lifecycle": {
+    "ticket": "BE-1692",
+    "note": "post-deploy DB_* injection never reaches the app without a redeploy",
+  },
+  "tests/general/psql.test.ts::mysql-legacy-createappdb-mutation": {
+    "ticket": "BE-1692",
+    "note": "post-deploy DB_* injection never reaches the app without a redeploy",
+  },
+}

@@ -1,3 +1,16 @@
+// Failure-focused jest reporter.
+//
+// Output layout is bottom-up: per-test failure context (console replay,
+// compact app cards, log snippets) prints as suites finish, and the run
+// ends with a summary of every failed test plus a ready-to-paste hivemind
+// investigation prompt — GitHub's log viewer auto-scrolls to the bottom,
+// so the bottom must carry the highest-value content.
+//
+// Failures are classified against known-issues.jsonc: KNOWN issues link
+// their Linear ticket and skip log output; UNTRACKED failures get a log
+// snippet (full logs only with VERBOSE=true — deep investigation is meant
+// to happen agentically, not by scrolling CI logs).
+
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -8,7 +21,11 @@ function isVerboseEnabled() {
 }
 
 const REGISTRY_PATH = path.join(process.cwd(), ".jest-deployed-apps.jsonl");
+const KNOWN_ISSUES_PATH = path.join(process.cwd(), "known-issues.jsonc");
+const RUN_SUMMARY_PATH = path.join(process.cwd(), ".jest-run-summary.jsonl");
+const LINEAR_ISSUE_URL_BASE = "https://linear.app/wasmer/issue";
 const CONSOLE_TEST_MARKER_RE = /^\[\[wasmer-test:([^\]]+)\]\]\s?/;
+const LOG_SNIPPET_MAX_CHARS = 2_000;
 
 function color(code, value) {
   if (process.env.NO_COLOR) {
@@ -16,6 +33,78 @@ function color(code, value) {
   }
   return `\u001b[${code}m${value}\u001b[0m`;
 }
+
+// --- known-issues registry ------------------------------------------------
+
+let knownIssuesCache;
+function loadKnownIssues() {
+  if (knownIssuesCache !== undefined) {
+    return knownIssuesCache;
+  }
+  knownIssuesCache = [];
+  try {
+    if (fs.existsSync(KNOWN_ISSUES_PATH)) {
+      // Full-line comments only; trailing comments would corrupt values
+      // containing "//" (URLs). Prettier formats .jsonc with trailing
+      // commas, which JSON.parse rejects — strip those too.
+      const raw = fs
+        .readFileSync(KNOWN_ISSUES_PATH, "utf-8")
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("//"))
+        .join("\n")
+        .replace(/,(\s*[}\]])/g, "$1");
+      knownIssuesCache = Object.entries(JSON.parse(raw)).map(([key, value]) => {
+        const separator = key.indexOf("::");
+        const file = separator === -1 ? key : key.slice(0, separator);
+        const name = separator === -1 ? null : key.slice(separator + 2);
+        return {
+          file: path.normalize(file),
+          name,
+          ticket: value.ticket,
+          note: value.note ?? null,
+          url: `${LINEAR_ISSUE_URL_BASE}/${value.ticket}`,
+        };
+      });
+    }
+  } catch (error) {
+    process.stderr.write(
+      `failures-only-reporter: could not parse ${KNOWN_ISSUES_PATH}: ${error}\n`,
+    );
+  }
+  return knownIssuesCache;
+}
+
+// fullName === null matches only file-level entries (suite load errors).
+function findKnownIssue(testFilePath, fullName) {
+  const relativePath = path.normalize(
+    path.relative(process.cwd(), testFilePath),
+  );
+  for (const entry of loadKnownIssues()) {
+    if (entry.file !== relativePath) {
+      continue;
+    }
+    if (entry.name === null) {
+      return entry;
+    }
+    if (
+      fullName !== null &&
+      (fullName === entry.name || fullName.startsWith(`${entry.name} `))
+    ) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function knownIssueSummaryFields(entry) {
+  return {
+    ticket: entry.ticket,
+    url: entry.url,
+    ...(entry.note ? { note: entry.note } : {}),
+  };
+}
+
+// --- deployed-app registry ------------------------------------------------
 
 function matchesFailingTest(record, failingTestNames) {
   if (!failingTestNames) {
@@ -74,47 +163,7 @@ function readDeployedAppsForTestFile(testFilePath, failingTestNames = null) {
   return [...byAppId.values()];
 }
 
-function readAppsForFailure(testFilePath, failingTestNames) {
-  return readDeployedAppsForTestFile(testFilePath, failingTestNames);
-}
-
-function formatAppContext(testFilePath, failingTestNames) {
-  const apps = readAppsForFailure(testFilePath, failingTestNames);
-  if (apps.length === 0) {
-    return [
-      color("33", "\nNo deployed app records found for failing test(s)."),
-      `Registry: ${REGISTRY_PATH}`,
-      "",
-    ].join("\n");
-  }
-
-  const lines = [
-    "",
-    color("1", color("36", "Deployed apps for failing test(s)")),
-    color("36", "────────────────────────────────────"),
-    `Test file: ${testFilePath}`,
-    `Failing-test apps are preserved by default. Use ${color("33", "KEEP_APPS=1")} to preserve apps for passing tests too.`,
-    "",
-  ];
-
-  for (const app of apps) {
-    lines.push(
-      color("36", "┌────────────────────────────────────────────────────────"),
-      `${color("36", "│")} ${color("2", "origin        ")} ${app.origin ?? app.testName ?? "unknown"}`,
-      `${color("36", "│")} ${color("2", "app id        ")} ${color("33", app.appId)}`,
-      `${color("36", "│")} ${color("2", "app name      ")} ${app.namespace}/${app.appName}`,
-      `${color("36", "│")} ${color("2", "app url       ")} ${color("32", app.appUrl)}`,
-      `${color("36", "│")} ${color("2", "permalink     ")} ${color("32", app.appPermalink)}`,
-      `${color("36", "│")} ${color("2", "dashboard     ")} ${color("32", app.appDashboard)}`,
-      `${color("36", "│")} ${color("2", "registry      ")} ${app.registry ?? process.env.WASMER_REGISTRY ?? "default"}`,
-      `${color("36", "│")} ${color("2", "app dir       ")} ${app.appDir}`,
-      color("36", "└────────────────────────────────────────────────────────"),
-      "",
-    );
-  }
-
-  return lines.join("\n");
-}
+// --- console replay -------------------------------------------------------
 
 function getFailingTestNames(testResult) {
   const names = new Set();
@@ -158,15 +207,7 @@ function consoleEntryForFailingTests(entry, failingTestNames) {
   return { ...entry, message: parsed.message };
 }
 
-function truncate(value) {
-  const maxLength = isVerboseEnabled()
-    ? Number.POSITIVE_INFINITY
-    : Number(process.env.MAX_APP_LOG_PRINT_LENGTH ?? 20_000);
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, maxLength)}\n... and ${value.length - maxLength} more characters (rerun with VERBOSE=true to see all app logs)`;
-}
+// --- app logs -------------------------------------------------------------
 
 function fetchAppLogs(app) {
   const wasmerBinary = process.env.WASMER_PATH ?? "wasmer";
@@ -201,28 +242,240 @@ function fetchAppLogs(app) {
   return stdout.trim() ? stdout : "No app logs returned.";
 }
 
-function formatAppLogs(testFilePath, failingTestNames) {
-  const apps = readAppsForFailure(testFilePath, failingTestNames);
-  if (apps.length === 0) {
-    return "";
+// Tail snippet — the primary investigation is agentic (artifacts + hivemind
+// prompt below), the inline log only orients the reader.
+function logSnippet(text) {
+  if (isVerboseEnabled() || text.length <= LOG_SNIPPET_MAX_CHARS) {
+    return text;
+  }
+  const tail = text.slice(-LOG_SNIPPET_MAX_CHARS);
+  const skipped = text.length - tail.length;
+  return `… (${skipped} earlier characters snipped; VERBOSE=true for full logs)\n${tail}`;
+}
+
+// --- failure blocks -------------------------------------------------------
+
+function knownIssueLines(known, indent) {
+  return [
+    color("33", `${indent}⚠ KNOWN ISSUE ${known.ticket} — ${known.url}`),
+    ...(known.note ? [`${indent}  ${known.note}`] : []),
+  ];
+}
+
+function untrackedLines(indent) {
+  return [
+    color("31", `${indent}🔥 UNTRACKED — no Linear ticket on record.`),
+    `${indent}  If this is a product bug: linear-ticket + file-known-issue skills.`,
+  ];
+}
+
+function appCardLines(app, known, indent) {
+  const lines = [
+    `${indent}${color("36", "app")} ${app.namespace}/${app.appName} (${color("33", app.appId)})`,
+    `${indent}    url        ${color("32", app.appUrl)}`,
+    `${indent}    dashboard  ${color("32", app.appDashboard)}`,
+  ];
+  const envRegistry = process.env.WASMER_REGISTRY;
+  if (app.registry && app.registry !== envRegistry) {
+    lines.push(`${indent}    registry   ${app.registry}`);
+  }
+  if (known) {
+    lines.push(
+      `${indent}    logs       wasmer app logs ${app.namespace}/${app.appName}`,
+    );
+  } else {
+    const snippet = logSnippet(fetchAppLogs(app));
+    lines.push(
+      `${indent}    ${color("2", "logs ────────────────────────────")}`,
+      ...snippet
+        .split("\n")
+        .map((line) => `${indent}    ${color("2", "│")} ${line}`),
+    );
+  }
+  return lines;
+}
+
+function failureContextLines(testResult) {
+  const lines = [];
+  const failingNames = [...getFailingTestNames(testResult)];
+  if (failingNames.length === 0 && !testResult.testExecError) {
+    return lines;
   }
 
-  const lines = [
-    "",
-    color("1", color("36", "App logs for failing test(s)")),
-    color("36", "────────────────────────────"),
-  ];
+  const allApps = readDeployedAppsForTestFile(testResult.testFilePath);
+  const usedAppIds = new Set();
 
-  for (const app of apps) {
+  lines.push(
+    "",
+    color("36", "──────────────────────────────────────────────────────────"),
+    color("1", color("36", `Failure context — ${testResult.testFilePath}`)),
+  );
+  if (allApps.length > 0) {
     lines.push(
-      "",
-      color("36", `▶ ${app.namespace}/${app.appName} (${app.appId})`),
-      truncate(fetchAppLogs(app)),
+      color(
+        "2",
+        `Apps preserved for debugging (${color("33", "KEEP_APPS=1")} to also keep passing-test apps)`,
+      ),
     );
   }
 
-  return lines.join("\n");
+  for (const fullName of failingNames) {
+    const known = findKnownIssue(testResult.testFilePath, fullName);
+    lines.push("", color("31", `✕ ${fullName}`));
+    lines.push(
+      ...(known ? knownIssueLines(known, "  ") : untrackedLines("  ")),
+    );
+    const apps = allApps.filter((app) =>
+      matchesFailingTest(app, new Set([fullName])),
+    );
+    for (const app of apps) {
+      usedAppIds.add(app.appId);
+      lines.push(...appCardLines(app, known, "  "));
+    }
+  }
+
+  if (testResult.testExecError) {
+    const known = findKnownIssue(testResult.testFilePath, null);
+    lines.push("", color("31", "✕ suite failed to run"));
+    lines.push(
+      ...(known ? knownIssueLines(known, "  ") : untrackedLines("  ")),
+    );
+  }
+
+  const leftover = allApps.filter((app) => !usedAppIds.has(app.appId));
+  if (leftover.length > 0) {
+    lines.push("", color("2", "other apps deployed by this file:"));
+    for (const app of leftover) {
+      lines.push(
+        ...appCardLines(
+          app,
+          findKnownIssue(testResult.testFilePath, null),
+          "  ",
+        ),
+      );
+    }
+  }
+
+  return lines;
 }
+
+function fixedKnownIssueLines(testResult) {
+  const lines = [];
+  for (const result of testResult.testResults ?? []) {
+    if (result.status !== "passed") {
+      continue;
+    }
+    const fullName = [...result.ancestorTitles, result.title].join(" ");
+    const known = findKnownIssue(testResult.testFilePath, fullName);
+    if (known) {
+      lines.push(
+        color(
+          "32",
+          `✔ ${known.ticket} is listed in known-issues.jsonc but "${fullName}" passed — the issue may be fixed; consider removing the entry`,
+        ),
+      );
+    }
+  }
+  return lines;
+}
+
+// --- end-of-run summary ---------------------------------------------------
+
+function collectFailures(results) {
+  const failures = [];
+  for (const suite of results.testResults ?? []) {
+    const file = path.relative(process.cwd(), suite.testFilePath);
+    if (suite.testExecError) {
+      failures.push({
+        file,
+        fullName: `suite failed to run (${file})`,
+        known: findKnownIssue(suite.testFilePath, null),
+      });
+    }
+    for (const result of suite.testResults ?? []) {
+      if (result.status !== "failed") {
+        continue;
+      }
+      const fullName = [...result.ancestorTitles, result.title].join(" ");
+      failures.push({
+        file,
+        fullName,
+        known: findKnownIssue(suite.testFilePath, fullName),
+      });
+    }
+  }
+  return failures;
+}
+
+function hivemindPrompt(failures) {
+  const runUrl =
+    process.env.GITHUB_ACTIONS && process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : null;
+  const source = runUrl
+    ? `CI run ${runUrl} (test-run-* artifacts carry jest-output.log, .jest-run-summary.jsonl and .jest-deployed-apps.jsonl per suite)`
+    : `local run in ${process.cwd()} (.jest-run-summary.jsonl, .jest-deployed-apps.jsonl)`;
+  const list = failures
+    .map((failure) =>
+      failure.known
+        ? `- [KNOWN ${failure.known.ticket} ${failure.known.url}] ${failure.fullName} (${failure.file})`
+        : `- [UNTRACKED] ${failure.fullName} (${failure.file})`,
+    )
+    .join("\n");
+  return [
+    "Investigate these wasmer integration test failures (load your integration-test-failure skill).",
+    `Source: ${source}`,
+    "Failing tests:",
+    list,
+    "Fetch the run artifacts and root-cause each UNTRACKED failure first.",
+    "For confirmed product bugs: file a Linear ticket (linear-ticket format) and register the test in wasmer-integration-tests known-issues.jsonc per the file-known-issue skill.",
+    "For KNOWN failures, only verify the ticket still matches the observed behavior.",
+  ].join("\n");
+}
+
+function runSummaryLines(failures) {
+  const known = failures.filter((failure) => failure.known);
+  const untracked = failures.filter((failure) => !failure.known);
+  const lines = [
+    "",
+    color("1", "════════════════════════════════════════════════════════════"),
+    color(
+      "1",
+      `FAILED TESTS — ${failures.length} total (${untracked.length} untracked, ${known.length} known)`,
+    ),
+  ];
+  if (untracked.length > 0) {
+    lines.push(color("31", "🔥 UNTRACKED:"));
+    for (const failure of untracked) {
+      lines.push(`  ✕ ${failure.fullName} — ${failure.file}`);
+    }
+  }
+  if (known.length > 0) {
+    lines.push(color("33", "⚠ KNOWN:"));
+    for (const failure of known) {
+      lines.push(
+        `  ✕ ${failure.fullName} — ${color("33", failure.known.ticket)} ${failure.known.url}`,
+      );
+    }
+  }
+  lines.push(
+    "",
+    color(
+      "1",
+      color(
+        "36",
+        "Investigate agentically — paste this into your hivemind agent:",
+      ),
+    ),
+    color("36", "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"),
+    hivemindPrompt(failures),
+    color("36", "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"),
+    "",
+  );
+  return lines;
+}
+
+// --- reporter -------------------------------------------------------------
 
 class FailuresOnlyReporter {
   onTestResult(_testContext, testResult) {
@@ -245,15 +498,77 @@ class FailuresOnlyReporter {
           globalThis.console?.[filteredEntry.type] ?? globalThis.console?.log;
         log(filteredEntry.message);
       }
-      process.stderr.write(
-        `${formatAppContext(testResult.testFilePath, appTestNames)}\n`,
-      );
-      process.stderr.write(
-        `${formatAppLogs(testResult.testFilePath, appTestNames)}\n`,
-      );
+      const contextLines = failureContextLines(testResult);
+      if (contextLines.length > 0) {
+        process.stderr.write(`${contextLines.join("\n")}\n`);
+      }
+    }
+
+    const fixedLines = fixedKnownIssueLines(testResult);
+    if (fixedLines.length > 0) {
+      process.stderr.write(`\n${fixedLines.join("\n")}\n`);
     }
 
     testResult.console = undefined;
+  }
+
+  // Appends one machine-readable record per jest invocation for CI (Barmin)
+  // to aggregate, then prints the failed-test summary and the hivemind
+  // investigation prompt — last, because GitHub's log viewer lands at the
+  // bottom of a failed job.
+  onRunComplete(_contexts, results) {
+    try {
+      const record = {
+        startedAt: new Date(results.startTime).toISOString(),
+        completedAt: new Date().toISOString(),
+        numTotalTests: results.numTotalTests,
+        numPassedTests: results.numPassedTests,
+        numFailedTests: results.numFailedTests,
+        numPendingTests: results.numPendingTests,
+        suiteErrors: [],
+        tests: [],
+      };
+      for (const suite of results.testResults ?? []) {
+        const file = path.relative(process.cwd(), suite.testFilePath);
+        if (suite.testExecError) {
+          const known = findKnownIssue(suite.testFilePath, null);
+          record.suiteErrors.push({
+            file,
+            message: String(
+              suite.testExecError.message ?? suite.testExecError,
+            ).slice(0, 2000),
+            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+          });
+        }
+        for (const result of suite.testResults ?? []) {
+          const fullName = [...result.ancestorTitles, result.title].join(" ");
+          const known = findKnownIssue(suite.testFilePath, fullName);
+          record.tests.push({
+            file,
+            fullName,
+            status: result.status,
+            durationMs: result.duration ?? null,
+            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+          });
+        }
+      }
+      fs.appendFileSync(RUN_SUMMARY_PATH, `${JSON.stringify(record)}\n`);
+    } catch (error) {
+      process.stderr.write(
+        `failures-only-reporter: failed to write ${RUN_SUMMARY_PATH}: ${error}\n`,
+      );
+    }
+
+    try {
+      const failures = collectFailures(results);
+      if (failures.length > 0) {
+        process.stderr.write(`${runSummaryLines(failures).join("\n")}\n`);
+      }
+    } catch (error) {
+      process.stderr.write(
+        `failures-only-reporter: failed to print run summary: ${error}\n`,
+      );
+    }
   }
 }
 

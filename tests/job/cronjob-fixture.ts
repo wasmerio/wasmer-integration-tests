@@ -8,7 +8,10 @@ import {
 import { sleep } from "../../src/util";
 
 export const CRON_INTERVAL_MS = 60_000;
-export const CRON_START_TIMEOUT_MS = 3 * CRON_INTERVAL_MS;
+// The first fire lags the deploy while Edge's scheduler picks up the new job
+// config — observed ~4 min on a cold local stack — so the start window must
+// cover that sync lag, not just the cron interval.
+export const CRON_START_TIMEOUT_MS = 6 * CRON_INTERVAL_MS;
 export const CRON_STOP_TIMEOUT_MS = 5 * CRON_INTERVAL_MS;
 
 export function buildCronApp(name: string, jobs: AppJob[]) {

@@ -115,22 +115,28 @@ jobs:
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
           WASMER_TOKEN: ${{ secrets.token }}
+        # Brace group so multi-line test_command values pipe every command's
+        # output; pipefail keeps the jest exit code through tee.
         run: |
-          ${{ matrix.test_command }}
-      - name: Notify failure in Slack
-        env:
-          TEST_FAILURE_WEBHOOK: ${{ secrets.test_failure_webhook }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: failure() && env.TEST_FAILURE_WEBHOOK != ''
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          text="Integration tests for ${{ matrix.id }} failed ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/$job_id"
-          payload=$(jq -n --arg text "$text" '{text: $text}')
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "$payload" \
-            ${TEST_FAILURE_WEBHOOK}
+          set -euo pipefail
+          {
+            ${{ matrix.test_command }}
+          } 2>&1 | tee jest-output.log
+      # Full run info for debugging + the machine summary Barmin aggregates.
+      - name: Upload test run artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-run-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: warn
+          # The summary/registry files are dotfiles; upload-artifact@v4
+          # silently drops hidden files unless this is set.
+          include-hidden-files: true
+          path: |
+            jest-output.log
+            .jest-run-summary.jsonl
+            .jest-deployed-apps.jsonl
 
   provide-quality-assessment:
     name: Provide quality assessment
@@ -141,232 +147,53 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - name: Wait for failures
-        id: fail
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          repository: wasmerio/wasmer-integration-tests
+          ref: ${{ inputs.test_branch }}
+      - name: Add pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        run: pnpm install
+      - name: Wait for sibling test jobs
         uses: actions/github-script@v8
         with:
           script: |
-            const o = context.repo.owner;
-            const r = context.repo.repo;
-            const id = context.runId;
-            function isSelf(job) {
-              if (job.name === 'Notify quality assessment') return true;
-              if (job.name === 'notify-quality-assessment') return true;
-              if (job.name === context.job) return true;
-              if (job.name === process.env.GITHUB_JOB) return true;
-              return (job.steps || []).some(
-                step => step.name === 'Wait for failures'
+            const selfNames = new Set([
+              'Provide quality assessment', 'provide-quality-assessment',
+              context.job, process.env.GITHUB_JOB,
+            ]);
+            // Reusable-workflow jobs are named "<caller job> / <name>".
+            const bare = name => name.split(' / ').pop();
+            // 600 * 5s = 50 minutes — must outlast the 45-minute suite
+            // timeout, or Barmin reports a run its slowest suite is
+            // still writing.
+            for (let i = 0; i < 600; i++) {
+              const res = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner, repo: context.repo.repo,
+                run_id: context.runId, per_page: 100,
+              });
+              const others = (res.data.jobs || []).filter(
+                j => !selfNames.has(bare(j.name))
               );
+              if (others.every(j => j.status === 'completed')) return;
+              await new Promise(r => setTimeout(r, 5000));
             }
-            const filterJobs = js =>
-              js.filter(job => !isSelf(job));
-            async function jobs() {
-              const res = await github.rest.actions
-                .listJobsForWorkflowRun({
-                  owner: o, repo: r, run_id: id
-                });
-              return res.data.jobs || [];
-            }
-            async function waitDone() {
-              // This equates to 180*5000ms = 15 minutes
-              for (let i = 0; i < 180; i++) {
-                const js = await jobs();
-                const others = filterJobs(js);
-                const done = others.every(
-                  j => j.status === 'completed'
-                );
-                if (done) return others;
-                await new Promise(x => setTimeout(x, 5000));
-              }
-              return filterJobs(await jobs());
-            }
-            const all = await waitDone();
-            const failed = all.filter(
-              j => j.conclusion === 'failure'
-            );
-            core.setOutput('count', String(failed.length));
-            core.setOutput('jobs', JSON.stringify(
-              failed.map(j => ({
-                id: j.id, name: j.name, url: j.html_url
-              }))
-            ));
-      - name: Get commit info
-        id: ci
-        uses: actions/github-script@v8
+            core.warning('Sibling jobs still running after 15 minutes');
+      - name: Download test run artifacts
+        uses: actions/download-artifact@v4
         with:
-          script: |
-            const o = context.repo.owner;
-            const r = context.repo.repo;
-            const pr = context.payload.pull_request;
-            const sha = pr ? pr.head.sha : context.sha;
-            const ref = pr ? pr.head.ref : context.ref;
-            const cm = await github.rest.repos.getCommit({
-              owner: o, repo: r, ref: sha
-            });
-            const c = cm.data.commit;
-            const url = 'https://github.com/' + o + '/'
-              + r + '/commit/' + sha;
-
-            let mergedPr = null;
-            if (pr?.merged === true && pr.html_url) {
-              mergedPr = pr;
-            } else if (
-              !pr &&
-              context.eventName === 'push' &&
-              context.ref?.startsWith('refs/heads/')
-            ) {
-              const branch = context.ref.replace('refs/heads/', '');
-              try {
-                const prs = await github.rest.repos
-                  .listPullRequestsAssociatedWithCommit({
-                    owner: o, repo: r, commit_sha: sha
-                  });
-                const merged = (prs.data || [])
-                  .filter(p => p.merged_at && p.base?.ref === branch)
-                  .sort((a, b) =>
-                    Date.parse(b.merged_at) - Date.parse(a.merged_at)
-                  );
-                mergedPr = merged[0] || null;
-              } catch (err) {
-                core.warning(
-                  `Failed to load pull request associated with ${sha}: ${err.message}`
-                );
-              }
-            }
-
-            core.setOutput('sha', sha);
-            core.setOutput('ref', ref);
-            core.setOutput('author', c.author.name);
-            core.setOutput('email', c.author.email);
-            core.setOutput('message', c.message);
-            core.setOutput('url', url);
-            core.setOutput('is_pr', pr ? 'true' : 'false');
-            core.setOutput('pr_num', pr ? String(pr.number) : '');
-            core.setOutput('merged_pr_num', mergedPr ? String(mergedPr.number) : '');
-            core.setOutput('merged_pr_title', mergedPr?.title || '');
-            core.setOutput('merged_pr_url', mergedPr?.html_url || '');
-            core.setOutput('repository', o + '/' + r);
-      - name: Compose notification
-        id: notify
+          pattern: test-run-*
+          path: test-runs
+      # All assessment logic (classification against known issues, message
+      # composition, Slack posting, job summary) lives in scripts/barmin.ts.
+      - name: Compose and post quality assessment
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
-          FAILURE_COUNT: ${{ steps.fail.outputs.count }}
-          SHA: ${{ steps.ci.outputs.sha }}
-          AUTHOR: ${{ steps.ci.outputs.author }}
-          EMAIL: ${{ steps.ci.outputs.email }}
-          REF: ${{ steps.ci.outputs.ref }}
-          URL: ${{ steps.ci.outputs.url }}
-          MESSAGE: ${{ steps.ci.outputs.message }}
-          REPO: ${{ steps.ci.outputs.repository }}
-          MERGED_PR_NUM: ${{ steps.ci.outputs.merged_pr_num }}
-          MERGED_PR_TITLE: ${{ steps.ci.outputs.merged_pr_title }}
-          MERGED_PR_URL: ${{ steps.ci.outputs.merged_pr_url }}
+          TESTED_REGISTRY: ${{ inputs.registry }}
           RELEASE_URL: ${{ inputs.release_url || github.event.release.html_url || '' }}
-        run: |
-          set -euo pipefail
-          short_sha="${SHA:0:7}"
-          ref_label="${REPO}@${REF}"
-          send="true"
-          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
-            send="false"
-          fi
-          release_line="${RELEASE_URL:+*Release:* ${RELEASE_URL}}"
-          merged_pr_line=""
-          if [ -n "${MERGED_PR_URL}" ]; then
-            merged_pr_line="*Merged PR:* <${MERGED_PR_URL}|#${MERGED_PR_NUM}>"
-            if [ -n "${MERGED_PR_TITLE}" ]; then
-              merged_pr_line="${merged_pr_line} ${MERGED_PR_TITLE}"
-            fi
-          fi
-          if [ "${FAILURE_COUNT}" = "0" ]; then
-            msg_lines=(
-              '──────────────────────────────────────────────'
-              "🎉 All green from update in *${REPO}*! Good job *${AUTHOR}*! 🙌"
-              ''
-              "*Repository:* ${REPO}"
-            )
-            if [ -n "${merged_pr_line}" ]; then
-              msg_lines+=("${merged_pr_line}")
-            fi
-            msg_lines+=(
-              "*Commit:* <${URL}|${short_sha}>"
-              ''
-              '*Commit message:*'
-              '```'
-              "${MESSAGE}"
-              '```'
-            )
-            printf -v text '%s\n' "${msg_lines[@]}"
-            conclusion="success"
-          else
-
-            usernameFromEmail="${EMAIL%@*}"
-            
-            # Some manually mapped common cases
-            case "${EMAIL}" in
-              "me@syrusakbary.com")
-                usernameFromEmail="syrus"
-                ;;
-              "artem.yarulin@kapteko.com")
-                usernameFromEmail="artem"
-                ;;
-              "m.amin.rayej@gmail.com")
-                usernameFromEmail="amin"
-                ;;
-              "chris@theduke.at")
-                usernameFromEmail="christoph"
-              ;;
-
-            esac
-
-            msg_lines=(
-              "*Uh-oh, what happened here?☝️ *"
-              "Seems like something broke... Who dunit'?"
-              "Primary suspect: *<@${usernameFromEmail}>*"
-              ''
-              "*Commit:* ${SHA}, <${URL}|View commit>"
-              ''
-              "*Repository:* ${REPO}"
-            )
-            if [ -n "${merged_pr_line}" ]; then
-              msg_lines+=("${merged_pr_line}")
-            fi
-            if [ -n "${release_line}" ]; then
-              msg_lines+=("${release_line}")
-            fi
-            msg_lines+=(
-              '*Commit message:*'
-              '```'
-              "${MESSAGE}"
-              '```'
-              'Recommendation: Re-run the failing pipeline in case of flaky test/flaky functionality.'
-            )
-            printf -v text '%s\n' "${msg_lines[@]}"
-            conclusion="failure"
-          fi
-          payload=$(jq -n --arg text "$text" '{text: $text}')
-          {
-            echo "text<<EOF"
-            printf '%s\n' "$text"
-            echo "EOF"
-            echo "payload<<EOF"
-            printf '%s\n' "$payload"
-            echo "EOF"
-            echo "conclusion=$conclusion"
-            echo "send=$send"
-          } >> "$GITHUB_OUTPUT"
-      - name: Post Slack message
-        if: ${{ steps.notify.outputs.send == 'true' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.test_failure_webhook }}
-          PAYLOAD: ${{ steps.notify.outputs.payload }}
-        run: |
-          set -euo pipefail
-          curl -sS -X POST -H 'Content-type: application/json' \
-            --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
-      - name: Write job summary
-        if: ${{ steps.notify.outputs.conclusion == 'failure' }}
-        env:
-          SUMMARY_TEXT: ${{ steps.notify.outputs.text }}
-        run: |
-          printf '%s\n' "$SUMMARY_TEXT" >> "$GITHUB_STEP_SUMMARY"
+        run: pnpm barmin

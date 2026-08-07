@@ -234,10 +234,13 @@ def bootstrap(ctx: Ctx) -> None:
         "root",
         "--mysql-password",
         "root",
+        # Apps resolve DB hosts through Edge's resolver, not compose DNS, so
+        # the compose alias is unreachable from inside an app. Use the bridge
+        # gateway + published port, exactly like MySQL above.
         "--app-postgres-host",
-        "postgres-app-db-1",
+        mysql_app_host,
         "--app-postgres-port",
-        "5432",
+        ctx.get("POSTGRES_APP_DB_PORT"),
         "--loki-uri",
         "http://loki:3100",
         "--metrics-clickhouse-host",

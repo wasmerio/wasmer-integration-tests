@@ -95,7 +95,46 @@ function dbEngine() {
   if (host.startsWith("db.") || host.startsWith("mysql.")) {
     return "mysql";
   }
-  return process.env.DB_PORT === "5432" ? "postgres" : "mysql";
+  if (process.env.DB_PORT === "5432") {
+    return "postgres";
+  }
+  if (process.env.DB_PORT === "3306") {
+    return "mysql";
+  }
+  // No engine signal (e.g. local platform: raw IP host, remapped port).
+  return null;
+}
+
+async function connectPostgres(config) {
+  const { default: pg } = await import("pg");
+  const base = { ...config, connectionTimeoutMillis: 10_000 };
+  // TLS first (managed endpoints enforce sslmode=require), plaintext
+  // fallback for TLS-less endpoints like the local platform.
+  const withTls = new pg.Client({
+    ...base,
+    ssl: { rejectUnauthorized: false },
+  });
+  try {
+    await withTls.connect();
+    await withTls.end();
+  } catch (err) {
+    await withTls.end().catch(() => {});
+    if (!/ssl/i.test(err instanceof Error ? err.message : String(err))) {
+      throw err;
+    }
+    const plaintext = new pg.Client(base);
+    await plaintext.connect();
+    await plaintext.end();
+  }
+}
+
+async function connectMysql(config) {
+  const mysql = await import("mysql2/promise");
+  const conn = await mysql.createConnection({
+    ...config,
+    connectTimeout: 10_000,
+  });
+  await conn.end();
 }
 
 async function checkDbConnection() {
@@ -112,40 +151,28 @@ async function checkDbConnection() {
     database: process.env.DB_NAME,
   };
 
-  try {
-    if (dbEngine() === "postgres") {
-      const { default: pg } = await import("pg");
-      const base = { ...config, connectionTimeoutMillis: 10_000 };
-      // TLS first (managed endpoints enforce sslmode=require), plaintext
-      // fallback for TLS-less endpoints like the local platform.
-      const withTls = new pg.Client({
-        ...base,
-        ssl: { rejectUnauthorized: false },
-      });
-      try {
-        await withTls.connect();
-        await withTls.end();
-      } catch (err) {
-        await withTls.end().catch(() => {});
-        if (!/ssl/i.test(err instanceof Error ? err.message : String(err))) {
-          throw err;
-        }
-        const plaintext = new pg.Client(base);
-        await plaintext.connect();
-        await plaintext.end();
+  // When the engine is ambiguous, probe postgres first: pg fails fast
+  // against a MySQL server, while mysql2 waits out its whole connect
+  // timeout against PostgreSQL (both protocols expect the peer to speak
+  // first).
+  const engine = dbEngine();
+  const candidates = engine ? [engine] : ["postgres", "mysql"];
+  const errors = [];
+  for (const candidate of candidates) {
+    try {
+      if (candidate === "postgres") {
+        await connectPostgres(config);
+      } else {
+        await connectMysql(config);
       }
-    } else {
-      const mysql = await import("mysql2/promise");
-      const conn = await mysql.createConnection({
-        ...config,
-        connectTimeout: 10_000,
-      });
-      await conn.end();
+      return "OK";
+    } catch (err) {
+      errors.push(
+        `${candidate}: ${err instanceof Error ? err.message : err}`,
+      );
     }
-    return "OK";
-  } catch (err) {
-    return `Connection failed: ${err instanceof Error ? err.message : err}`;
   }
+  return `Connection failed: ${errors.join("; ")}`;
 }
 
 // --- durable-state --------------------------------------------------------

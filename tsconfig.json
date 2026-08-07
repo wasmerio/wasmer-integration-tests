@@ -2,6 +2,8 @@
   "compilerOptions": {
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "target": "es2022",
+    "module": "commonjs",
     "lib": ["es2023"]
   },
   "exclude": ["wasmopticon", "node_modules"]
