@@ -338,8 +338,7 @@ async function getCommitInfo(): Promise<CommitInfo> {
 
 function findingLine(finding: Finding): string {
   if (finding.ticket && finding.url) {
-    const note = finding.note ? ` — ${finding.note}` : "";
-    return `• <${finding.url}|${finding.ticket}> ${finding.name} _(${finding.suite})_${note}`;
+    return `• <${finding.url}|${finding.ticket}> ${finding.name} _(${finding.suite})_`;
   }
   return `• ${finding.name} — \`${finding.file}\` _(${finding.suite})_`;
 }
@@ -351,87 +350,62 @@ function composeMessage(
   const { untracked, known, fixedKnown, infraJobs, failedJobCount } =
     classification;
   const failed = failedJobCount > 0;
-  const shortSha = commit.sha.slice(0, 7);
-  const suspect =
+  const slackUser =
     SLACK_USERNAME_BY_EMAIL[commit.email] ?? commit.email.split("@")[0];
   const runUrl = `${env("GITHUB_SERVER_URL", "https://github.com")}/${env("GITHUB_REPOSITORY")}/actions/runs/${env("GITHUB_RUN_ID")}`;
-  const lines: string[] = ["──────────────────────────────────────────────"];
+  const commitTitle = commit.message.split("\n")[0];
+  const contextLine = `*${env("GITHUB_REPOSITORY")}@${commit.ref}* · <${commit.url}|${commit.sha.slice(0, 7)}> ${commitTitle} · <@${slackUser}>`;
 
+  const lines: string[] = [];
   if (!failed) {
-    lines.push(
-      `🎉 All green from update in *${env("GITHUB_REPOSITORY")}*! Good job *${commit.author}*! 🙌`,
-    );
+    lines.push(":tada: Integration tests green — nice one!");
   } else if (untracked.length > 0) {
     lines.push(
-      "*Uh-oh, what happened here?☝️ *",
-      `${untracked.length} failure(s) nobody has diagnosed yet... Who dunit'?`,
-      `Primary suspect: *<@${suspect}>*`,
+      `:fire: *${untracked.length} untracked test failure${untracked.length === 1 ? "" : "s"}* — needs a diagnosis`,
     );
   } else if (known.length > 0) {
     lines.push(
-      ":warning: *Tests are red, but nothing new broke.*",
-      `All ${known.length} failing test(s) are known issues tracked in Linear (listed below).`,
+      `:warning: Tests red, nothing new — all ${known.length} failure${known.length === 1 ? " is a" : "s are"} known issue${known.length === 1 ? "" : "s"}`,
     );
   } else {
     lines.push(
-      ":construction: *Test job(s) failed without producing test results.*",
-      "Likely an environment or bring-up failure rather than a test failure — check the job logs.",
+      `:construction: ${failedJobCount} job${failedJobCount === 1 ? "" : "s"} failed without test results — likely infra`,
     );
   }
+  lines.push(contextLine);
 
   if (untracked.length > 0) {
-    lines.push(
-      "",
-      `:fire: *UNTRACKED failures (${untracked.length}) — no Linear ticket on record:*`,
-      ...untracked.map(findingLine),
-      "_Diagnose and register via the file-known-issue skill (known-issues.jsonc)._",
-    );
+    lines.push("", ":fire: *Untracked:*", ...untracked.map(findingLine));
   }
   if (known.length > 0) {
-    lines.push(
-      "",
-      `:warning: *Known issues (${known.length}):*`,
-      ...known.map(findingLine),
-    );
+    lines.push("", ":warning: *Known issues:*", ...known.map(findingLine));
   }
   if (infraJobs.length > 0) {
     lines.push(
       "",
-      `:construction: *Job failures without test-level data (${infraJobs.length}):*`,
+      ":construction: *No test data:*",
       ...infraJobs.map((job) => `• <${job.url}|${job.name}>`),
     );
   }
   if (fixedKnown.length > 0) {
     lines.push(
       "",
-      "*🎉 Known issues now passing — consider removing from known-issues.jsonc:*",
+      ":tada: *Now passing — remove from known-issues.jsonc:*",
       ...fixedKnown.map(findingLine),
     );
   }
-
-  lines.push(
-    "",
-    `*Environment:* ${env("TESTED_REGISTRY", "unknown")}`,
-    `*Repository:* ${env("GITHUB_REPOSITORY")}`,
-    `*Commit:* <${commit.url}|${shortSha}> (${commit.ref})`,
-  );
   if (commit.mergedPrLine) {
-    lines.push(commit.mergedPrLine);
+    lines.push("", commit.mergedPrLine);
   }
   if (env("RELEASE_URL")) {
     lines.push(`*Release:* ${env("RELEASE_URL")}`);
   }
-  lines.push("", "*Commit message:*", "```", commit.message, "```");
   if (failed) {
-    lines.push(
-      "",
-      `Debug: full jest output + deployed-app registry per suite in the <${runUrl}#artifacts|test-run-* artifacts>.`,
-    );
+    lines.push("", `Debug: <${runUrl}#artifacts|test-run-* artifacts>`);
   }
   if (untracked.length > 0) {
     lines.push(
-      "",
-      "*Investigate agentically — paste this into your hivemind agent:*",
+      "Paste into your hivemind agent:",
       "```",
       `Investigate the wasmer integration test failures in ${runUrl} (load your integration-test-failure skill): download the test-run-* artifacts, root-cause each UNTRACKED failure, and for confirmed product bugs file a Linear ticket and register the test in known-issues.jsonc (file-known-issue skill).`,
       "```",
@@ -440,7 +414,6 @@ function composeMessage(
 
   return { text: lines.join("\n"), failed };
 }
-
 async function postToSlack(text: string): Promise<void> {
   const webhook = env("SLACK_WEBHOOK_URL");
   if (!webhook) {
