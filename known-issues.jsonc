@@ -24,4 +24,12 @@
     "ticket": "BE-1692",
     "note": "post-deploy DB_* injection never reaches the app without a redeploy",
   },
+  "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
+    "ticket": "BE-1705",
+    "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
+  },
+  "tests/job/cronjob-config-removal.test.ts::removing a cronjob from config stops it without deleting its app": {
+    "ticket": "BE-1705",
+    "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
+  },
 }
