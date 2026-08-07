@@ -53,15 +53,15 @@
     "note": "rc.5 fix not rolled out: the dev Edge override still serves rc.4, which types -1 as double",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: hexo-starter": {
-    "ticket": "BE-1724",
-    "note": "deploys during a dev sync-stall window stay unknown_domain forever; any template can hit it",
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: js-worker": {
-    "ticket": "BE-1724",
-    "note": "deploys during a dev sync-stall window stay unknown_domain forever; any template can hit it",
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: python-http-server": {
-    "ticket": "BE-1724",
-    "note": "deploys during a dev sync-stall window stay unknown_domain forever; any template can hit it",
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
   },
 }
