@@ -44,4 +44,28 @@
     "ticket": "WAX-607",
     "note": "local platform only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27, Edge serves an HTML error page",
   },
+  "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
+    "ticket": "BE-1705",
+    "note": "orphan schedules now starve fresh cronjobs too; the first counter increment never happens",
+  },
+  "tests/app/phpix-64bit-int-semantics.test.ts::ECO-426 phpix integer semantics 64-bit phpix types negated integers as int": {
+    "ticket": "ECO-426",
+    "note": "rc.5 fix not rolled out: the dev Edge override still serves rc.4, which types -1 as double",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: hexo-starter": {
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: js-worker": {
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: python-http-server": {
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: preact-starter": {
+    "ticket": "BE-1647",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+  },
 }
