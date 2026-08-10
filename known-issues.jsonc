@@ -16,14 +16,6 @@
 // use test.failing for a product bug: it hides the failure and turns red
 // the moment the bug is fixed.
 {
-  "tests/general/psql.test.ts::psql-full-lifecycle": {
-    "ticket": "BE-1692",
-    "note": "post-deploy DB_* injection never reaches the app without a redeploy",
-  },
-  "tests/general/psql.test.ts::mysql-legacy-createappdb-mutation": {
-    "ticket": "BE-1692",
-    "note": "post-deploy DB_* injection never reaches the app without a redeploy",
-  },
   "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
     "ticket": "BE-1705",
     "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
@@ -32,17 +24,13 @@
     "ticket": "BE-1705",
     "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
   },
-  "tests/app/app_ban_unban_roundtrip.test.ts::app-ban-unban-roundtrip": {
-    "ticket": "BE-1695",
-    "note": "fix ac3a329 merged 2026-08-03 but no prod backend release since; prod and the prod-mirror local platform still 400 unknown_domain",
-  },
   "tests/app/eco-419-php-clean-url-routing.test.ts::ECO-419 php clean-url routing clean URL is routed through the docroot index.php": {
     "ticket": "ECO-419",
-    "note": "phpix overwrite fix live on dev only; prod and the local platform still 404 on clean URLs",
+    "note": "local platform only since prod went green on release 2026.08.10.1 (fresh apps get fixed phpix); the local platform still 404s clean URLs",
   },
   "tests/app/node-fixture-contract.test.ts::node-fixture-contract-endpoints": {
     "ticket": "WAX-607",
-    "note": "local platform only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27, Edge serves an HTML error page",
+    "note": "local platform only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27; WAX-607 Done 2026-08-07 — remove once a local-platform image carries the fixed EdgeJS",
   },
   "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
     "ticket": "BE-1705",
@@ -67,5 +55,17 @@
   "tests/app/templates.test.ts::app templates deploy Template remote build: preact-starter": {
     "ticket": "BE-1647",
     "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+  },
+  "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
+    "ticket": "BE-1705",
+    "note": "orphan schedules starve fresh cronjobs; the execute counter never increments (prod nightly 7 of 8 nights Aug 3-10)",
+  },
+  "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
+    "ticket": "BE-1705",
+    "note": "orphan schedules starve fresh cronjobs; the counter never increments (prod nightly 8 of 8 nights Aug 3-10)",
+  },
+  "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
+    "ticket": "EDGE-1994",
+    "note": "prod only: Edge never serves a cached response even with every request pinned to one node; dev green since the node-pin fix 50ea477",
   },
 }
