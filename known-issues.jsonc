@@ -24,13 +24,9 @@
     "ticket": "BE-1705",
     "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
   },
-  "tests/app/eco-419-php-clean-url-routing.test.ts::ECO-419 php clean-url routing clean URL is routed through the docroot index.php": {
-    "ticket": "ECO-419",
-    "note": "local platform only since prod went green on release 2026.08.10.1 (fresh apps get fixed phpix); the local platform still 404s clean URLs",
-  },
   "tests/app/node-fixture-contract.test.ts::node-fixture-contract-endpoints": {
     "ticket": "WAX-607",
-    "note": "local platform only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27; WAX-607 Done 2026-08-07 — remove once a local-platform image carries the fixed EdgeJS",
+    "note": "prod-pinned Edge only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27; WAX-607 Done 2026-08-07, resolve_dev Edge local platform green 2026-08-10 — remove once the prod Edge build carries the fixed EdgeJS",
   },
   "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
     "ticket": "BE-1705",
@@ -66,6 +62,6 @@
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
-    "note": "prod only: Edge never serves a cached response even with every request pinned to one node; dev green since the node-pin fix 50ea477",
+    "note": "prod only: Edge never serves a cached response even with every request pinned to one node; dev and prod-backend+dev-Edge local platform cache fine, isolating the prod Edge build/config",
   },
 }
