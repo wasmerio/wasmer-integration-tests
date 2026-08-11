@@ -360,13 +360,55 @@ export function buildPythonApp(
   };
 }
 
+export const PACKAGE_SALT_FILE = ".package-salt";
+
+export interface WriteAppDefinitionOptions {
+  // Package byte-identical content instead of salting it. Only for tests that
+  // deliberately provoke the shared staging key (BE-1719).
+  uniquePackage?: boolean;
+}
+
+// Return `app.files` with a random file added inside the first host directory
+// the manifest mounts.
+//
+// `wasmer deploy` uploads the package to a content-addressed `tmp/<sha256>`
+// staging key, and R2 throttles writes per key, so concurrent deploys of
+// identical content fail with a hard 429 (BE-1719). The app name lives in
+// `app.yaml` and does not enter the package hash, so the salt has to be part
+// of the packaged filesystem.
+function saltedAppFiles(app: AppDefinition): DirEntry {
+  const files: DirEntry = { ...(app.files ?? {}) };
+  if (!app.wasmerToml) {
+    return files;
+  }
+
+  const mounts = (app.wasmerToml.fs ?? {}) as Record<string, string>;
+  let hostDir = Object.values(mounts).find((dir) => typeof dir === "string");
+  if (!hostDir) {
+    hostDir = "salt";
+    app.wasmerToml.fs = { ...mounts, "/salt": hostDir };
+  }
+
+  const key = hostDir.replace(/^\.\//, "").replace(/\/+$/, "");
+  const existing = files[key];
+  files[key] = {
+    ...(typeof existing === "object" ? existing : {}),
+    [PACKAGE_SALT_FILE]: crypto.randomUUID(),
+  };
+  return files;
+}
+
 // Write an `AppDefinition` to a directory.
 export async function writeAppDefinition(
   path: string,
   app: AppDefinition,
+  options?: WriteAppDefinitionOptions,
 ): Promise<void> {
+  const appFiles =
+    options?.uniquePackage === false ? (app.files ?? {}) : saltedAppFiles(app);
+
   const files: Record<string, string | object> = {
-    ...(app.files ?? {}),
+    ...appFiles,
     "app.yaml": yaml.dump(app.appYaml),
   };
 
