@@ -32,10 +32,6 @@
     "ticket": "BE-1705",
     "note": "orphan schedules now starve fresh cronjobs too; the first counter increment never happens",
   },
-  "tests/app/phpix-64bit-int-semantics.test.ts::ECO-426 phpix integer semantics 64-bit phpix types negated integers as int": {
-    "ticket": "ECO-426",
-    "note": "rc.5 fix not rolled out: the dev Edge override still serves rc.4, which types -1 as double",
-  },
   "tests/app/templates.test.ts::app templates deploy Template remote build: hexo-starter": {
     "ticket": "BE-1647",
     "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
@@ -63,6 +59,14 @@
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
     "ticket": "BE-1705",
     "note": "orphan schedules starve fresh cronjobs; the counter never increments (prod nightly 8 of 8 nights Aug 3-10)",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: xmcp-starter": {
+    "ticket": "SRE-1700",
+    "note": "the remote build wedges in the depot 'exporting to client directory' step and is canceled at the 600s cap; deploy reports 'Build failed with exit code 1'",
+  },
+  "tests/general/be-1719-shared-staging-key.test.ts::be-1719-concurrent-deploys-of-identical-packages": {
+    "ticket": "BE-1719",
+    "note": "concurrent deploys of one package share the tmp/<sha256> staging key; R2 throttles per key and the CLI aborts on the first 429 with no retry",
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
