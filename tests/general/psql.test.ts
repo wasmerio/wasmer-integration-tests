@@ -116,7 +116,6 @@ async function credentialsFor(
   };
 }
 
-// Known issue BE-1692 — tracked in known-issues.jsonc, expected red.
 test.concurrent("psql-full-lifecycle", async () => {
   const env = TestEnv.fromEnv();
 

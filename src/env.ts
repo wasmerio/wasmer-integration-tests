@@ -368,6 +368,9 @@ export interface CommandOutput {
 export interface DeployOptions {
   extraCliArgs?: string[];
   noWait?: boolean;
+  // Deploy the package bytes as built, without the per-deploy salt. Only for
+  // tests that deliberately provoke the shared staging key (BE-1719).
+  uniquePackage?: boolean;
 }
 
 const nativeFetch = globalThis.fetch.bind(globalThis);
@@ -1098,7 +1101,9 @@ export class TestEnv {
     }
 
     const dir = await buildTempDir(spec.files ?? {});
-    await writeAppDefinition(dir, spec);
+    await writeAppDefinition(dir, spec, {
+      uniquePackage: options?.uniquePackage,
+    });
     return this.deployAppDir(dir, options);
   }
 
