@@ -26,14 +26,18 @@ export interface Style {
   enabled: boolean;
 }
 
-/** Honors NO_COLOR (any value) and FORCE_COLOR, else follows the stream. */
+/** Honors NO_COLOR (any value) and FORCE_COLOR, else follows the stream.
+ * `env` is a parameter for the same reason `colorDepth`'s is: a caller that
+ * writes somewhere other than `process.stdout` must be able to answer this
+ * about its own sink, not about the ambient process. */
 export function colorEnabled(
   stream: { isTTY?: boolean } = process.stdout,
+  env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  if (process.env["NO_COLOR"]) {
+  if (env["NO_COLOR"]) {
     return false;
   }
-  const forced = process.env["FORCE_COLOR"];
+  const forced = env["FORCE_COLOR"];
   if (forced !== undefined && forced !== "" && forced !== "0") {
     return true;
   }

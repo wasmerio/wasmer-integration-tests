@@ -11,6 +11,8 @@ import {
   ExecutorProfileError,
 } from "../../ass/executors/jest";
 import type { ResolvedState } from "../../ass/executors/contract";
+import { runCli } from "../../ass/cli";
+import { ESC } from "../../ass/report/style";
 import {
   addScenario,
   cli,
@@ -97,6 +99,42 @@ describe("run orchestration through the CLI", () => {
     expect(deployIndex).toBeGreaterThan(upIndex);
     expect(execIndex).toBeGreaterThan(deployIndex);
     expect(harness.calls.slice(execIndex + 1)).toEqual(["down", "restore"]);
+  });
+
+  test("styling follows the caller, not the ambient environment", async () => {
+    // CI runs jest with FORCE_COLOR=1. That must not reach a run whose caller
+    // writes somewhere other than a terminal — and the closing summary has to
+    // agree with the streaming table, since they render as one frame.
+    const previous = process.env["FORCE_COLOR"];
+    process.env["FORCE_COLOR"] = "1";
+    try {
+      const plain = await cli(
+        makeRepoRoot(),
+        ["run", "wax-600"],
+        makeFakeHarness().deps,
+      );
+      expect(plain.stdout).not.toContain(ESC);
+      expect(plain.stdout).toMatch(/timing │ total: /);
+
+      const out: string[] = [];
+      await runCli(["run", "wax-600"], {
+        cwd: makeRepoRoot(),
+        io: { out: (line) => out.push(line), err: () => {} },
+        color: true,
+        runnerDeps: makeFakeHarness().deps,
+      });
+      const styled = out.join("\n");
+      expect(styled).toContain(ESC);
+      // Both halves of the frame, not just the streaming one.
+      expect(styled).toMatch(new RegExp(`scenario.*${ESC}`));
+      expect(styled).toMatch(new RegExp(`timing.*${ESC}`));
+    } finally {
+      if (previous === undefined) {
+        delete process.env["FORCE_COLOR"];
+      } else {
+        process.env["FORCE_COLOR"] = previous;
+      }
+    }
   });
 
   test("a reproduced pinned open run exits 0 with retained evidence", async () => {

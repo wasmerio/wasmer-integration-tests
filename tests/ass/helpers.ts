@@ -57,6 +57,10 @@ export async function cli(
   const code = await runCli(argv, {
     cwd: root,
     io: { out: (line) => out.push(line), err: (line) => err.push(line) },
+    // Assertions here read the CLI's words, not its styling. CI exports
+    // FORCE_COLOR=1 for jest, which would otherwise smear SGR codes through
+    // every substring match. Color itself is covered against the renderers.
+    color: false,
     runnerDeps,
     doctor,
   });

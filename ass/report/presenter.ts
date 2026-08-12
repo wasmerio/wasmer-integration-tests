@@ -129,6 +129,12 @@ export class Presenter {
     this.phaseStartedMs = this.now();
   }
 
+  /** The color decision this presenter resolved. The closing summary is
+   * rendered separately but shares the frame, so it must share this too. */
+  get color(): boolean {
+    return this.s.enabled;
+  }
+
   /** Every real line erases the transient progress row first, so the wave
    * always sits at the live bottom edge of the table. */
   private out(line: string): void {

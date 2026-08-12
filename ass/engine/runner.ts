@@ -365,6 +365,7 @@ export async function runScenario(
     const lines = formatSummary(report, reportPath, {
       cwd,
       continued: view !== undefined,
+      color: view?.color,
     });
     if (view) {
       view.summary(lines);

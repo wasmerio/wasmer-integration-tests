@@ -44,6 +44,9 @@ export interface CliOptions {
   runnerDeps?: RunnerDeps;
   /** Test seam: fake the toolchain probes doctor runs. */
   doctor?: Omit<DoctorOptions, "cwd">;
+  /** Colorize output. Defaults to sniffing `process.stdout`, which is only
+   * the right question when `io` is unset and actually writes there. */
+  color?: boolean;
 }
 
 export interface Overrides {
@@ -200,6 +203,7 @@ async function runCommand(
   overrides: Overrides,
   cwd: string,
   io: CliIo,
+  color: boolean,
   deps?: RunnerDeps,
   verbose = false,
 ): Promise<number> {
@@ -211,7 +215,7 @@ async function runCommand(
   // over each other.
   const presenter = new Presenter({
     io,
-    color: colorEnabled(),
+    color,
     verbose: verbose || isTruthy(process.env["VERBOSE"]),
     // The live progress wave draws only on a real terminal: its repaints
     // are carriage-return games that would corrupt piped or CI output.
@@ -260,6 +264,7 @@ export async function runCli(
     out: (line) => process.stdout.write(`${line}\n`),
     err: (line) => process.stderr.write(`${line}\n`),
   };
+  const color = options.color ?? colorEnabled();
   let code = EXIT_OK;
   const chomp = (s: string): string => (s.endsWith("\n") ? s.slice(0, -1) : s);
 
@@ -349,6 +354,7 @@ export async function runCli(
       overridesFrom(flags),
       cwd,
       io,
+      color,
       options.runnerDeps,
       flags.verbose === true,
     );
@@ -364,6 +370,7 @@ export async function runCli(
       overridesFrom(flags),
       cwd,
       io,
+      color,
       options.runnerDeps,
       flags.verbose === true,
     );
@@ -400,7 +407,7 @@ export async function runCli(
     .description("Report environment capabilities and how to fix them")
     .action(() => {
       const report = runDoctor({ cwd, ...options.doctor });
-      for (const line of formatDoctor(report, { color: colorEnabled() })) {
+      for (const line of formatDoctor(report, { color })) {
         io.out(line);
       }
       code = report.ok ? EXIT_OK : EXIT_USAGE;

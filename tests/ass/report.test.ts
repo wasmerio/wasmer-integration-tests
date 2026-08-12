@@ -385,19 +385,15 @@ describe("style helpers", () => {
   });
 
   test("colorEnabled honors NO_COLOR over a TTY", () => {
-    const previous = process.env["NO_COLOR"];
-    try {
-      process.env["NO_COLOR"] = "1";
-      expect(colorEnabled({ isTTY: true })).toBe(false);
-      delete process.env["NO_COLOR"];
-      expect(colorEnabled({ isTTY: true })).toBe(true);
-      expect(colorEnabled({ isTTY: false })).toBe(false);
-    } finally {
-      if (previous === undefined) {
-        delete process.env["NO_COLOR"];
-      } else {
-        process.env["NO_COLOR"] = previous;
-      }
-    }
+    // Env passed in, never mutated: CI runs jest with FORCE_COLOR=1, and a
+    // test that reads the ambient environment would assert about the runner.
+    expect(colorEnabled({ isTTY: true }, { NO_COLOR: "1" })).toBe(false);
+    expect(
+      colorEnabled({ isTTY: true }, { NO_COLOR: "1", FORCE_COLOR: "1" }),
+    ).toBe(false);
+    expect(colorEnabled({ isTTY: true }, {})).toBe(true);
+    expect(colorEnabled({ isTTY: false }, {})).toBe(false);
+    expect(colorEnabled({ isTTY: false }, { FORCE_COLOR: "1" })).toBe(true);
+    expect(colorEnabled({ isTTY: false }, { FORCE_COLOR: "0" })).toBe(false);
   });
 });
