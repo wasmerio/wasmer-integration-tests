@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Entry point for the ass CLI. Exists so a run prints only ass's own output:
+# `pnpm run` prefaces every invocation with its own two-line banner, which
+# breaks the single-voice terminal contract the presenter maintains.
+#
+# `ass doctor` is the setup contract's convergence test, so it has to be
+# runnable on a machine that has not installed anything yet — a bare exec
+# failure is the one state doctor exists to explain (review 4, R4-02). The
+# message below mirrors doctor's own `dependencies installed` remediation.
+root=$(dirname -- "$0")/..
+runner="$root/node_modules/.bin/tsx"
+if [ ! -x "$runner" ]; then
+	printf '%s\n' "ass: dependencies are not installed ($runner is missing)" >&2
+	printf '%s\n' "     fix: make setup    (checks node 22+, runs pnpm install)" >&2
+	printf '%s\n' "     then: ./bin/ass doctor" >&2
+	exit 1
+fi
+exec "$runner" "$root/ass/main.ts" "$@"

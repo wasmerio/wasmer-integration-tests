@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "test": "jest",
-    "barmin": "tsx scripts/barmin.ts"
+    "ass": "./bin/ass"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -11,6 +11,7 @@
     "@types/ssh2": "^1.15.5",
     "@types/ssh2-sftp-client": "^9.0.6",
     "artillery": "^2.0.33",
+    "commander": "^14.0.3",
     "eslint": "^9.39.4",
     "jest": "^29.7.0",
     "jest-environment-node": "^29.7.0",

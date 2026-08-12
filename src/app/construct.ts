@@ -274,25 +274,27 @@ export function buildPhpApp(
   return spec;
 }
 
-const PERSISTENT_COUNTER_FIXTURE_PATH = pathModule.join(
-  __dirname,
-  "..",
-  "..",
-  "fixtures",
-  "php",
-  "durable-counter.php",
-);
+// Lazy on purpose: `__dirname` only exists under CJS (jest). The ass CLI
+// imports this module as ESM through tsx, where a module-scope reference
+// crashes the import even though it never builds a PHP app.
+function persistentCounterFixturePath(): string {
+  return pathModule.join(
+    __dirname,
+    "..",
+    "..",
+    "fixtures",
+    "php",
+    "durable-counter.php",
+  );
+}
 
 export function buildPersistentCounterApp(
   additionalAppYamlSettings?: Record<string, unknown>,
 ): AppDefinition {
-  return buildPhpApp(
-    fs.readFileSync(PERSISTENT_COUNTER_FIXTURE_PATH, "utf-8"),
-    {
-      volumes: [{ name: "data", mount: "/data" }],
-      ...additionalAppYamlSettings,
-    },
-  );
+  return buildPhpApp(fs.readFileSync(persistentCounterFixturePath(), "utf-8"), {
+    volumes: [{ name: "data", mount: "/data" }],
+    ...additionalAppYamlSettings,
+  });
 }
 
 function persistentCounterPathFor(name: string): string {

@@ -23,3 +23,11 @@ local-platform/package-compilation-list.txt
 # here and must not be reformatted/committed.
 .agents
 .claude
+# Transient ass-run backups of mutated local files; present only while a run
+# is in flight (or after a crash). Never format or commit them.
+*.ass-bak
+*.ass-absent
+# Shell entry points: Prettier has no parser for them.
+bin/ass
+ass/bootstrap/detect.sh
+.ass/

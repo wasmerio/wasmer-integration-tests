@@ -19,7 +19,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from localplatform.bootstrap import _REDACT_PATTERN, sign_edge_grpc_token
+from unittest import mock
+
+from localplatform import fetch
+from localplatform.bootstrap import (
+    _REDACT_PATTERN,
+    sign_edge_grpc_token,
+    strip_unknown_flag,
+)
+from localplatform.fetch import (
+    ECR_ACCOUNT_PROFILES,
+    backend_archive_cache_path,
+    is_immutable_artifact_source,
+    materialize_backend_archive,
+    parse_ecr_registry,
+    select_ecr_profile,
+)
 from localplatform.ensure_compiled import _build_package_list
 from localplatform.lib import (
     Ctx,
@@ -261,6 +276,164 @@ class TestPackageList(TempDirTest):
             self.tmp / "nope.json", self.tmp / "nope.txt", output
         )
         self.assertEqual(packages, [])
+
+
+class TestStripUnknownFlag(unittest.TestCase):
+    """Pinned older backends reject newer smbe flags; the bootstrap strips
+    exactly the rejected flag (and its value) and retries."""
+
+    def test_strips_flag_with_value(self):
+        cmd = ["smbe", "--mysql-host", "db", "--app-postgres-host", "pg", "--x", "1"]
+        self.assertEqual(
+            strip_unknown_flag(cmd, "--app-postgres-host"),
+            ["smbe", "--mysql-host", "db", "--x", "1"],
+        )
+
+    def test_strips_valueless_flag(self):
+        cmd = ["smbe", "--skip-templates", "--mysql-host", "db"]
+        self.assertEqual(
+            strip_unknown_flag(cmd, "--skip-templates"),
+            ["smbe", "--mysql-host", "db"],
+        )
+
+    def test_absent_flag_returns_none(self):
+        self.assertIsNone(strip_unknown_flag(["smbe", "--x", "1"], "--y"))
+
+
+class TestBackendArchiveCache(TempDirTest):
+    """Immutable backend archive sources are cached content-addressed,
+    mirroring the Edge binary cache; floating sources always re-fetch."""
+
+    RELEASE = "github-release:wasmerio/backend:v2026-07-15_2_9a6c3d4:*image*.tar*"
+
+    def _ctx(self) -> Ctx:
+        ctx = Ctx(
+            env={
+                "LOCAL_PLATFORM_BACKEND_ARCHIVE_CACHE_DIR": str(self.tmp / "cache"),
+            }
+        )
+        ctx.run_dir = self.tmp / "run"
+        (ctx.run_dir / "artifacts").mkdir(parents=True)
+        return ctx
+
+    def test_immutable_source_classification(self) -> None:
+        self.assertTrue(is_immutable_artifact_source(self.RELEASE))
+        self.assertTrue(is_immutable_artifact_source("artifact:o/r:12345:backend"))
+        for floating in (
+            "github-release:wasmerio/backend:latest:*image*.tar*",
+            "path:/tmp/backend.tar",
+            "url:https://example.com/backend.tar",
+            "github-artifact:o/r:backend",
+            "none:",
+        ):
+            self.assertFalse(is_immutable_artifact_source(floating), floating)
+
+    def test_miss_populates_cache_then_hit_skips_fetch(self) -> None:
+        ctx = self._ctx()
+        archive = ctx.run_dir / "artifacts" / "backend-image.tar"
+        fetched: list[str] = []
+
+        def fake_fetch(_ctx, source, destination, _label):
+            fetched.append(source)
+            destination.write_bytes(b"tar-bytes")
+            return True
+
+        with mock.patch.object(fetch, "log"), mock.patch.object(
+            fetch, "fetch_to_file", fake_fetch
+        ):
+            materialize_backend_archive(ctx, self.RELEASE, archive)
+        self.assertEqual(fetched, [self.RELEASE])
+        self.assertEqual(archive.read_bytes(), b"tar-bytes")
+        cached = backend_archive_cache_path(ctx, self.RELEASE)
+        self.assertEqual(cached.read_bytes(), b"tar-bytes")
+
+        archive.unlink()
+
+        def refuse_fetch(*_args, **_kwargs):
+            raise AssertionError("a cache hit must not fetch")
+
+        with mock.patch.object(fetch, "log"), mock.patch.object(
+            fetch, "fetch_to_file", refuse_fetch
+        ):
+            materialize_backend_archive(ctx, self.RELEASE, archive)
+        self.assertEqual(archive.read_bytes(), b"tar-bytes")
+
+    def test_floating_source_is_never_cached(self) -> None:
+        ctx = self._ctx()
+        archive = ctx.run_dir / "artifacts" / "backend-image.tar"
+        floating = "github-release:wasmerio/backend:latest:*image*.tar*"
+
+        def fake_fetch(_ctx, _source, destination, _label):
+            destination.write_bytes(b"floating-bytes")
+            return True
+
+        with mock.patch.object(fetch, "log"), mock.patch.object(
+            fetch, "fetch_to_file", fake_fetch
+        ):
+            materialize_backend_archive(ctx, floating, archive)
+        self.assertEqual(archive.read_bytes(), b"floating-bytes")
+        self.assertFalse((self.tmp / "cache").exists())
+
+
+class TestEcrProfileSelection(unittest.TestCase):
+    """The profile must follow the account that owns the registry (the same
+    rule wasmer/backend's Makefile encodes as ACCOUNT_<env> + tf-<env>): a
+    wrong-account profile logs in fine and only 403s later at docker pull."""
+
+    DEV = "376772435488"
+    PROD = "658661676544"
+
+    def test_parses_ecr_registry_hosts(self) -> None:
+        self.assertEqual(
+            parse_ecr_registry(f"{self.PROD}.dkr.ecr.us-east-1.amazonaws.com"),
+            (self.PROD, "us-east-1"),
+        )
+        self.assertEqual(
+            parse_ecr_registry(f"{self.DEV}.dkr.ecr.eu-west-3.amazonaws.com"),
+            (self.DEV, "eu-west-3"),
+        )
+        for other in ("ghcr.io", "docker.io", "notanaccount.dkr.ecr.x.amazonaws.com"):
+            self.assertIsNone(parse_ecr_registry(other), other)
+
+    def test_account_table_matches_backend_makefile(self) -> None:
+        self.assertEqual(ECR_ACCOUNT_PROFILES[self.DEV], "tf-dev")
+        self.assertEqual(ECR_ACCOUNT_PROFILES[self.PROD], "tf-prod")
+
+    def test_configured_profile_for_the_right_account_is_kept(self) -> None:
+        profile, warning = select_ecr_profile(
+            self.PROD, "tf-prod", lambda p: self.PROD if p == "tf-prod" else self.DEV
+        )
+        self.assertEqual(profile, "tf-prod")
+        self.assertIsNone(warning)
+
+    def test_wrong_account_profile_is_corrected_with_a_warning(self) -> None:
+        # The real failure: local.env pins tf-dev while resolve_prod lands on
+        # a prod-account registry.
+        accounts = {"tf-dev": self.DEV, "tf-prod": self.PROD, None: self.DEV}
+        profile, warning = select_ecr_profile(
+            self.PROD, "tf-dev", lambda p: accounts.get(p)
+        )
+        self.assertEqual(profile, "tf-prod")
+        self.assertIn("different account", warning or "")
+
+    def test_ambient_credentials_win_in_ci(self) -> None:
+        # CI assumes a role directly; no named profile is configured.
+        profile, warning = select_ecr_profile(
+            self.PROD, None, lambda p: self.PROD if p is None else None
+        )
+        self.assertIsNone(profile)
+        self.assertIsNone(warning)
+
+    def test_no_match_keeps_configured_and_warns_actionably(self) -> None:
+        profile, warning = select_ecr_profile(self.PROD, "tf-dev", lambda _p: None)
+        self.assertEqual(profile, "tf-dev")
+        self.assertIn(self.PROD, warning or "")
+        self.assertIn("ecr:BatchGetImage", warning or "")
+
+    def test_unknown_account_falls_back_to_configured(self) -> None:
+        profile, warning = select_ecr_profile("111122223333", "tf-aux", lambda _p: None)
+        self.assertEqual(profile, "tf-aux")
+        self.assertIsNotNone(warning)
 
 
 class TestRedaction(unittest.TestCase):

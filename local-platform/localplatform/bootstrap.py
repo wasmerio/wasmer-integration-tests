@@ -148,6 +148,19 @@ def sign_edge_grpc_token(private_key_path: Path) -> str:
 
 _REDACT_PATTERN = re.compile(r"((?:WASMER_TOKEN|EDGE_SYNC_TOKEN)=).+$", re.MULTILINE)
 
+_UNKNOWN_ARG_PATTERN = re.compile(r"unexpected argument '(--[A-Za-z0-9-]+)' found")
+
+
+def strip_unknown_flag(cmd: list[str], flag: str) -> list[str] | None:
+    """Remove `flag` (and its value, when one follows) from an argv.
+    Returns None when the flag is not present."""
+    try:
+        index = cmd.index(flag)
+    except ValueError:
+        return None
+    has_value = index + 1 < len(cmd) and not cmd[index + 1].startswith("--")
+    return cmd[:index] + cmd[index + (2 if has_value else 1) :]
+
 
 def bootstrap(ctx: Ctx) -> None:
     run_dir = ctx.require_run_dir()
@@ -254,19 +267,41 @@ def bootstrap(ctx: Ctx) -> None:
         *skip_templates_args,
     ]
 
-    status = run_quietly(
-        "Bootstrap backend/test env",
-        bootstrap_raw,
-        bootstrap_cmd,
-        env=ctx.env,
-        timeout=ctx.getint("LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS", 900),
-        # The raw log contains the admin/edge-sync tokens; only the redacted
-        # copy below may be printed.
-        print_output_on_failure=False,
-    )
-    raw_text = (
-        bootstrap_raw.read_text(errors="replace") if bootstrap_raw.exists() else ""
-    )
+    def _run_bootstrap(cmd: list[str]) -> tuple[int, str]:
+        status = run_quietly(
+            "Bootstrap backend/test env",
+            bootstrap_raw,
+            cmd,
+            env=ctx.env,
+            timeout=ctx.getint("LOCAL_PLATFORM_BOOTSTRAP_TIMEOUT_SECONDS", 900),
+            # The raw log contains the admin/edge-sync tokens; only the
+            # redacted copy below may be printed.
+            print_output_on_failure=False,
+        )
+        raw = (
+            bootstrap_raw.read_text(errors="replace") if bootstrap_raw.exists() else ""
+        )
+        return status, raw
+
+    status, raw_text = _run_bootstrap(bootstrap_cmd)
+    # Pinned older backends ship an smbe that predates newer optional flags
+    # (e.g. --app-postgres-host). Strip exactly the flags it rejects and
+    # retry, so pinned-version runs (ASS repros, bisections) keep booting.
+    for _ in range(8):
+        if status == 0:
+            break
+        unknown = _UNKNOWN_ARG_PATTERN.search(raw_text)
+        if unknown is None:
+            break
+        stripped = strip_unknown_flag(bootstrap_cmd, unknown.group(1))
+        if stripped is None:
+            break
+        log_warn(
+            f"smbe does not accept {unknown.group(1)} (pinned older backend?); "
+            "retrying without it"
+        )
+        bootstrap_cmd = stripped
+        status, raw_text = _run_bootstrap(bootstrap_cmd)
     bootstrap_log.parent.mkdir(parents=True, exist_ok=True)
     bootstrap_log.write_text(_REDACT_PATTERN.sub(r"\1<redacted>", raw_text))
     if status != 0:
