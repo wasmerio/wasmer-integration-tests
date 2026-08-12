@@ -10,17 +10,10 @@
 #
 # Scheduling note (D5): no cron entries exist, here or elsewhere, and none
 # may target Bugtopia with stress profiles until QA-643 qualifies it as the
-# approved stress environment. Dispatch- and call-triggered runs only —
-# plus one TEMPORARY push trigger below.
+# approved stress environment. Dispatch- and call-triggered runs only.
 name: ASS run
 
 on:
-  # TEMPORARY (QA-642 validation, PR #181): every push to the ASS branch
-  # runs the reference reproduction (wax-603, local) through this pipeline
-  # so its wiring is proven before merge. Remove once the run is green —
-  # push events carry no inputs, so the run falls back to the defaults.
-  push:
-    branches: [qa-634-anti-slop-shield-foundation]
   workflow_dispatch:
     inputs:
       scenario:
@@ -74,7 +67,7 @@ permissions:
 
 jobs:
   run:
-    name: ass run ${{ inputs.scenario || 'wax-603' }} (${{ inputs.env || 'local' }})
+    name: ass run ${{ inputs.scenario }} (${{ inputs.env }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -105,8 +98,8 @@ jobs:
         # target's CI user token (same secrets the integration suites use).
         env:
           WASMER_TOKEN: ${{ secrets.wasmer_token || (inputs.env == 'bugtopia' && secrets.BUGT_BACKEND_CIUSER_TOKEN) || secrets.DEV_BACKEND_CIUSER_TOKEN }}
-          SCENARIO: ${{ inputs.scenario || 'wax-603' }}
-          TARGET_ENV: ${{ inputs.env || 'local' }}
+          SCENARIO: ${{ inputs.scenario }}
+          TARGET_ENV: ${{ inputs.env }}
           EXECUTOR: ${{ inputs.executor }}
           FAIL_THRESHOLD: ${{ inputs.fail_threshold || 'alert' }}
         run: |
@@ -132,7 +125,7 @@ jobs:
         if: always() && steps.run.outputs.exit-code != '1'
         uses: actions/upload-artifact@v4
         with:
-          name: ass-report-${{ inputs.scenario || 'wax-603' }}-${{ inputs.env || 'local' }}
+          name: ass-report-${{ inputs.scenario }}-${{ inputs.env }}
           path: |
             .local-platform/ass/runs/*/report.json
             .local-platform/ass/*-setup-failed.json

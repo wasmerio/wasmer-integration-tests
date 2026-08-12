@@ -422,16 +422,13 @@ describe("the pipeline workflow (QA-642)", () => {
     expect(raw).toContain("QA-643");
   });
 
-  test("the temporary push trigger is branch-scoped and marked for removal", () => {
-    // Validating the pipeline before merge (PR #181) — it must never fire on
-    // main, and it must be labelled so removal is not forgotten.
-    const push = triggers["push"] as { branches?: string[] } | undefined;
-    if (push === undefined) {
-      return; // already removed, as intended after the run went green
-    }
-    expect(push.branches).toEqual(["qa-634-anti-slop-shield-foundation"]);
-    expect(push.branches).not.toContain("main");
-    expect(raw).toContain("TEMPORARY");
+  test("nothing fires the pipeline implicitly — dispatch and call only", () => {
+    // The validation-only push trigger is gone; a scenario run costs a real
+    // environment, so it must always be an explicit request.
+    expect(Object.keys(triggers).sort()).toEqual([
+      "workflow_call",
+      "workflow_dispatch",
+    ]);
   });
 
   test("a missing report artifact is a visible failure, never quietly green", () => {
