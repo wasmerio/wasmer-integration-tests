@@ -1,10 +1,11 @@
 # Node fixture
 
-Node implementation of the language-agnostic fixture contract in
-[`../openapi.yaml`](../openapi.yaml). Zero-framework `node:http` server;
-the only dependencies are the pure-JS database drivers (`pg`, `mysql2`)
-needed by `/results`, loaded lazily so every other endpoint runs without
-`node_modules`.
+Node implementation of the language-agnostic fixture contract — HTTP in
+[`../openapi.yaml`](../openapi.yaml), WebSocket in
+[`../asyncapi.yaml`](../asyncapi.yaml). Zero-framework `node:http` server;
+the dependencies are the pure-JS database drivers (`pg`, `mysql2`) needed
+by `/results`, loaded lazily so every other endpoint runs without
+`node_modules`, plus `ws` for the `/ws` channel.
 
 Intended for remote builds: the platform builds from `package.json`
 (`npm start` → `node src/main.js`) — no Wasmer manifest is checked in.
@@ -19,6 +20,11 @@ Contract notes specific to this implementation:
   process) rather than file locks.
 - `__TEMPLATE__` in `src/main.js` is the per-deployment unique hash
   placeholder, replaced by the test harness like in the other fixtures.
+- `/ws` runs on a `noServer` `WebSocketServer` driven from the HTTP
+  server's `upgrade` event, so a plain `GET /ws` still reaches the router
+  and answers `426`. Ping/pong and the closing handshake are handled by
+  `ws` itself; the contract asserts them anyway, because a proxy in front
+  of the app is what usually breaks them.
 
 Run locally:
 

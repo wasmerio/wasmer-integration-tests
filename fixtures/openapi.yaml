@@ -14,6 +14,11 @@ info:
     managed databases, database connectivity, durable state via persistent
     counters, outbound HTTP (blocking and non-blocking), and a catch-all
     path echo with request logging.
+
+    The `/ws` path is reserved for the WebSocket contract in
+    `asyncapi.yaml` and is excluded from the catch-all. A fixture that
+    implements that document must implement it at the same `info.version`;
+    the two specs are one contract split by protocol.
 servers:
   - url: "{appUrl}"
     description: >-
@@ -42,10 +47,15 @@ tags:
     description: >-
       Perform outbound HTTP requests from inside the instance, in both
       blocking and non-blocking mode, with a caller-controlled timeout.
+  - name: websocket-upgrade
+    description: >-
+      Path reserved for the WebSocket contract in `asyncapi.yaml`, held
+      here only to keep it out of the catch-all.
   - name: catch-all
     description: >-
-      Any path not matched by another endpoint: echo the request path and
-      emit a log line, for routing and log-collection validation.
+      Any path not matched by another endpoint, and not reserved by
+      `asyncapi.yaml`: echo the request path and emit a log line, for
+      routing and log-collection validation.
 paths:
   /:
     get:
@@ -177,23 +187,49 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/ProxyResult"
+  /ws:
+    get:
+      tags: [websocket-upgrade]
+      operationId: websocketUpgrade
+      summary: WebSocket endpoint; not part of the catch-all
+      description: >-
+        Reserved by `asyncapi.yaml`, which defines everything that happens
+        after a successful RFC 6455 handshake. Documented here only to fix
+        the two behaviours the HTTP contract owns: a request without a
+        valid upgrade is refused with `426 Upgrade Required`, and no
+        request to this path — upgraded or not — emits the catch-all log
+        line, so log assertions stay free of WebSocket traffic.
+      responses:
+        "101":
+          description: >-
+            Handshake accepted; the connection continues under
+            `asyncapi.yaml`.
+        "426":
+          description: Request carried no valid WebSocket upgrade
+          content:
+            text/plain:
+              schema:
+                type: string
   /{path}:
     get:
       tags: [catch-all]
       operationId: echoPath
       summary: Echo the request path and log the request
       description: >-
-        Handles every path not matched by another endpoint. The response
-        echoes the request path (leading and trailing slashes stripped)
-        together with the instance's unique deployment hash, which tests
-        use to distinguish deployments and bust caches. In addition, each
-        request emits a `YYYY-mm-dd HH:ii:ss - <path>` line to both stdout
-        and stderr so log-collection tests can assert on it.
+        Handles every path not matched by another endpoint, `/ws`
+        excluded. The response echoes the request path (leading and
+        trailing slashes stripped) together with the instance's unique
+        deployment hash, which tests use to distinguish deployments and
+        bust caches. In addition, each request emits a
+        `YYYY-mm-dd HH:ii:ss - <path>` line to both stdout and stderr so
+        log-collection tests can assert on it.
       parameters:
         - name: path
           in: path
           required: true
-          description: Any request path not matched by another endpoint
+          description: >-
+            Any request path not matched by another endpoint and not
+            reserved by `asyncapi.yaml`
           schema:
             type: string
       responses:

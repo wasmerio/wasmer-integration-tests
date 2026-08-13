@@ -1,4 +1,5 @@
-// Node implementation of the fixture contract (fixtures/openapi.yaml).
+// Node implementation of the fixture contract (fixtures/openapi.yaml for
+// HTTP, fixtures/asyncapi.yaml for the /ws WebSocket channel).
 // Zero-framework: node:http only. The pg/mysql2 drivers are loaded lazily
 // inside the /results handler so every other endpoint works without
 // node_modules.
@@ -7,6 +8,8 @@ import http from "node:http";
 import https from "node:https";
 import fs from "node:fs/promises";
 import path from "node:path";
+
+import { WebSocketServer } from "ws";
 
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 8080);
@@ -289,6 +292,217 @@ async function handleProxy(req, res, mode) {
   }
 }
 
+// --- websocket (fixtures/asyncapi.yaml) -----------------------------------
+
+const REQUEST_ID_RE = /^[A-Za-z0-9-]{1,16}$/;
+const BINARY_HEADER_BYTES = 16;
+const UNKNOWN_REQUEST_ID = "unknown";
+const MAX_BINARY_PAYLOAD = 65536;
+
+function wsSend(socket, payload) {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify(payload));
+  }
+}
+
+function wsError(socket, requestId, code, message) {
+  wsSend(socket, {
+    type: "error.response",
+    requestId: REQUEST_ID_RE.test(requestId ?? "")
+      ? requestId
+      : UNKNOWN_REQUEST_ID,
+    code,
+    message,
+  });
+}
+
+// The contract's echo value domain: strings, booleans, null, safe integers,
+// and arrays/objects of those. Floats are rejected because their text form
+// is not stable across runtimes.
+function isEchoValue(value) {
+  if (value === null) {
+    return true;
+  }
+  const type = typeof value;
+  if (type === "string" || type === "boolean") {
+    return true;
+  }
+  if (type === "number") {
+    return Number.isInteger(value) && Number.isSafeInteger(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every(isEchoValue);
+  }
+  if (type === "object") {
+    return Object.values(value).every(isEchoValue);
+  }
+  return false;
+}
+
+function hasExactKeys(payload, keys) {
+  const actual = Object.keys(payload);
+  return (
+    actual.length === keys.length && keys.every((key) => actual.includes(key))
+  );
+}
+
+// Returns an error string, or null when the payload conforms.
+function validateRequest(payload) {
+  if (!REQUEST_ID_RE.test(payload.requestId ?? "")) {
+    return "requestId must match ^[A-Za-z0-9-]{1,16}$";
+  }
+  switch (payload.type) {
+    case "echo.request":
+      if (!hasExactKeys(payload, ["type", "requestId", "value"])) {
+        return "echo.request accepts exactly type, requestId and value";
+      }
+      return isEchoValue(payload.value)
+        ? null
+        : "value is outside the contract's echo value domain";
+    case "notification.request":
+      if (
+        !hasExactKeys(payload, ["type", "requestId", "message", "delay_ms"])
+      ) {
+        return "notification.request accepts exactly type, requestId, message and delay_ms";
+      }
+      if (typeof payload.message !== "string") {
+        return "message must be a string";
+      }
+      return Number.isInteger(payload.delay_ms) &&
+        payload.delay_ms >= 0 &&
+        payload.delay_ms <= 10000
+        ? null
+        : "delay_ms must be an integer between 0 and 10000";
+    case "error.request":
+      if (!hasExactKeys(payload, ["type", "requestId", "code"])) {
+        return "error.request accepts exactly type, requestId and code";
+      }
+      return payload.code === "requested_failure"
+        ? null
+        : "code must be requested_failure";
+    default:
+      return null;
+  }
+}
+
+function handleTextFrame(socket, raw) {
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return wsError(
+      socket,
+      UNKNOWN_REQUEST_ID,
+      "invalid_payload",
+      "Frame is not valid JSON",
+    );
+  }
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return wsError(
+      socket,
+      UNKNOWN_REQUEST_ID,
+      "invalid_payload",
+      "Frame is not a JSON object",
+    );
+  }
+
+  const known = [
+    "echo.request",
+    "notification.request",
+    "error.request",
+  ].includes(payload.type);
+  if (!known) {
+    return wsError(
+      socket,
+      payload.requestId,
+      "unknown_message_type",
+      `Unsupported message type: ${payload.type}`,
+    );
+  }
+
+  const problem = validateRequest(payload);
+  if (problem) {
+    return wsError(socket, payload.requestId, "invalid_payload", problem);
+  }
+
+  switch (payload.type) {
+    case "echo.request":
+      return wsSend(socket, {
+        type: "echo.response",
+        requestId: payload.requestId,
+        value: payload.value,
+      });
+    case "notification.request":
+      setTimeout(() => {
+        wsSend(socket, {
+          type: "notification.event",
+          requestId: payload.requestId,
+          message: payload.message,
+        });
+      }, payload.delay_ms);
+      return undefined;
+    case "error.request":
+      return wsError(
+        socket,
+        payload.requestId,
+        "requested_failure",
+        "The client requested this error.",
+      );
+  }
+}
+
+function handleBinaryFrame(socket, frame) {
+  if (frame.length < BINARY_HEADER_BYTES) {
+    return wsError(
+      socket,
+      UNKNOWN_REQUEST_ID,
+      "invalid_payload",
+      `Binary frame is shorter than the ${BINARY_HEADER_BYTES}-byte header`,
+    );
+  }
+  if (frame.length - BINARY_HEADER_BYTES > MAX_BINARY_PAYLOAD) {
+    const requestId = frame
+      .subarray(0, BINARY_HEADER_BYTES)
+      .toString("ascii")
+      .trimEnd();
+    return wsError(
+      socket,
+      requestId,
+      "invalid_payload",
+      `Binary payload exceeds ${MAX_BINARY_PAYLOAD} bytes`,
+    );
+  }
+  // Header and payload both go back byte-identical.
+  if (socket.readyState === socket.OPEN) {
+    socket.send(frame, { binary: true });
+  }
+}
+
+const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+
+wss.on("connection", (socket) => {
+  // ws answers pings with a matching pong and completes the closing
+  // handshake on its own; both are contract obligations, so they are noted
+  // rather than reimplemented.
+  socket.on("message", (data, isBinary) => {
+    try {
+      if (isBinary) {
+        handleBinaryFrame(socket, Buffer.from(data));
+      } else {
+        handleTextFrame(socket, Buffer.from(data).toString("utf-8"));
+      }
+    } catch (err) {
+      wsError(
+        socket,
+        UNKNOWN_REQUEST_ID,
+        "invalid_payload",
+        `Frame could not be processed: ${err}`,
+      );
+    }
+  });
+  socket.on("error", () => {});
+});
+
 // --- catch-all ------------------------------------------------------------
 
 function handleEcho(req, res, pathname) {
@@ -326,6 +540,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === "/sync" && req.method === "POST") {
       return await handleProxy(req, res, "sync");
     }
+    // Reserved by fixtures/asyncapi.yaml: refused without an upgrade, and
+    // never logged, so it stays out of the catch-all entirely.
+    if (pathname === "/ws") {
+      return text(res, "Upgrade Required", 426);
+    }
     if (req.method === "GET") {
       return handleEcho(req, res, pathname);
     }
@@ -333,6 +552,17 @@ const server = http.createServer(async (req, res) => {
   } catch (err) {
     return text(res, `Internal error: ${err}`, 500);
   }
+});
+
+server.on("upgrade", (req, socket, head) => {
+  const pathname = new URL(req.url, "http://localhost").pathname;
+  if (pathname !== "/ws") {
+    socket.destroy();
+    return;
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit("connection", ws, req);
+  });
 });
 
 server.listen(PORT, HOST, () => {

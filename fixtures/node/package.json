@@ -2,7 +2,7 @@
   "name": "wasmer-integ-tests-node-toolbox",
   "version": "1.0.0",
   "private": true,
-  "description": "Node implementation of the fixture contract in fixtures/openapi.yaml",
+  "description": "Node implementation of the fixture contract in fixtures/openapi.yaml and fixtures/asyncapi.yaml",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "mysql2": "^3.11.0",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "ws": "^8.20.1"
   }
 }

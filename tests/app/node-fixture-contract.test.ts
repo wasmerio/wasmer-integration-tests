@@ -1,13 +1,13 @@
-import * as fs from "node:fs";
-import * as pathModule from "node:path";
-
 import { AppInfo, TestEnv, randomAppName } from "../../src/index";
-import { createTempDir } from "../../src/fs";
-import { projectRoot } from "../utils/path";
 import {
   NO_PSQL_CONFIG_RE,
   postgresRegionCandidates,
 } from "../utils/app-databases";
+import {
+  REMOTE_BUILD_TIMEOUT,
+  deployNodeFixture,
+  prepareNodeFixtureDir,
+} from "../utils/node-fixture";
 import {
   assertDatabaseConnectivity,
   assertDatabaseEnvReport,
@@ -26,44 +26,6 @@ import {
 // Database connectivity is asserted *from inside the app* (/results), which
 // the psql/sql suites deliberately do not cover: they round-trip from the
 // test runner only.
-
-const REMOTE_BUILD_TIMEOUT = 15 * 60 * 1000;
-
-const NODE_FIXTURE_DIR = pathModule.join(projectRoot, "fixtures", "node");
-
-// Copy the fixture sources into a temp dir and write an app.yaml with the
-// given extra config (volumes, database capability, region pinning). The
-// fixture itself stays free of Wasmer manifests; the deploy relies on the
-// remote-build node preset detecting package.json.
-async function prepareDeployDir(
-  env: TestEnv,
-  appName: string,
-  appYamlExtra: string,
-): Promise<string> {
-  const dir = await createTempDir();
-  for (const entry of ["package.json", "src"]) {
-    await fs.promises.cp(
-      pathModule.join(NODE_FIXTURE_DIR, entry),
-      pathModule.join(dir, entry),
-      { recursive: true },
-    );
-  }
-  const appYaml = `kind: wasmer.io/App.v0
-name: ${appName}
-owner: ${env.namespace}
-package: .
-${appYamlExtra}`;
-  await fs.promises.writeFile(pathModule.join(dir, "app.yaml"), appYaml);
-  return dir;
-}
-
-async function deployNodeFixture(
-  env: TestEnv,
-  appYamlExtra: string,
-): Promise<AppInfo> {
-  const dir = await prepareDeployDir(env, randomAppName(), appYamlExtra);
-  return env.deployAppDir(dir, { extraCliArgs: ["--build-remote"] });
-}
 
 test.concurrent(
   "node-fixture-contract-endpoints",
@@ -145,7 +107,7 @@ test.concurrent(
     let app: AppInfo | undefined;
     for (const region of candidates) {
       const appName = randomAppName();
-      const dir = await prepareDeployDir(
+      const dir = await prepareNodeFixtureDir(
         env,
         appName,
         `capabilities:
