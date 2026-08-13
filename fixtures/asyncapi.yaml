@@ -1,0 +1,432 @@
+asyncapi: 3.1.0
+info:
+  title: Integration Test Fixture WebSocket Contract
+  version: 1.0.0
+  description: |
+    Language-agnostic WebSocket contract for the integration-test fixture app.
+    A fixture that implements this contract must also implement the HTTP
+    contract in `openapi.yaml` at the same `info.version`; the two documents
+    are one contract split by protocol. `openapi.yaml` reserves the `/ws` path
+    for this document and excludes it from its catch-all.
+
+    All message types use one WebSocket channel. This arrangement checks that
+    Edge and each language runtime support a multiplexed WebSocket connection.
+    The contract covers JSON messages, binary messages, unsolicited server
+    notifications, correlated replies, recoverable application errors, and the
+    RFC 6455 keepalive and close handshakes.
+
+    Timing precision, ordering, backpressure, connection disruption, and other
+    stress behavior are outside this contract. ASS scenarios define those
+    requirements.
+
+    ## Correlation
+
+    Every request carries a `requestId` and every reply repeats it verbatim.
+    Binary frames carry the same id in a fixed-width header (see
+    `binaryRequest`). Because the channel is multiplexed and this contract
+    makes no ordering guarantee, a client must match replies by `requestId`
+    and never by arrival order.
+
+    ## Equality
+
+    An echoed value is compared by deep JSON equality: object key order is
+    insignificant, and integers are exact. The echo value domain deliberately
+    excludes floating-point numbers, whose text representation and precision
+    differ per runtime, so a conformant fixture can never fail an echo
+    assertion for reasons unrelated to Edge or the engine.
+
+    ## Failure handling
+
+    The server must not close the connection because of a bad message. Every
+    frame the server cannot process yields an `error.response` on the same
+    connection, which then stays usable:
+
+    - a frame that is not valid JSON, or whose payload fails this schema,
+      yields code `invalid_payload`;
+    - a JSON frame whose `type` is not defined here yields code
+      `unknown_message_type`;
+    - `error.request` yields the code the client asked for.
+
+    When the server cannot read a `requestId` from the offending frame, it
+    reports the reserved id `unknown`.
+
+    ## Connection lifecycle
+
+    These are RFC 6455 obligations that a proxy in front of the app can
+    silently break, so they are in-contract rather than assumed:
+
+    - the server answers a ping with a pong carrying the same payload;
+    - a client-initiated close is completed by the server, and the client
+      observes close code 1000 — never 1006;
+    - the server never initiates a close except on process shutdown.
+
+    ## Operation perspective
+
+    `action` is written from the fixture app's point of view: `receive` is
+    what the app reads off the socket, `send` is what the app writes to it.
+    Generated clients must invert this.
+defaultContentType: application/json
+servers:
+  deployed:
+    host: "{appHost}"
+    protocol: wss
+    description: WebSocket endpoint of a deployed fixture app.
+    variables:
+      appHost:
+        default: localhost
+        description: >-
+          Host name, and optional port, that the target environment assigns to
+          the app.
+  local:
+    host: "{appHost}"
+    protocol: ws
+    description: WebSocket endpoint for a fixture app without TLS.
+    variables:
+      appHost:
+        default: localhost
+        description: >-
+          Host name, and optional port, that the target environment assigns to
+          the app.
+channels:
+  fixtureWebSocket:
+    address: /ws
+    description: >-
+      Multiplexed WebSocket channel for all fixture messages. A request to
+      this path without a valid RFC 6455 upgrade is answered over plain HTTP
+      with `426 Upgrade Required`, per `openapi.yaml`. Unlike every other
+      path, a request here emits no catch-all log line.
+    bindings:
+      ws:
+        method: GET
+        bindingVersion: 0.1.0
+    messages:
+      echoRequest:
+        $ref: "#/components/messages/echoRequest"
+      echoResponse:
+        $ref: "#/components/messages/echoResponse"
+      binaryRequest:
+        $ref: "#/components/messages/binaryRequest"
+      binaryResponse:
+        $ref: "#/components/messages/binaryResponse"
+      notificationRequest:
+        $ref: "#/components/messages/notificationRequest"
+      notificationEvent:
+        $ref: "#/components/messages/notificationEvent"
+      errorRequest:
+        $ref: "#/components/messages/errorRequest"
+      errorResponse:
+        $ref: "#/components/messages/errorResponse"
+operations:
+  receiveClientMessages:
+    action: receive
+    summary: Receive messages from the WebSocket client.
+    channel:
+      $ref: "#/channels/fixtureWebSocket"
+    messages:
+      - $ref: "#/channels/fixtureWebSocket/messages/echoRequest"
+      - $ref: "#/channels/fixtureWebSocket/messages/binaryRequest"
+      - $ref: "#/channels/fixtureWebSocket/messages/notificationRequest"
+      - $ref: "#/channels/fixtureWebSocket/messages/errorRequest"
+  sendServerMessages:
+    action: send
+    summary: Send messages to the WebSocket client.
+    channel:
+      $ref: "#/channels/fixtureWebSocket"
+    messages:
+      - $ref: "#/channels/fixtureWebSocket/messages/echoResponse"
+      - $ref: "#/channels/fixtureWebSocket/messages/binaryResponse"
+      - $ref: "#/channels/fixtureWebSocket/messages/notificationEvent"
+      - $ref: "#/channels/fixtureWebSocket/messages/errorResponse"
+components:
+  messages:
+    echoRequest:
+      name: echoRequest
+      title: Echo request
+      summary: Ask the server to return the supplied JSON value.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/echoRequestPayload"
+      examples:
+        - name: textAndNumber
+          payload:
+            type: echo.request
+            requestId: echo-1
+            value:
+              text: Hello World
+              number: 42
+    echoResponse:
+      name: echoResponse
+      title: Echo response
+      summary: >-
+        Return the JSON value from an echo request, deep-equal to what the
+        client sent.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/echoResponsePayload"
+      examples:
+        - name: textAndNumber
+          payload:
+            type: echo.response
+            requestId: echo-1
+            value:
+              text: Hello World
+              number: 42
+    binaryRequest:
+      name: binaryRequest
+      title: Binary echo request
+      summary: >-
+        Ask the server to return the bytes from one binary frame. The frame is
+        a 16-byte header followed by the payload. The header is the
+        `requestId` in ASCII, right-padded with spaces (`0x20`) to exactly 16
+        bytes; the payload is the remaining bytes, which may be empty and
+        which implementations must support up to 65536 bytes. The payload is
+        opaque: it may contain any byte value, including NUL, and must never
+        be decoded as text.
+      contentType: application/octet-stream
+      payload:
+        type: string
+        format: binary
+        contentEncoding: base64
+        description: >-
+          Raw frame bytes. `contentEncoding` describes how examples in this
+          document are written, not the wire format — the frame itself is
+          unencoded binary.
+      examples:
+        - name: fourBytesWithHeader
+          summary: requestId `bin-1`, payload bytes 00 01 02 03
+          payload: YmluLTEgICAgICAgICAgIAABAgM=
+    binaryResponse:
+      name: binaryResponse
+      title: Binary echo response
+      summary: >-
+        Return a binary frame carrying the request's 16-byte header unchanged,
+        followed by payload bytes identical to those received.
+      contentType: application/octet-stream
+      payload:
+        type: string
+        format: binary
+        contentEncoding: base64
+        description: >-
+          Raw frame bytes, framed exactly like `binaryRequest`.
+      examples:
+        - name: fourBytesWithHeader
+          summary: requestId `bin-1`, payload bytes 00 01 02 03
+          payload: YmluLTEgICAgICAgICAgIAABAgM=
+    notificationRequest:
+      name: notificationRequest
+      title: Notification request
+      summary: >-
+        Ask the server to push an unsolicited notification after a delay. The
+        server sends no immediate reply, so the client must hold an otherwise
+        idle connection open until the event arrives — which is what proves a
+        proxy neither closes nor buffers a quiet WebSocket.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/notificationRequestPayload"
+      examples:
+        - name: delayedMessage
+          payload:
+            type: notification.request
+            requestId: notification-1
+            message: Work complete
+            delay_ms: 2000
+    notificationEvent:
+      name: notificationEvent
+      title: Notification event
+      summary: >-
+        Push the requested notification, no earlier than `delay_ms` after the
+        request was received. Exactly one event per request.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/notificationEventPayload"
+      examples:
+        - name: delayedMessage
+          payload:
+            type: notification.event
+            requestId: notification-1
+            message: Work complete
+    errorRequest:
+      name: errorRequest
+      title: Error request
+      summary: Ask the server to return a recoverable application error.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/errorRequestPayload"
+      examples:
+        - name: requestedFailure
+          payload:
+            type: error.request
+            requestId: error-1
+            code: requested_failure
+    errorResponse:
+      name: errorResponse
+      title: Error response
+      summary: >-
+        Return a typed error without closing the WebSocket connection. Sent
+        both in reply to `error.request` and unprompted, whenever a received
+        frame cannot be processed.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/errorResponsePayload"
+      examples:
+        - name: requestedFailure
+          payload:
+            type: error.response
+            requestId: error-1
+            code: requested_failure
+            message: The client requested this error.
+        - name: unknownType
+          summary: A JSON frame whose `type` this contract does not define
+          payload:
+            type: error.response
+            requestId: probe-9
+            code: unknown_message_type
+            message: "Unsupported message type: fixture.bogus"
+        - name: unreadableFrame
+          summary: A frame that is not valid JSON, so no id could be read
+          payload:
+            type: error.response
+            requestId: unknown
+            code: invalid_payload
+            message: Frame is not valid JSON
+  schemas:
+    echoRequestPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: echo.request
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        value:
+          $ref: "#/components/schemas/echoValue"
+      required: [type, requestId, value]
+    echoResponsePayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: echo.response
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        value:
+          $ref: "#/components/schemas/echoValue"
+      required: [type, requestId, value]
+    notificationRequestPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: notification.request
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        message:
+          type: string
+        delay_ms:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Milliseconds to wait before pushing the event. A lower bound, not
+            a deadline: the contract asserts the event is not early, never
+            that it is punctual.
+      required: [type, requestId, message, delay_ms]
+    notificationEventPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: notification.event
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        message:
+          type: string
+          description: Message from the matching notification request, unchanged.
+      required: [type, requestId, message]
+    errorRequestPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: error.request
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        code:
+          type: string
+          const: requested_failure
+          description: >-
+            Only the client-requested failure can be asked for; the other
+            codes in `errorCode` are server-originated.
+      required: [type, requestId, code]
+    errorResponsePayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: error.response
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        code:
+          $ref: "#/components/schemas/errorCode"
+        message:
+          type: string
+          minLength: 1
+          description: >-
+            Human-readable detail. Free-form: tests assert on `code`, never on
+            this text.
+      required: [type, requestId, code, message]
+    errorCode:
+      type: string
+      enum:
+        - requested_failure
+        - unknown_message_type
+        - invalid_payload
+      description: |
+        `requested_failure` — the client asked for this error.
+        `unknown_message_type` — valid JSON, but `type` is not in this contract.
+        `invalid_payload` — the frame is not valid JSON, or fails this schema.
+    requestId:
+      type: string
+      pattern: "^[A-Za-z0-9-]{1,16}$"
+      description: >-
+        Client value that correlates a reply with its request. Bounded to 16
+        ASCII characters so the same id fits the fixed-width binary header.
+        `unknown` is reserved for errors whose originating frame carried no
+        readable id.
+    echoValue:
+      description: >-
+        Value domain that every runtime must round-trip exactly. Floating-point
+        numbers are excluded on purpose: their text form and precision differ
+        per runtime, which would make echo assertions test the language's
+        number formatting rather than the transport.
+      oneOf:
+        - type: string
+        - type: boolean
+        - type: "null"
+        - type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        - type: array
+          items:
+            $ref: "#/components/schemas/echoValue"
+        - type: object
+          additionalProperties:
+            $ref: "#/components/schemas/echoValue"
