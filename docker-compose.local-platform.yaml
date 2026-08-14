@@ -150,6 +150,15 @@ services:
       exit 0;
       "
 
+  stripe-mock:
+    # Opt-in (LOCAL_PLATFORM_STRIPE_MOCK=1): canned Stripe API responses so
+    # backend billing calls never leave the host. Stateless by design.
+    image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/stripe/stripe-mock:latest
+    profiles:
+      - stripe-mock
+    ports:
+      - "${STRIPE_MOCK_PORT:-12111}:12111"
+
   clickhouse:
     # Hub-only images ride the fleet mirror when set, Hub otherwise
     image: ${CI_DOCKER_HUB_MIRROR:-docker.io}/clickhouse/clickhouse-server:latest
@@ -161,6 +170,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./local-platform/clickhouse/initdb.d:/docker-entrypoint-initdb.d:ro
+      - ./local-platform/clickhouse/config.d/allow-legacy-aggregating-schema.xml:/etc/clickhouse-server/config.d/allow-legacy-aggregating-schema.xml:ro
     ulimits:
       nofile: "262144"
     healthcheck:

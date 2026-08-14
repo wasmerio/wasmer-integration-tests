@@ -8,7 +8,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import toml from "@iarna/toml";
-import yaml from "js-yaml";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,20 +48,94 @@ const directRefNamespaceAllowlist = new Set(
 );
 const scanDirs = (
   process.env.LOCAL_PLATFORM_PACKAGE_SCAN_DIRS ??
-  "tests,wasmopticon,fixtures,src/app"
+  // `ass/simulator` holds the business simulator's app fixtures, which the
+  // frontend loop deploys on every seed; they belong in discovery like any
+  // other fixture source.
+  "tests,wasmopticon,fixtures,src/app,ass/simulator"
 )
   .split(",")
   .map((part) => part.trim())
   .filter(Boolean);
 const verbose = /^(1|true|yes|on)$/i.test(process.env.VERBOSE ?? "");
+/** Publishing distinct packages is independent work: the boot spent ~1.6s
+ * per package doing it one at a time. */
+const concurrency = Math.max(
+  1,
+  Math.min(
+    16,
+    Number(process.env.LOCAL_PLATFORM_PACKAGE_CONCURRENCY ?? 8) || 8,
+  ),
+);
+/** `LOCAL_PLATFORM_SEED_PACKAGES=priority` mirrors only the packages the
+ * frontend/simulator loop actually deploys (plus their transitive
+ * dependencies); integration tests keep the full set (`=1`).
+ *
+ * Membership is decided by *where a requirement was discovered*, not by a
+ * hardcoded name list: anything the simulator's fixture registry declares is
+ * priority, so adding a fixture keeps working without editing this file. */
+const prioritySeed = /^priority$/i.test(
+  process.env.LOCAL_PLATFORM_SEED_PACKAGES ?? "",
+);
+const prioritySources = (
+  process.env.LOCAL_PLATFORM_PRIORITY_SOURCES ?? "ass/simulator/fixtures.ts"
+)
+  .split(",")
+  .map((part) => part.trim())
+  .filter(Boolean);
+const priorityPackages = new Set(
+  (process.env.LOCAL_PLATFORM_PRIORITY_PACKAGES ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name !== ""),
+);
+
+function isPriorityRequirement(requirement) {
+  if (priorityPackages.has(requirement.name)) {
+    return true;
+  }
+  return (requirement.sources ?? []).some((source) =>
+    prioritySources.some((needle) => String(source).includes(needle)),
+  );
+}
+
+/** Bounded-concurrency map that preserves input order in its results. */
+async function mapWithPool(items, width, task) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) {
+        return;
+      }
+      results[index] = await task(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(width, items.length)) }, () =>
+      worker(),
+    ),
+  );
+  return results;
+}
+/** Prefetch mode: resolve and download into the cache, write nothing to the
+ * target registry. It needs only the public source registry, so it can run
+ * at the very start of a boot - in parallel with the image pull and the
+ * migrations - instead of after the backend is up. On a cold cache that is
+ * the difference between paying for the download and hiding it. */
+const prefetchOnly = /^(1|true|yes|on)$/i.test(
+  process.env.LOCAL_PLATFORM_PACKAGE_PREFETCH ?? "",
+);
 const dryRun = /^(1|true|yes|on)$/i.test(
   process.env.LOCAL_PLATFORM_PACKAGE_SEED_DRY_RUN ?? "",
 );
 
-if (!targetRegistry && !dryRun) {
+// A prefetch talks only to the public source registry, so it deliberately
+// runs before the target registry exists.
+if (!targetRegistry && !dryRun && !prefetchOnly) {
   throw new Error("WASMER_REGISTRY is required for local package seeding");
 }
-if (!targetToken && !dryRun) {
+if (!targetToken && !dryRun && !prefetchOnly) {
   throw new Error("WASMER_TOKEN is required for local package seeding");
 }
 
@@ -229,23 +302,45 @@ function discoverFromToml(filePath, raw, requirements) {
   }
 }
 
+// Line-scan for a `dependencies:` block nested under `wasmerToml:` (no YAML
+// parser in the dependency-free tooling; D-7 removed js-yaml repo-wide).
 function discoverFromYaml(filePath, raw, requirements) {
-  let parsed;
-  try {
-    parsed = yaml.load(raw);
-  } catch (err) {
-    throw new Error(`Failed to parse ${filePath}: ${err}`);
-  }
-
-  const manifest = parsed?.wasmerToml;
-  const dependencies = manifest?.dependencies;
-  if (!dependencies || typeof dependencies !== "object") {
-    return;
-  }
-
-  for (const [name, constraint] of Object.entries(dependencies)) {
-    if (typeof constraint === "string") {
-      addRequirement(requirements, name, constraint, filePath);
+  const lines = raw.split("\n");
+  let manifestIndent = null;
+  let depsIndent = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
+    }
+    const indent = line.length - line.trimStart().length;
+    if (manifestIndent === null) {
+      if (/^["']?wasmerToml["']?:\s*$/.test(trimmed)) {
+        manifestIndent = indent;
+      }
+      continue;
+    }
+    if (indent <= manifestIndent) {
+      manifestIndent = null;
+      depsIndent = null;
+      continue;
+    }
+    if (depsIndent === null) {
+      if (/^["']?dependencies["']?:\s*$/.test(trimmed)) {
+        depsIndent = indent;
+      }
+      continue;
+    }
+    if (indent <= depsIndent) {
+      depsIndent = null;
+      continue;
+    }
+    const entry =
+      /^["']?([a-z0-9_.-]+\/[a-z0-9_.-]+)["']?:\s*["']?([^"'#]+?)["']?\s*$/i.exec(
+        trimmed,
+      );
+    if (entry) {
+      addRequirement(requirements, entry[1], entry[2], filePath);
     }
   }
 }
@@ -254,6 +349,20 @@ function discoverFromSource(filePath, raw, requirements) {
   const dependencyEntryRe =
     /["']([a-z0-9_.-]+\/[a-z0-9_.-]+)["']\s*:\s*["']([^"']+)["']/gi;
   for (const match of raw.matchAll(dependencyEntryRe)) {
+    addRequirement(requirements, match[1], match[2], filePath);
+  }
+
+  // A bare `namespace/name` in source is usually prose, so it is only taken
+  // from allow-listed namespaces - except in a curated fixture registry,
+  // where every package reference is one an app fixture really deploys.
+  // Sources that embed a wasmer.toml as a string literal (the simulator's
+  // fixture registry does) declare their dependencies in toml's assignment
+  // form. It is as unambiguous as the JSON form above - a quoted package
+  // name and a quoted constraint - and without it those fixtures' packages
+  // are invisible to discovery.
+  const dependencyAssignRe =
+    /["']([a-z0-9_.-]+\/[a-z0-9_.-]+)["']\s*=\s*["']([^"']+)["']/gi;
+  for (const match of raw.matchAll(dependencyAssignRe)) {
     addRequirement(requirements, match[1], match[2], filePath);
   }
 
@@ -430,29 +539,38 @@ async function resolveSourceRequirement(requirement) {
 
 async function resolveAllRequirements(initialRequirements) {
   const resolvedByExact = new Map();
-  const queue = [...initialRequirements];
+  let level = [...initialRequirements];
 
-  while (queue.length > 0) {
-    const requirement = queue.shift();
-    const resolved = await resolveSourceRequirement(requirement);
-    const exactKey = `${resolved.resolvedName}@${resolved.resolvedVersion}`;
-    const existing = resolvedByExact.get(exactKey);
-    if (existing) {
-      existing.sources.push(...requirement.sources);
-      continue;
-    }
-    resolvedByExact.set(exactKey, resolved);
-
-    for (const dependency of resolved.dependencies) {
-      if (!isValidPackageName(dependency.name)) {
+  // Breadth-first, one level at a time: every requirement in a level is an
+  // independent round trip to the source registry, so they go together.
+  while (level.length > 0) {
+    const resolvedLevel = await mapWithPool(level, concurrency, (requirement) =>
+      resolveSourceRequirement(requirement).then((resolved) => ({
+        requirement,
+        resolved,
+      })),
+    );
+    const next = [];
+    for (const { requirement, resolved } of resolvedLevel) {
+      const exactKey = `${resolved.resolvedName}@${resolved.resolvedVersion}`;
+      const existing = resolvedByExact.get(exactKey);
+      if (existing) {
+        existing.sources.push(...requirement.sources);
         continue;
       }
-      queue.push({
-        name: dependency.name,
-        constraint: dependency.constraint,
-        sources: [`dependency of ${exactKey}`],
-      });
+      resolvedByExact.set(exactKey, resolved);
+      for (const dependency of resolved.dependencies) {
+        if (!isValidPackageName(dependency.name)) {
+          continue;
+        }
+        next.push({
+          name: dependency.name,
+          constraint: dependency.constraint,
+          sources: [`dependency of ${exactKey}`],
+        });
+      }
     }
+    level = next;
   }
 
   return [...resolvedByExact.values()].sort((a, b) => {
@@ -533,6 +651,9 @@ async function ensureTargetNamespace(namespace) {
 }
 
 async function targetHasPackage(pkg) {
+  if (prefetchOnly) {
+    return false;
+  }
   try {
     const data = await graphql(
       targetRegistry,
@@ -802,10 +923,29 @@ async function main() {
       .join(", ")}`,
   );
 
+  const requirements = prioritySeed
+    ? discovered.filter(isPriorityRequirement)
+    : discovered;
+  if (prioritySeed) {
+    if (requirements.length === 0) {
+      throw new Error(
+        "Priority seeding found no requirements: nothing matched " +
+          `${prioritySources.join(", ")} or LOCAL_PLATFORM_PRIORITY_PACKAGES. ` +
+          "A frontend loop with no app packages cannot deploy anything, so this " +
+          "refuses rather than booting a registry that looks seeded.",
+      );
+    }
+    log(
+      `Priority seeding: mirroring ${requirements.length} of ${discovered.length} ` +
+        `requirement(s) (${requirements.map((pkg) => pkg.name).join(", ")}) plus their ` +
+        "dependencies. Set LOCAL_PLATFORM_SEED_PACKAGES=1 for the full set.",
+    );
+  }
+
   const wasmerVersion = (await runWasmer(["--version"], {})).stdout.trim();
   log(`Wasmer CLI: ${wasmerVersion || "unknown version"}`);
 
-  const resolved = await resolveAllRequirements(discovered);
+  const resolved = await resolveAllRequirements(requirements);
   log(
     `Resolved ${resolved.length} package version(s): ${resolved
       .map((pkg) => `${pkg.resolvedName}@${pkg.resolvedVersion}`)
@@ -825,6 +965,30 @@ async function main() {
     results,
   };
   await writeDiagnostics();
+  if (prefetchOnly) {
+    log(
+      `Prefetching ${resolved.length} package(s) into ${cacheDir} (no registry writes)`,
+    );
+    const downloaded = await mapWithPool(resolved, concurrency, async (pkg) => {
+      try {
+        await downloadPackage(pkg);
+        return { ...pkg, seeded: false, skippedReason: "prefetched" };
+      } catch (err) {
+        // A prefetch failure is not fatal: the seeding step that follows
+        // downloads what is missing, and reports the real error there.
+        log(
+          `Prefetch of ${pkg.resolvedName}@${pkg.resolvedVersion} failed: ${err.message}`,
+        );
+        return { ...pkg, seeded: false, skippedReason: "prefetch-failed" };
+      }
+    });
+    results.push(...downloaded);
+    await writeDiagnostics();
+    log(
+      `Package prefetch complete: ${downloaded.length} package(s) in the cache`,
+    );
+    return;
+  }
   if (dryRun) {
     log("Dry run enabled; not pushing packages into the target registry");
     for (const pkg of resolved) {
@@ -832,9 +996,37 @@ async function main() {
       await writeDiagnostics();
     }
   } else {
-    for (const pkg of resolved) {
-      results.push(await seedPackage(pkg));
-      await writeDiagnostics();
+    // Namespaces are shared between packages, so they are created once
+    // before the pool rather than raced inside it.
+    const namespaces = [
+      ...new Set(resolved.map((pkg) => pkg.resolvedName.split("/")[0])),
+    ];
+    await mapWithPool(namespaces, concurrency, (namespace) =>
+      ensureTargetNamespace(namespace),
+    );
+    log(
+      `Seeding ${resolved.length} package(s) with concurrency ${concurrency}`,
+    );
+    const seeded = await mapWithPool(resolved, concurrency, async (pkg) => {
+      try {
+        return await seedPackage(pkg);
+      } catch (err) {
+        return { ...pkg, seeded: false, error: String(err?.message ?? err) };
+      }
+    });
+    results.push(...seeded);
+    await writeDiagnostics();
+    const failures = seeded.filter((pkg) => pkg.error !== undefined);
+    if (failures.length > 0) {
+      throw new Error(
+        `${failures.length} package(s) failed to seed: ` +
+          failures
+            .map(
+              (pkg) =>
+                `${pkg.resolvedName}@${pkg.resolvedVersion}: ${pkg.error}`,
+            )
+            .join("; "),
+      );
     }
   }
 

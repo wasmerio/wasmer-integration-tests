@@ -1,5 +1,8 @@
 -- Generated from wasmer/edge crates/metrics/src/store/clickhouse/migrations.rs
 -- Local-platform loads these on fresh ClickHouse startup for isolated CI runs.
+-- Requires config.d/allow-legacy-aggregating-schema.xml on ClickHouse 26.7+
+-- (see that file); without it this script aborts midway and later tables are
+-- silently missing.
 USE edge_metrics_local;
 
 -- 0000_create_workload_metrics_summary_table

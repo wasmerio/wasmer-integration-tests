@@ -4,8 +4,8 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { load as parseYaml, YAMLException } from "js-yaml";
 import { ZodError } from "zod";
+import { parseToml, TomlParseError } from "./toml";
 import {
   formatScenarioIssues,
   parseScenario,
@@ -87,7 +87,7 @@ function scenarioDirs(dir: string): string[] {
     .map((entry) => entry.name)
     .filter((name) => {
       try {
-        return statSync(path.join(dir, name, "scenario.yaml")).isFile();
+        return statSync(path.join(dir, name, "scenario.toml")).isFile();
       } catch {
         return false;
       }
@@ -132,7 +132,7 @@ export function loadScenario(
   slug: string,
 ): LoadedScenario {
   const ref = resolveSlug(roots, kind, slug);
-  const file = path.join(ref.dir, "scenario.yaml");
+  const file = path.join(ref.dir, "scenario.toml");
   let raw: string;
   try {
     raw = readFileSync(file, "utf8");
@@ -141,10 +141,10 @@ export function loadScenario(
   }
   let data: unknown;
   try {
-    data = parseYaml(raw, { filename: file });
+    data = parseToml(raw, file);
   } catch (err) {
-    const detail = err instanceof YAMLException ? err.message : String(err);
-    throw new ScenarioLoadError(`invalid YAML in ${file}:\n${detail}`);
+    const detail = err instanceof TomlParseError ? err.message : String(err);
+    throw new ScenarioLoadError(detail);
   }
   try {
     const scenario = parseScenario(data, validationModeFor(kind));

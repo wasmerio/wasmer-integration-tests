@@ -60,7 +60,7 @@ claim at all, so the run is marked degraded and `ass promote` refuses it.
 
 ## Files
 
-- `scenario.yaml` — the declaration. Both the workload and the baseline run
+- `scenario.toml` — the declaration. Both the workload and the baseline run
   the same probe; only the engine underneath differs.
 - `probe/repro.py` — the matrix. Hang-safe by construction: each check runs
   in a daemon thread watched by a wall-clock guard built only from primitives

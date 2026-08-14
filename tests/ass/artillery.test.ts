@@ -75,7 +75,7 @@ describe("artillery-http against a real local target", () => {
     expect(requests - before).toBe(5);
     // The interpolated target is what Artillery was actually given.
     expect(readFileSync(outcome.logs["artillery-script"], "utf8")).toContain(
-      `target: ${baseUrl}`,
+      `"target": "${baseUrl}"`,
     );
     expect(outcome.counters["http.codes.200"]).toBe(5);
     expect(outcome.counters["http.requests"]).toBe(5);

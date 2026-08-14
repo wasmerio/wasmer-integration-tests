@@ -27,11 +27,7 @@ import { evaluateVerdict, NO_STREAM_SOURCES } from "./verdict";
 import { planChannels } from "./capabilities";
 
 export type ComparisonStatus =
-  | "ok"
-  | "waived"
-  | "engine-missing"
-  | "not-run"
-  | "failed";
+  "ok" | "waived" | "engine-missing" | "not-run" | "failed";
 
 export interface ComparisonResult {
   /** "baseline", or the control's declared name. */

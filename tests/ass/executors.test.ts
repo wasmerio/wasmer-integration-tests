@@ -561,38 +561,41 @@ describe("artillery-http executor (QA-638)", () => {
 // perturbations, so these exercise the whole run path in milliseconds.
 
 const PROBE_SCENARIO = `
-meta:
-  id: PB-1
-  title: a self-verdicting probe
-  lifecycle: { state: open }
-fixtures:
-  probes:
-    matrix:
-      source: package:./probe
-      executors: [raw-wasmer]
-  components:
-    python: registry:python/python@=3.13.5
-load:
-  executor: raw-wasmer
-  raw-wasmer:
-    package: "{{ component.python }}"
-    volumes:
-      "{{ matrix.path }}": /work
-    args: [/work/repro.py, --once]
-verdict:
-  probe:
-    channels:
-      - { type: log, stream: stderr }
-  baseline:
-    engine: python3
-    entry: [repro.py, --once]
-    workdir: "{{ matrix.path }}"
-    expect: not-reproduced
+[meta]
+id = "PB-1"
+title = "a self-verdicting probe"
+lifecycle = { state = "open" }
+
+[fixtures.probes.matrix]
+source = "package:./probe"
+executors = ["raw-wasmer"]
+
+[fixtures.components]
+python = "registry:python/python@=3.13.5"
+
+[load]
+executor = "raw-wasmer"
+
+[load.raw-wasmer]
+package = "{{ component.python }}"
+args = ["/work/repro.py", "--once"]
+
+[load.raw-wasmer.volumes]
+"{{ matrix.path }}" = "/work"
+
+[verdict.probe]
+channels = [{ type = "log", stream = "stderr" }]
+
+[verdict.baseline]
+engine = "python3"
+entry = ["repro.py", "--once"]
+workdir = "{{ matrix.path }}"
+expect = "not-reproduced"
 `;
 
-function probeRoot(yaml = PROBE_SCENARIO): string {
+function probeRoot(toml = PROBE_SCENARIO): string {
   const root = makeRoot();
-  const dir = addScenario(root, "repros", "probey", yaml);
+  const dir = addScenario(root, "repros", "probey", toml);
   mkdirSync(path.join(dir, "probe"), { recursive: true });
   writeFileSync(path.join(dir, "probe", "repro.py"), "print('hi')\n");
   return root;
@@ -701,17 +704,17 @@ describe("declared controls (D8)", () => {
   // A profile is named after its executor unless it names one, which is the
   // only way to declare two raw-wasmer profiles in one scenario.
   const WITH_CONTROL = PROBE_SCENARIO.replace(
-    "verdict:",
-    `  old-interpreter:
-    executor: raw-wasmer
-    package: python/python@3.12.0
-    args: [--once]
-verdict:
-  controls:
-    old-interpreter:
-      executor: old-interpreter
-      expect: reproduced
-`,
+    "[verdict.probe]",
+    `[load.old-interpreter]
+executor = "raw-wasmer"
+package = "python/python@3.12.0"
+args = ["--once"]
+
+[verdict.controls.old-interpreter]
+executor = "old-interpreter"
+expect = "reproduced"
+
+[verdict.probe]`,
   );
 
   test("a control that behaves as declared leaves the outcome alone", async () => {
@@ -782,13 +785,13 @@ verdict:
     harness.deps.enginePresence = () => true;
     const root = probeRoot(
       PROBE_SCENARIO.replace(
-        "  baseline:",
-        `  controls:
-    node-too:
-      engine: node
-      entry: [probe.mjs]
-      expect: not-reproduced
-  baseline:`,
+        "[verdict.baseline]",
+        `[verdict.controls.node-too]
+engine = "node"
+entry = ["probe.mjs"]
+expect = "not-reproduced"
+
+[verdict.baseline]`,
       ),
     );
     const result = await cli(root, ["run", "probey"], harness.deps);
@@ -801,11 +804,12 @@ describe("preflight before any workload runs (AC-5)", () => {
   test("a fixture that excludes the active executor fails preflight", async () => {
     const root = probeRoot(
       PROBE_SCENARIO.replace(
-        "executors: [raw-wasmer]",
-        "executors: [artillery-http]",
+        'executors = ["raw-wasmer"]',
+        'executors = ["artillery-http"]',
       ).replace(
-        "load:\n  executor: raw-wasmer",
-        "load:\n  executor: raw-wasmer\n  artillery-http:\n    target: http://x\n    scenarios: [{flow: []}]",
+        '[load]\nexecutor = "raw-wasmer"',
+        '[load]\nexecutor = "raw-wasmer"\n\n[load.artillery-http]\n' +
+          'target = "http://x"\nscenarios = [{ flow = [] }]',
       ),
     );
     const harness = makeFakeHarness();
@@ -829,8 +833,8 @@ describe("preflight before any workload runs (AC-5)", () => {
   test("a probe channel no executor can carry fails preflight", async () => {
     const root = probeRoot(
       PROBE_SCENARIO.replace(
-        "      - { type: log, stream: stderr }",
-        "      - { type: http, match: body }",
+        'channels = [{ type = "log", stream = "stderr" }]',
+        'channels = [{ type = "http", match = "body" }]',
       ),
     );
     const result = await cli(root, ["run", "probey"], makeFakeHarness().deps);
@@ -846,24 +850,26 @@ describe("preflight before any workload runs (AC-5)", () => {
       "repros",
       "unjudgeable",
       `
-meta:
-  id: UJ-1
-  title: environment-only verdict with a native baseline
-  lifecycle: { state: open }
-fixtures:
-  components:
-    edge: github-release:wasmerio/edge:v1:edge
-load:
-  executor: jest
-  jest:
-    spec: tests/x.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - log_matches: { stream: edge, pattern: boom }
-  baseline:
-    engine: python3
-    entry: [repro.py]
+[meta]
+id = "UJ-1"
+title = "environment-only verdict with a native baseline"
+lifecycle = { state = "open" }
+
+[fixtures.components]
+edge = "github-release:wasmerio/edge:v1:edge"
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/x.test.ts"
+
+[[verdict.reproduced_when.any]]
+log_matches = { stream = "edge", pattern = "boom" }
+
+[verdict.baseline]
+engine = "python3"
+entry = ["repro.py"]
 `,
     );
     const result = await cli(

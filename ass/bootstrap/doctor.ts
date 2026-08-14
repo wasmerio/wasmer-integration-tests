@@ -2,7 +2,7 @@
 // (docs/anti-slop-shield-v1.md §7). SETUP.md's terminal instruction is
 // "iterate until `ass doctor` exits 0", so every check states what is missing
 // *and* how to get it. Missing optional tools degrade a capability rather than
-// blocking the harness: no Docker means no local target, not no ass.
+// blocking the harness: no Docker means no local target, not no ASS.
 //
 // Every probe goes through one injected process boundary, so the whole table
 // is deterministic in tests without touching the developer's machine.
@@ -139,7 +139,7 @@ export function runDoctor(options: DoctorOptions): DoctorReport {
     ok: pythonOk,
     detail: python.status === 0 ? python.stdout.trim() : "not found",
     degrades:
-      "local-target runs (the local-platform CLI) — every target ass can " +
+      "local-target runs (the local-platform CLI) — every target ASS can " +
       "currently run — and the python3 native baseline",
     remediation: `${hint} python3.12 or newer`,
   });
@@ -159,7 +159,7 @@ export function runDoctor(options: DoctorOptions): DoctorReport {
     // 5), so this degrade currently costs every run. Say that rather than
     // implying a remote fallback that does not exist yet (review 4, R4-03).
     degrades:
-      "local-target runs (ass run --env local) — every target ass can " +
+      "local-target runs (ass run --env local) — every target ASS can " +
       "currently run; remote targets land in Phase 5",
     remediation:
       "install Docker Engine with the compose v2 plugin (docs.docker.com/engine/install)",

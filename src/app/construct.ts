@@ -1,5 +1,5 @@
 import * as toml from "@iarna/toml";
-import * as yaml from "js-yaml";
+import { parseYaml } from "../yaml";
 import { DirEntry } from "../fs";
 import { isVerboseEnabled } from "../env";
 import { z } from "zod";
@@ -411,7 +411,8 @@ export async function writeAppDefinition(
 
   const files: Record<string, string | object> = {
     ...appFiles,
-    "app.yaml": yaml.dump(app.appYaml),
+    // JSON is valid YAML; app.yaml stays the product's format.
+    "app.yaml": JSON.stringify(app.appYaml, null, 2),
   };
 
   if (app.wasmerToml) {
@@ -451,7 +452,7 @@ export function loadAppYaml(path: string): AppYaml {
       pathModule.join(path, "app.yaml"),
       "utf-8",
     );
-    return AppYaml.parse(yaml.load(fileContent));
+    return AppYaml.parse(parseYaml(fileContent));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     if (error instanceof Error) {

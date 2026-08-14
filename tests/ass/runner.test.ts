@@ -18,7 +18,7 @@ import {
   cli,
   makeFakeHarness,
   makeRoot,
-  PERSISTED_YAML,
+  PERSISTED_TOML,
 } from "./helpers";
 
 describe("jest executor boundary", () => {
@@ -81,7 +81,7 @@ describe("jest executor boundary", () => {
 describe("run orchestration through the CLI", () => {
   function makeRepoRoot(): string {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     return root;
   }
 
@@ -325,7 +325,7 @@ describe("run orchestration through the CLI", () => {
       noCap,
       "repros",
       "quiet",
-      PERSISTED_YAML.replace(/^ {2}perturbations:\n^ {4}edge: .*\n/m, ""),
+      PERSISTED_TOML.replace(/^\[fixtures\.perturbations\]\nedge = .*\n/m, ""),
     );
     const err = await cli(
       noCap,
@@ -345,25 +345,28 @@ describe("run orchestration through the CLI", () => {
       "repros",
       "remote-ready",
       `
-meta:
-  id: RR-1
-  title: remote-evaluable scenario
-  lifecycle: { state: open }
-fixtures:
-  components:
-    edge: github-release:wasmerio/edge:v1:edge
-  perturbations:
-    edge: { cpus: 1 }
-load:
-  executor: jest
-  jest:
-    spec: tests/x.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - output_matches: { pattern: kaboom }
-  baseline:
-    waived: n/a
+[meta]
+id = "RR-1"
+title = "remote-evaluable scenario"
+lifecycle = { state = "open" }
+
+[fixtures.components]
+edge = "github-release:wasmerio/edge:v1:edge"
+
+[fixtures.perturbations]
+edge = { cpus = 1 }
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/x.test.ts"
+
+[[verdict.reproduced_when.any]]
+output_matches = { pattern = "kaboom" }
+
+[verdict.baseline]
+waived = "n/a"
 `,
     );
     const harness = makeFakeHarness({
@@ -395,20 +398,22 @@ verdict:
       "repros",
       "appstream",
       `
-meta:
-  id: PR-1
-  title: reads a deployed app's own log stream
-  lifecycle: { state: open }
-load:
-  executor: jest
-  jest:
-    spec: tests/x.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - log_matches: { stream: app, pattern: boom }
-  baseline:
-    waived: n/a
+[meta]
+id = "PR-1"
+title = "reads a deployed app's own log stream"
+lifecycle = { state = "open" }
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/x.test.ts"
+
+[[verdict.reproduced_when.any]]
+log_matches = { stream = "app", pattern = "boom" }
+
+[verdict.baseline]
+waived = "n/a"
 `,
     );
     const result = await cli(
@@ -427,7 +432,7 @@ describe("reference scenario declaration", () => {
   test("repros/wax-600 parses under persisted validation with the script's pins", async () => {
     const repoRoot = path.resolve(__dirname, "..", "..");
     expect(
-      existsSync(path.join(repoRoot, "repros", "wax-600", "scenario.yaml")),
+      existsSync(path.join(repoRoot, "repros", "wax-600", "scenario.toml")),
     ).toBe(true);
     const { loadScenario, rootsFrom } =
       await import("../../ass/scenario/loader");

@@ -6,7 +6,7 @@ tests/generated-templates.json
 .jest-deployed-apps.jsonl
 .jest-run-summary.jsonl
 jest-output.log
-local.env
+local-platform.local.toml
 .local-platform/
 __pycache__/
 *.ass-bak

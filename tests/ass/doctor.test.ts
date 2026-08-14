@@ -81,7 +81,7 @@ describe("capability table", () => {
     expect(compose.required).toBe(false);
     // R4-03: local is the only target the engine runs today, so the degrade
     // must not imply a remote fallback that has not landed.
-    expect(compose.degrades).toContain("every target ass can currently run");
+    expect(compose.degrades).toContain("every target ASS can currently run");
     expect(compose.degrades).not.toContain("remote targets stay usable");
     const rendered = formatDoctor(report).join("\n");
     expect(rendered).toContain("unavailable: local-target runs");

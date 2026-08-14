@@ -21,9 +21,9 @@
 // config edit never strips the "Upload files" button.
 
 import { createZip } from "stackmachine";
-import * as yaml from "js-yaml";
 
 import { assertEquals, assertNotEquals } from "../../src/testing_tools";
+import { parseYaml } from "../../src/yaml";
 import { randomAppName, sleep, TestEnv } from "../../src/index";
 import { deployAppToAppInfo } from "../../src/convert";
 
@@ -115,9 +115,10 @@ test("BE-1610: isUploaded survives a config-only re-version", async () => {
     //    the SAME package with a changed config. This mints a new active version
     //    via the `graphql` client with NO ZipRollout. Any config-only change does
     //    it; `debug: true` is a harmless, always-valid edit.
-    const cfg = yaml.load(uploaded.userYamlConfig) as Record<string, unknown>;
+    const cfg = parseYaml(uploaded.userYamlConfig) as Record<string, unknown>;
     cfg.debug = true;
-    const yamlConfig = yaml.dump(cfg);
+    // JSON is valid YAML; the backend parses it as a config edit.
+    const yamlConfig = JSON.stringify(cfg);
 
     await env.backend.gqlQuery(PUBLISH_DEPLOY_APP, {
       input: {

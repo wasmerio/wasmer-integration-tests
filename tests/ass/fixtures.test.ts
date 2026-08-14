@@ -81,45 +81,38 @@ describe("local-platform driver file mutations", () => {
     return new LocalPlatformDriver(repoDir, { io: { info: () => {} } });
   }
 
-  test("pins append to an existing local.env and restore byte-for-byte", () => {
+  test("pins ride the up() environment and mutate no files", async () => {
     const repoDir = makeRepoDir();
-    const driver = makeDriver(repoDir);
-    const localEnv = path.join(repoDir, "local.env");
-    const original =
-      "export BACKEND_VERSION=resolve_dev\nexport VERBOSE=true\n";
-    writeFileSync(localEnv, original);
+    const seen: NodeJS.ProcessEnv[] = [];
+    const exec: ExecFn = async (_argv, opts) => {
+      seen.push(opts.env);
+      return 0;
+    };
+    const driver = new LocalPlatformDriver(repoDir, {
+      exec,
+      io: { info: () => {} },
+    });
 
     driver.applyPins({ EDGE_VERSION: "github-release:wasmerio/edge:v1:edge" });
-    const mutated = readFileSync(localEnv, "utf8");
-    // Appended: sequential-source semantics mean the pin wins over the
-    // original BACKEND_VERSION line while VERBOSE survives.
-    expect(mutated.startsWith(original)).toBe(true);
-    expect(mutated).toContain(
-      "export EDGE_VERSION='github-release:wasmerio/edge:v1:edge'",
+    await driver.up();
+    expect(seen[0]["EDGE_VERSION"]).toBe(
+      "github-release:wasmerio/edge:v1:edge",
     );
-    expect(existsSync(`${localEnv}.ass-bak`)).toBe(true);
-
+    // Env pins leave nothing on disk: no backup, nothing to restore.
+    expect(existsSync(path.join(repoDir, "local-platform.local.toml"))).toBe(
+      false,
+    );
     expect(driver.restoreFiles()).toEqual([]);
-    expect(readFileSync(localEnv, "utf8")).toBe(original);
-    expect(existsSync(`${localEnv}.ass-bak`)).toBe(false);
-  });
-
-  test("pins on a missing local.env create it and remove it on restore", () => {
-    const repoDir = makeRepoDir();
-    const driver = makeDriver(repoDir);
-    const localEnv = path.join(repoDir, "local.env");
-
-    driver.applyPins({ BACKEND_VERSION: "x" });
-    expect(existsSync(localEnv)).toBe(true);
-    expect(driver.restoreFiles()).toEqual([]);
-    expect(existsSync(localEnv)).toBe(false);
   });
 
   test("a stale backup from a crashed run refuses to be clobbered", () => {
     const repoDir = makeRepoDir();
     const driver = makeDriver(repoDir);
-    writeFileSync(path.join(repoDir, "local.env.ass-bak"), "old backup");
-    expect(() => driver.applyPins({ EDGE_VERSION: "x" })).toThrow(
+    writeFileSync(
+      path.join(repoDir, "docker-compose.local-platform.yaml.ass-bak"),
+      "old backup",
+    );
+    expect(() => driver.applyCpus("edge", 1)).toThrow(
       /stale backup .* did not restore/,
     );
   });
@@ -352,7 +345,7 @@ describe("resolveLocal lifecycle", () => {
   test("cleanup errors surface without masking the original failure", async () => {
     const harness = makeFakeHarness({
       failUp: "resolver exploded",
-      restoreErrors: ["could not restore local.env: EACCES"],
+      restoreErrors: ["could not restore the compose file: EACCES"],
     });
     try {
       await resolveLocal(
@@ -371,7 +364,7 @@ describe("resolveLocal lifecycle", () => {
       const setupError = err as SetupFailedError;
       expect(setupError.message).toContain("resolver exploded");
       expect(setupError.cleanupErrors).toEqual([
-        "could not restore local.env: EACCES",
+        "could not restore the compose file: EACCES",
       ]);
     }
   });

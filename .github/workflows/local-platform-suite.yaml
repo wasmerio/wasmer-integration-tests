@@ -54,7 +54,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          matrix="$(jq -c '{include: .}' .github/integration-test-suites.json)"
+          # platform: false entries (ass unit tests) run in Code QA, not here.
+          matrix="$(jq -c '{include: map(select(.platform != false))}' .github/integration-test-suites.json)"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   local-platform-cache:

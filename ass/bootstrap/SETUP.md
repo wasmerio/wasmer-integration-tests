@@ -1,6 +1,6 @@
 # ASS setup contract
 
-You are setting up a machine to run **ass** (Anti Slop Shield), the declarative
+You are setting up a machine to run **ASS** (Anti Slop Shield), the declarative
 failure-reproduction harness in this repository. This file states the end state
 you must reach. It does not script you: how you get there depends on the
 machine, and you can see the machine.
@@ -49,7 +49,7 @@ with no Go, by contrast, simply cannot run a Go baseline.
 
 ## Known failure modes
 
-- **Rootful Docker writes root-owned cache entries.** ass wipes those through a
+- **Rootful Docker writes root-owned cache entries.** ASS wipes those through a
   container, so nothing needs `sudo`. If you find yourself reaching for `sudo
 rm -rf` under `.local-platform/`, stop — that is the harness's job.
 - **`gh` authenticated but release downloads 404.** The token needs read access
@@ -57,9 +57,11 @@ rm -rf` under `.local-platform/`, stop — that is the harness's job.
   the same as having access.
 - **A port is already allocated.** An interrupted run can leave containers
   behind. `make local-platform-down` is the supported teardown.
-- **`local.env`.** Developer-local settings live here and ass appends its pins
-  to a backed-up copy for the duration of a run. A stray `local.env.ass-bak`
-  means a run died hard; restore it with `mv local.env.ass-bak local.env`.
+- **`local-platform.local.toml`.** Developer-local platform settings live here
+  (TOML; env vars win). ASS passes its component pins through the boot
+  environment, so pins leave no file residue; a stray
+  `docker-compose.local-platform.yaml.ass-bak` means a run died hard —
+  restore it by moving it back over the compose file.
 
 ## Rules for you, the agent
 

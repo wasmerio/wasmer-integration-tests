@@ -264,9 +264,89 @@ export interface SummaryOptions {
 
 /** A keyed block: the first line sits beside its key, the rest hang under it,
  * and `null` opens a breathing gap without breaking the rule. */
-interface Block {
+export interface Block {
   key: string;
+  /** `null` opens a bar-only gap inside the block. */
   lines: (string | null)[];
+}
+
+export interface BlockTableOptions {
+  color: boolean;
+  depth: ColorDepth;
+  width: number;
+  /** Continue an open frame (a divider) instead of opening a new one. */
+  continued?: boolean;
+  /** Header for a fresh frame: `<id>  <title>`. */
+  header?: { id: string; title: string };
+}
+
+/** The two-column table `ass run` closes with: keys right-aligned against a
+ * vertical rule, dashed dividers between multi-line blocks, and a closing
+ * rule. Shared so every summary in the tool is the same table. */
+export function formatBlocks(
+  blocks: Block[],
+  options: BlockTableOptions,
+): string[] {
+  const s = makeStyle(options.color);
+  const { depth, width } = options;
+  const gutter = GUTTER;
+  const frame = (text: string): string =>
+    tint(text, FRAME_RGB, { color: options.color, depth });
+  const bar = frame("│");
+  const rows: string[] = [];
+  const gap = (): void => {
+    rows.push(`  ${" ".repeat(gutter)} ${bar}`);
+  };
+  const stub = Math.max(0, Math.min(15, width - gutter - 4));
+  const divider = (): void => {
+    rows.push(
+      frame(`${"─".repeat(gutter + 3)}┼`) +
+        fade("─", stub, { color: options.color, depth }),
+    );
+  };
+  if (options.header === undefined) {
+    divider();
+  } else {
+    rows.push(
+      `${s(options.header.id, "bold")}  ${truncate(
+        options.header.title,
+        width - options.header.id.length - 2,
+      )}`,
+    );
+    rows.push(
+      frame(
+        `${"─".repeat(gutter + 3)}┬${"─".repeat(Math.max(0, width - gutter - 4))}`,
+      ),
+    );
+  }
+  blocks.forEach((block, index) => {
+    // Multi-line values run into the next key otherwise; consecutive
+    // single-line rows stay grouped so the footer does not sprawl.
+    const previous = blocks[index - 1];
+    if (
+      previous !== undefined &&
+      (previous.lines.length > 1 || block.lines.length > 1)
+    ) {
+      divider();
+    }
+    block.lines.forEach((line, position) => {
+      if (line === null) {
+        gap();
+      } else if (position === 0) {
+        rows.push(
+          `  ${tint(block.key.padStart(gutter), KEY_RGB, { color: options.color, depth })} ${bar} ${line}`,
+        );
+      } else {
+        rows.push(`  ${" ".repeat(gutter)} ${bar} ${line}`);
+      }
+    });
+  });
+  rows.push(
+    frame(
+      `${"─".repeat(gutter + 3)}┴${"─".repeat(Math.max(0, width - gutter - 4))}`,
+    ),
+  );
+  return rows;
 }
 
 export function formatSummary(
@@ -469,67 +549,19 @@ export function formatSummary(
     lines: [relativizePath(reportPath, options.cwd)],
   });
 
-  const frame = (text: string): string =>
-    tint(text, FRAME_RGB, { color: s.enabled, depth });
-  const bar = frame("│");
-  const rows: string[] = [];
-  // Two weights of break: a dashed line divides one key from the next, a
-  // bar-only row breaks within a key. Both keep the vertical rule unbroken.
-  const gap = (): void => {
-    rows.push(`  ${" ".repeat(gutter)} ${bar}`);
-  };
-  // Short stub past the junction that fades out: a clear boundary where it
-  // meets the rule, nothing competing further out.
-  const stub = Math.max(0, Math.min(15, width - gutter - 4));
-  const divider = (): void => {
-    rows.push(
-      frame(`${"─".repeat(gutter + 3)}┼`) +
-        fade("─", stub, { color: s.enabled, depth }),
-    );
-  };
-  if (options.continued === true) {
-    divider();
-  } else {
-    rows.push(
-      `${s(report.scenario.id, "bold")}  ${truncate(
-        report.scenario.title,
-        width - report.scenario.id.length - 2,
-      )}`,
-    );
-    rows.push(
-      frame(
-        `${"─".repeat(gutter + 3)}┬${"─".repeat(Math.max(0, width - gutter - 4))}`,
-      ),
-    );
-  }
-  blocks.forEach((block, index) => {
-    // Multi-line values run into the next key otherwise; consecutive
-    // single-line rows stay grouped so the footer does not sprawl.
-    const previous = blocks[index - 1];
-    if (
-      previous !== undefined &&
-      (previous.lines.length > 1 || block.lines.length > 1)
-    ) {
-      divider();
-    }
-    block.lines.forEach((line, position) => {
-      if (line === null) {
-        gap();
-      } else if (position === 0) {
-        rows.push(
-          `  ${tint(block.key.padStart(gutter), KEY_RGB, { color: s.enabled, depth })} ${bar} ${line}`,
-        );
-      } else {
-        rows.push(`  ${" ".repeat(gutter)} ${bar} ${line}`);
-      }
-    });
+  return formatBlocks(blocks, {
+    color: s.enabled,
+    depth,
+    width,
+    ...(options.continued === true
+      ? {}
+      : {
+          header: {
+            id: report.scenario.id,
+            title: report.scenario.title,
+          },
+        }),
   });
-  rows.push(
-    frame(
-      `${"─".repeat(gutter + 3)}┴${"─".repeat(Math.max(0, width - gutter - 4))}`,
-    ),
-  );
-  return rows;
 }
 
 /** Drop the compose scaffolding, keep the message legible, and make the line

@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
-import * as yaml from "js-yaml";
 import { spawn, SpawnOptions } from "node:child_process";
 
 import { ENV_VAR_MAX_PRINT_LENGTH, TestEnv } from "../../src/env";
+import { parseYaml } from "../../src/yaml";
 import { copyPackageAnonymous } from "../../src/package";
 import {
   AppYaml,
@@ -25,7 +25,7 @@ async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
   try {
     await fs.promises.access(appYamlPath, fs.constants.F_OK);
     const raw = await fs.promises.readFile(appYamlPath, "utf-8");
-    const loaded = yaml.load(raw);
+    const loaded = parseYaml(raw);
     app = AppYaml.parse(loaded);
     app.domains = [];
   } catch {
@@ -36,8 +36,8 @@ async function overwriteAppYaml(dir: string, namespace: string): Promise<void> {
   app.owner = namespace;
   app.name = randomAppName();
   if (app.app_id) delete app.app_id;
-  // Write back as YAML to preserve expected format
-  const dumped = yaml.dump(app);
+  // JSON is valid YAML, so the CLI still reads it.
+  const dumped = JSON.stringify(app, null, 2);
   await fs.promises.writeFile(appYamlPath, dumped, "utf-8");
 }
 

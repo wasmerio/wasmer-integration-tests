@@ -75,6 +75,29 @@ jobs:
         run: |
           make fmt-check
 
+  ass-unit:
+    name: ASS unit tests
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Add pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup project
+        shell: bash
+        run: make setup
+
+      # Fake-deps unit suites: no platform, no real token (jest globalSetup
+      # just needs the variable set).
+      - name: Run ASS unit tests
+        run: |
+          WASMER_TOKEN=dummy npx jest ./tests/ass/
+
   lint:
     name: Lint the project
     runs-on: ubuntu-24.04

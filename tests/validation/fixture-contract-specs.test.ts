@@ -1,9 +1,8 @@
 import * as fs from "node:fs";
 import * as pathModule from "node:path";
 
-import yaml from "js-yaml";
-
 import { projectRoot } from "../utils/path";
+import { parseYaml } from "../../src/yaml";
 import { SELF_TEST_CHECKS } from "../utils/fixture-contract";
 import {
   BINARY_HEADER_BYTES,
@@ -61,7 +60,7 @@ interface AsyncApiSpec {
 
 function loadSpec<T>(name: string): T {
   const raw = fs.readFileSync(pathModule.join(FIXTURES_DIR, name), "utf-8");
-  return yaml.load(raw) as T;
+  return parseYaml(raw) as T;
 }
 
 const openapi = loadSpec<OpenApiSpec>("openapi.yaml");

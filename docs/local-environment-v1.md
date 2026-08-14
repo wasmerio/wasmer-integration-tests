@@ -23,12 +23,19 @@ The local platform currently supports only these selectors:
 - `BACKEND_VERSION`
 - `EDGE_VERSION`
 
-Example `local.env`:
+Configuration is layered TOML, read by `local-platform/cli.py` (lowest to
+highest: `<parent>/local-platform.toml` committed by a consumer repo,
+`<parent>/local-platform.local.toml`, this repo's
+`local-platform.local.toml`, an explicit `--config PATH`; process env vars
+beat every file). Example `local-platform.local.toml`:
 
-```bash
-export BACKEND_VERSION=resolve_prod
-export EDGE_VERSION=resolve_prod
-export LOCAL_TEST_COMMAND='pnpm exec jest'
+```toml
+[platform]
+backend_version = "resolve_prod"
+edge_version = "resolve_prod"
+
+[local_test]
+command = "pnpm exec jest"
 ```
 
 ## Commands
@@ -74,6 +81,47 @@ Important files:
 - `artifacts/relay-persisted-queries.json`: currently an empty manifest placeholder
 - `logs/`: collected service and test logs
 - `diagnostics/`: compose config, stats, cache diagnostics, and package seed output
+
+`test-env.sh` is the platform's contract with external consumers (the
+stackmachine.com frontend loop, the business simulator). Besides the
+`WASMER_*`/`EDGE_*` variables it always exports the direct-access Postgres
+quartet for the platform database:
+
+- `LOCAL_PLATFORM_POSTGRES_URL` (`postgresql://postgres:postgres@localhost:<POSTGRES_PORT>/wapm`)
+- `LOCAL_PLATFORM_POSTGRES_USERNAME` / `_PASSWORD` / `_DATABASE`
+
+and, when stripe-mock is enabled, `STRIPE_MOCK_URL`.
+
+## stripe-mock (opt-in)
+
+`LOCAL_PLATFORM_STRIPE_MOCK=1` adds a [stripe-mock](https://github.com/stripe/stripe-mock)
+container to the stack (compose profile `stripe-mock`, host port
+`STRIPE_MOCK_PORT`, default `12111`). With the flag unset — the default —
+the compose model, boot behavior, and generated env files are unchanged.
+
+When enabled:
+
+- `backend.env` additionally exports `STRIPE_API_BASE_URL=http://stripe-mock:12111`,
+  `STRIPE_SECRET_KEY=sk_test_localplatform` (stripe-mock accepts any
+  `sk_test_*` key), and `NEW_BILLING_PIPELINE_ENABLED=true`, so backend
+  billing traffic stays on the host.
+- `test-env.sh` additionally exports `STRIPE_MOCK_URL=http://localhost:<STRIPE_MOCK_PORT>`.
+- `make local-platform-status` lists the stripe-mock container like any other
+  service, and the port preflight checks `STRIPE_MOCK_PORT` (it is skipped
+  when the flag is off).
+
+Changing the flag against a running stack is treated like a version-selector
+change: the old run is torn down and re-bootstrapped, because `backend.env`
+must be regenerated.
+
+stripe-mock returns canned, stateless Stripe API responses — it keeps
+outbound Stripe calls from failing, nothing more. Billing states live in the
+backend database and are seeded separately.
+
+Known limitation: backend images older than 2026-04-03 predate the
+`STRIPE_API_BASE_URL` knob and ignore it silently, so billing traffic from
+such pinned images would still target real Stripe. There is deliberately no
+code guard for this; the standard `resolve_prod` flow always has the knob.
 
 ## Troubleshooting (agent runbook)
 
@@ -130,9 +178,9 @@ If it fails on dev too, it's a test bug; if only locally, it's a wiring issue.
 
 ## Reuse behavior
 
-`make local-platform-up` reuses `.local-platform/current` only when the requested `BACKEND_VERSION` and `EDGE_VERSION` match the already running stack.
+`make local-platform-up` reuses `.local-platform/current` only when the requested `BACKEND_VERSION`, `EDGE_VERSION`, and `LOCAL_PLATFORM_STRIPE_MOCK` state match the already running stack.
 
-If the selectors changed, the old stack is automatically stopped before a new one is created.
+If any of these selectors changed, the old stack is automatically stopped before a new one is created.
 
 ## Ports
 
@@ -152,8 +200,12 @@ Default host ports:
 - ClickHouse: `18123`, `19123`
 - Loki: `13100`
 - Vector: `19089`
+- stripe-mock: `12111` (only bound with `LOCAL_PLATFORM_STRIPE_MOCK=1`;
+  override with `STRIPE_MOCK_PORT`)
 
-Override any of them through `local.env` before starting the stack.
+Override any of them through the `[ports]` table of
+`local-platform.local.toml` (e.g. `mysql_app_db_2 = 13317`) or env vars
+before starting the stack.
 
 ## CI shape
 

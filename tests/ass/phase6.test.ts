@@ -4,7 +4,7 @@
 
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { load as loadYaml } from "js-yaml";
+import { parseYaml } from "../../src/yaml";
 import {
   redactReport,
   secretsOf,
@@ -16,7 +16,7 @@ import {
   cli,
   makeFakeHarness,
   makeRoot,
-  PERSISTED_YAML,
+  PERSISTED_TOML,
 } from "./helpers";
 
 function minimalReport(overrides: Partial<RunReport> = {}): RunReport {
@@ -98,28 +98,29 @@ describe("report hardening (QA-641)", () => {
       "repros",
       "leaky",
       `
-meta:
-  id: LK-1
-  title: evidence quotes a log line carrying a token
-  lifecycle: { state: open }
-fixtures:
-  probes:
-    matrix:
-      source: package:./probe
-load:
-  executor: artillery-http
-  artillery-http:
-    target: "{{ matrix.url }}"
-    scenarios:
-      - flow: [{ get: { url: "/" } }]
-verdict:
-  reproduced_when:
-    any:
-      - log_matches: { stream: app, pattern: "deadlock detected" }
-  collect:
-    - leak_context: { stream: app, pattern: "deadlock detected" }
-  baseline:
-    waived: n/a
+[meta]
+id = "LK-1"
+title = "evidence quotes a log line carrying a token"
+lifecycle = { state = "open" }
+
+[fixtures.probes.matrix]
+source = "package:./probe"
+
+[load]
+executor = "artillery-http"
+
+[load.artillery-http]
+target = "{{ matrix.url }}"
+scenarios = [{ flow = [{ get = { url = "/" } }] }]
+
+[[verdict.reproduced_when.any]]
+log_matches = { stream = "app", pattern = "deadlock detected" }
+
+[[verdict.collect]]
+leak_context = { stream = "app", pattern = "deadlock detected" }
+
+[verdict.baseline]
+waived = "n/a"
 `,
     );
     const harness = makeFakeHarness({
@@ -150,7 +151,7 @@ verdict:
 
   test("an unwritable report path costs the file, never the verdict", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     const harness = makeFakeHarness();
     // The report path itself is a directory, so the write must fail while
     // setup (which only needs the parent) succeeds.
@@ -165,7 +166,7 @@ verdict:
 
   test("fixture versions, executor, target, load shape, verdict and logs are recoverable", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     const harness = makeFakeHarness();
     const result = await cli(root, ["run", "wax-600"], harness.deps);
     expect(result.code).toBe(0);
@@ -194,18 +195,14 @@ verdict:
 });
 
 describe("the alerting seam (D6) through the real CLI", () => {
-  const FIXED_YAML = PERSISTED_YAML.replace(
-    "lifecycle: { state: open }",
-    `lifecycle:
-    state: fixed
-    fixed_in: { edge: "github-release:wasmerio/edge:v2026-08-05_1_419b336_dev1:edge" }
-    fixed_at: "2026-08-08"
-    evidence: worklog run 20260808`,
+  const FIXED_TOML = PERSISTED_TOML.replace(
+    `lifecycle = { state = "open" }`,
+    `lifecycle = { state = "fixed", fixed_in = { edge = "github-release:wasmerio/edge:v2026-08-05_1_419b336_dev1:edge" }, fixed_at = "2026-08-08", evidence = "worklog run 20260808" }`,
   );
 
   test("a fixed scenario reproducing on floating selectors alerts (exit 2)", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", FIXED_YAML);
+    addScenario(root, "repros", "wax-600", FIXED_TOML);
     const harness = makeFakeHarness();
     const result = await cli(
       root,
@@ -218,7 +215,7 @@ describe("the alerting seam (D6) through the real CLI", () => {
 
   test("the same fact under an open lifecycle on pins stays quiet (exit 0)", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     const harness = makeFakeHarness();
     const result = await cli(root, ["run", "wax-600"], harness.deps);
     expect(result.code).toBe(0);
@@ -237,37 +234,40 @@ describe("ass audit", () => {
   }
 
   const FIXED_SCENARIO = `
-meta:
-  id: FX-1
-  title: a fixed scenario
-  lifecycle:
-    state: fixed
-    fixed_in: { edge: "github-release:wasmerio/edge:v9:edge" }
-    fixed_at: "2026-08-01"
-    evidence: some run
-fixtures:
-  components:
-    edge: github-release:wasmerio/edge:v1:edge
-load:
-  executor: jest
-  jest:
-    spec: tests/x.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - output_matches: { pattern: kaboom }
-  baseline:
-    waived: n/a
+[meta]
+id = "FX-1"
+title = "a fixed scenario"
+
+[meta.lifecycle]
+state = "fixed"
+fixed_in = { edge = "github-release:wasmerio/edge:v9:edge" }
+fixed_at = "2026-08-01"
+evidence = "some run"
+
+[fixtures.components]
+edge = "github-release:wasmerio/edge:v1:edge"
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/x.test.ts"
+
+[[verdict.reproduced_when.any]]
+output_matches = { pattern = "kaboom" }
+
+[verdict.baseline]
+waived = "n/a"
 `;
 
   test("lists open scenarios stalest-first and never-run", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "oldy", PERSISTED_YAML);
+    addScenario(root, "repros", "oldy", PERSISTED_TOML);
     addScenario(
       root,
       "repros",
       "newy",
-      PERSISTED_YAML.replace("id: WAX-600", "id: WAX-601"),
+      PERSISTED_TOML.replace("id: WAX-600", "id: WAX-601"),
     );
     plantReport(root, "a", {
       scenario: {
@@ -341,8 +341,8 @@ verdict:
 
   test("an unloadable repro is named without taking the audit down", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "goody", PERSISTED_YAML);
-    addScenario(root, "repros", "broken", "meta: [this is not a scenario\n");
+    addScenario(root, "repros", "goody", PERSISTED_TOML);
+    addScenario(root, "repros", "broken", "meta = [this is not a scenario\n");
     const result = await cli(root, ["audit"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("unloadable scenarios (1):");
@@ -356,12 +356,12 @@ verdict:
       root,
       "repros",
       "oldie",
-      PERSISTED_YAML.replace(
-        "lifecycle: { state: open }",
-        'lifecycle: { state: retired, superseded_by: "tests/validation/x.test.ts" }',
+      PERSISTED_TOML.replace(
+        `lifecycle = { state = "open" }`,
+        `lifecycle = { state = "retired", superseded_by = "tests/validation/x.test.ts" }`,
       ),
     );
-    addScenario(root, "experiments", "drafty", PERSISTED_YAML);
+    addScenario(root, "experiments", "drafty", PERSISTED_TOML);
     const result = await cli(root, ["audit"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("superseded by tests/validation/x.test.ts");
@@ -379,9 +379,8 @@ describe("the pipeline workflow (QA-642)", () => {
     "ass-run.yaml",
   );
   const raw = readFileSync(workflowPath, "utf8");
-  // `on:` parses as boolean true in YAML 1.1; js-yaml maps it to the string
-  // key "true" — read it back defensively.
-  const workflow = loadYaml(raw) as Record<string, unknown>;
+  // Read `on:` defensively: YAML 1.1 parsers map it to the key "true".
+  const workflow = parseYaml(raw) as Record<string, unknown>;
   const triggers = (workflow["on"] ?? workflow["true"] ?? {}) as Record<
     string,
     unknown
