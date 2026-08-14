@@ -24,8 +24,10 @@ from unittest import mock
 from localplatform import fetch
 from localplatform.bootstrap import (
     _REDACT_PATTERN,
+    backend_env_appendix,
     sign_edge_grpc_token,
     strip_unknown_flag,
+    test_env_appendix,
 )
 from localplatform.fetch import (
     ECR_ACCOUNT_PROFILES,
@@ -37,8 +39,12 @@ from localplatform.fetch import (
 )
 from localplatform.ensure_compiled import _build_package_list
 from localplatform.lib import (
+    RESOLVED_ENV_KEYS,
+    STRIPE_MOCK_FLAG,
     Ctx,
     Fail,
+    apply_stripe_mock_profile,
+    check_required_ports_available,
     describe_artifact_source,
     describe_backend_version,
     format_duration,
@@ -46,8 +52,10 @@ from localplatform.lib import (
     is_truthy,
     parse_env_file,
     read_resolved_json,
+    stripe_mock_enabled,
     write_env_file,
 )
+from localplatform.up import DEPENDENCY_SERVICES, _dependency_services
 
 
 class TempDirTest(unittest.TestCase):
@@ -434,6 +442,123 @@ class TestEcrProfileSelection(unittest.TestCase):
         profile, warning = select_ecr_profile("111122223333", "tf-aux", lambda _p: None)
         self.assertEqual(profile, "tf-aux")
         self.assertIsNotNone(warning)
+
+
+class TestStripeMock(unittest.TestCase):
+    """LOCAL_PLATFORM_STRIPE_MOCK gates the stripe-mock service, its billing
+    env wiring, and the STRIPE_MOCK_URL contract export; the Postgres contract
+    exports are unconditional (worklog D-D)."""
+
+    PORTS = {
+        "BACKEND_HTTP_PORT": "18000",
+        "EDGE_HTTP_PORT": "19080",
+        "EDGE_SSH_PORT": "19022",
+        "EDGE_DNS_PORT": "19053",
+        "CLICKHOUSE_HTTP_PORT": "18123",
+        "POSTGRES_PORT": "15432",
+    }
+
+    def _ctx(self, **extra: str) -> Ctx:
+        return Ctx(env={**self.PORTS, **extra})
+
+    def test_flag_follows_local_platform_boolean_convention(self) -> None:
+        for falsy in ("", "0", "false", "no", "off"):
+            self.assertFalse(
+                stripe_mock_enabled(self._ctx(**{STRIPE_MOCK_FLAG: falsy})), falsy
+            )
+        # Any other spelling is truthy, matching is_truthy (so `2` enables).
+        for truthy in ("1", "true", "yes", "on", "2"):
+            self.assertTrue(
+                stripe_mock_enabled(self._ctx(**{STRIPE_MOCK_FLAG: truthy})), truthy
+            )
+        self.assertFalse(stripe_mock_enabled(self._ctx()))
+
+    def test_backend_env_appendix_flag_off_is_unchanged(self) -> None:
+        appendix = backend_env_appendix(self._ctx(), "tok")
+        self.assertIn('export EDGE_GRPC_TOKEN="tok"', appendix)
+        self.assertNotIn("STRIPE", appendix)
+        self.assertNotIn("NEW_BILLING_PIPELINE_ENABLED", appendix)
+
+    def test_backend_env_appendix_flag_on_has_billing_wiring(self) -> None:
+        appendix = backend_env_appendix(self._ctx(**{STRIPE_MOCK_FLAG: "1"}), "tok")
+        self.assertIn(
+            'export STRIPE_API_BASE_URL="http://stripe-mock:12111"', appendix
+        )
+        self.assertIn('export STRIPE_SECRET_KEY="sk_test_localplatform"', appendix)
+        # "true" = BillingScope::Both (backend billing_scope.rs accepts the
+        # legacy boolean spelling).
+        self.assertIn('export NEW_BILLING_PIPELINE_ENABLED="true"', appendix)
+
+    def test_test_env_appendix_postgres_exports_are_unconditional(self) -> None:
+        for flag in ("", "1"):
+            appendix = test_env_appendix(self._ctx(**{STRIPE_MOCK_FLAG: flag}))
+            self.assertIn(
+                'export LOCAL_PLATFORM_POSTGRES_URL='
+                '"postgresql://postgres:postgres@localhost:15432/wapm"',
+                appendix,
+            )
+            self.assertIn('export LOCAL_PLATFORM_POSTGRES_USERNAME="postgres"', appendix)
+            self.assertIn('export LOCAL_PLATFORM_POSTGRES_PASSWORD="postgres"', appendix)
+            self.assertIn('export LOCAL_PLATFORM_POSTGRES_DATABASE="wapm"', appendix)
+
+    def test_test_env_appendix_stripe_url_is_conditional(self) -> None:
+        self.assertNotIn("STRIPE_MOCK_URL", test_env_appendix(self._ctx()))
+        on = test_env_appendix(self._ctx(**{STRIPE_MOCK_FLAG: "1"}))
+        self.assertIn('export STRIPE_MOCK_URL="http://localhost:12111"', on)
+
+    def test_test_env_appendix_existing_exports_are_stable(self) -> None:
+        """Scenario 1 prohibition: the pre-existing export lines must not
+        change shape when the feature is off."""
+        appendix = test_env_appendix(self._ctx())
+        for line in (
+            'export WASMER_REGISTRY="http://localhost:18000/graphql"',
+            'export WASMER_APP_DOMAIN="localhost"',
+            'export EDGE_SERVER="http://127.0.0.1:19080"',
+            'export LOCAL_PLATFORM_CLICKHOUSE_URL="http://localhost:18123"',
+            'export LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER="1"',
+        ):
+            self.assertIn(line, appendix)
+
+    def test_stripe_mock_port_override_is_reflected(self) -> None:
+        appendix = test_env_appendix(
+            self._ctx(**{STRIPE_MOCK_FLAG: "1", "STRIPE_MOCK_PORT": "22111"})
+        )
+        self.assertIn('export STRIPE_MOCK_URL="http://localhost:22111"', appendix)
+
+    def test_dependency_services_gains_stripe_mock_only_when_enabled(self) -> None:
+        self.assertEqual(_dependency_services(self._ctx()), DEPENDENCY_SERVICES)
+        self.assertEqual(
+            _dependency_services(self._ctx(**{STRIPE_MOCK_FLAG: "1"})),
+            DEPENDENCY_SERVICES + ("stripe-mock",),
+        )
+
+    def test_profile_activation(self) -> None:
+        off = self._ctx()
+        apply_stripe_mock_profile(off)
+        self.assertNotIn("COMPOSE_PROFILES", off.env)
+
+        on = self._ctx(**{STRIPE_MOCK_FLAG: "1"})
+        apply_stripe_mock_profile(on)
+        self.assertEqual(on.env["COMPOSE_PROFILES"], "stripe-mock")
+
+        merged = self._ctx(**{STRIPE_MOCK_FLAG: "1", "COMPOSE_PROFILES": "debug"})
+        apply_stripe_mock_profile(merged)
+        self.assertEqual(merged.env["COMPOSE_PROFILES"], "debug,stripe-mock")
+        apply_stripe_mock_profile(merged)  # idempotent
+        self.assertEqual(merged.env["COMPOSE_PROFILES"], "debug,stripe-mock")
+
+    def test_flag_is_recorded_in_resolved_env_keys(self) -> None:
+        self.assertIn(STRIPE_MOCK_FLAG, RESOLVED_ENV_KEYS)
+
+    def test_port_preflight_gates_stripe_mock_port_on_flag(self) -> None:
+        """A busy 12111 must not block a default (flag-off) boot, but must
+        fail loudly when the flag is on."""
+        with mock.patch(
+            "localplatform.lib.port_is_listening", lambda port: port == 12111
+        ), mock.patch("localplatform.lib.port_owner_hint", lambda _ctx, _port: ""):
+            check_required_ports_available(Ctx(env={}))  # must not raise
+            with self.assertRaisesRegex(Fail, "stripe-mock"):
+                check_required_ports_available(Ctx(env={STRIPE_MOCK_FLAG: "1"}))
 
 
 class TestRedaction(unittest.TestCase):

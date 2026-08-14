@@ -592,6 +592,7 @@ def resolve(ctx: Ctx) -> None:
                 "compose_project_name": ctx.get("COMPOSE_PROJECT_NAME"),
                 "docker_cli_path": docker_cli_path,
                 "docker_buildx_path": docker_buildx_path,
+                "stripe_mock": ctx.get("LOCAL_PLATFORM_STRIPE_MOCK"),
                 "ports": {
                     name.removesuffix("_PORT").lower(): ctx.get(name)
                     for name in (
@@ -613,6 +614,7 @@ def resolve(ctx: Ctx) -> None:
                         "CLICKHOUSE_NATIVE_PORT",
                         "LOKI_PORT",
                         "VECTOR_HTTP_PORT",
+                        "STRIPE_MOCK_PORT",
                     )
                 },
             },

@@ -24,8 +24,10 @@ from .lib import (
     ANSI_GREEN,
     ANSI_RESET,
     ANSI_YELLOW,
+    STRIPE_MOCK_FLAG,
     Ctx,
     Fail,
+    apply_stripe_mock_profile,
     check_required_ports_available,
     compose,
     compose_cmd,
@@ -35,6 +37,7 @@ from .lib import (
     describe_edge_version,
     ensure_github_token,
     fail,
+    is_truthy,
     log,
     log_clear,
     log_use_color,
@@ -43,6 +46,7 @@ from .lib import (
     process_is_running,
     require_cmd,
     run_quietly,
+    stripe_mock_enabled,
     try_output,
     wait_url,
 )
@@ -59,6 +63,12 @@ DEPENDENCY_SERVICES = (
     "loki",
     "vector",
 )
+
+
+def _dependency_services(ctx: Ctx) -> tuple[str, ...]:
+    if stripe_mock_enabled(ctx):
+        return DEPENDENCY_SERVICES + ("stripe-mock",)
+    return DEPENDENCY_SERVICES
 
 # Selectors that need a GitHub token to resolve or download.
 _BACKEND_TOKEN_SELECTORS = ("resolve_dev", "latest_dev", "latest-dev")
@@ -276,17 +286,23 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
     except Exception as error:
         log_warn(f"Could not read {existing_resolved_env}: {error}")
         existing = {}
-    if existing.get("BACKEND_VERSION") != ctx.get("BACKEND_VERSION") or existing.get(
-        "EDGE_VERSION"
-    ) != ctx.get("EDGE_VERSION"):
+    if (
+        existing.get("BACKEND_VERSION") != ctx.get("BACKEND_VERSION")
+        or existing.get("EDGE_VERSION") != ctx.get("EDGE_VERSION")
+        # The flag reshapes backend.env and the compose service set, so a
+        # change needs a re-bootstrap exactly like a version-selector change.
+        or is_truthy(existing.get(STRIPE_MOCK_FLAG)) != stripe_mock_enabled(ctx)
+    ):
         log("Stopping existing local platform run because the requested selectors changed")
         log(
             f"Existing selectors: backend={existing.get('BACKEND_VERSION', '')} "
-            f"edge={existing.get('EDGE_VERSION', '')}"
+            f"edge={existing.get('EDGE_VERSION', '')} "
+            f"stripe_mock={is_truthy(existing.get(STRIPE_MOCK_FLAG))}"
         )
         log(
             f"Requested selectors: backend={ctx.get('BACKEND_VERSION')} "
-            f"edge={ctx.get('EDGE_VERSION')}"
+            f"edge={ctx.get('EDGE_VERSION')} "
+            f"stripe_mock={stripe_mock_enabled(ctx)}"
         )
         # Tear down with a separate context: down() loads the OLD run's
         # resolved env, which must not clobber the freshly requested selectors
@@ -315,7 +331,7 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
         and compose_service_is_running(ctx, "edge")
     ):
         log("Found a partially running Compose project; ensuring services are up")
-        compose(ctx, "up", "-d", *DEPENDENCY_SERVICES)
+        compose(ctx, "up", "-d", *_dependency_services(ctx))
         compose(ctx, "up", "-d", "backend")
         _wait_for_backend(ctx)
         compose(ctx, "up", "-d", "edge")
@@ -432,7 +448,7 @@ def _compose_up(ctx: Ctx, label: str, prefix: str, *services: str) -> None:
 
 def _start_dependency_services(ctx: Ctx) -> None:
     log("Starting dependency services")
-    _compose_up(ctx, "Dependency services", "[deps] ", *DEPENDENCY_SERVICES)
+    _compose_up(ctx, "Dependency services", "[deps] ", *_dependency_services(ctx))
     start_compose_log_follow(ctx)
 
 
@@ -607,6 +623,7 @@ def up(ctx: Ctx) -> None:
     require_cmd("node")
 
     load_local_env(ctx)
+    apply_stripe_mock_profile(ctx)
 
     if not ctx.is_ci():
         # Treat empty as unset, like `${BACKEND_VERSION:-resolve_prod}` did.

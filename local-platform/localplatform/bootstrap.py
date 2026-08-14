@@ -22,6 +22,7 @@ from .lib import (
     require_cmd,
     run,
     run_quietly,
+    stripe_mock_enabled,
     try_output,
 )
 
@@ -160,6 +161,57 @@ def strip_unknown_flag(cmd: list[str], flag: str) -> list[str] | None:
         return None
     has_value = index + 1 < len(cmd) and not cmd[index + 1].startswith("--")
     return cmd[:index] + cmd[index + (2 if has_value else 1) :]
+
+
+def backend_env_appendix(ctx: Ctx, edge_grpc_token: str) -> str:
+    """Lines appended to the smbe-generated backend.env."""
+    text = (
+        "\n# local-platform source build tooling\n"
+        'export PATH="/opt/source-build-tools/bin:$PATH"\n'
+        'export EDGE_GRPC_ENDPOINT="edge:9051"\n'
+        'export EDGE_GRPC_USE_INSECURE_CHANNEL="1"\n'
+        f'export EDGE_GRPC_TOKEN="{edge_grpc_token}"\n'
+        "# Production runs WordPress builds with phpix enabled; keep parity\n"
+        "# so the suite exercises the SHIPIT_PHPIX injection path.\n"
+        'export SM_APPS_PHP_USE_PHPIX="true"\n'
+    )
+    if stripe_mock_enabled(ctx):
+        # Backends older than 2026-04-03 predate STRIPE_API_BASE_URL and
+        # ignore it silently; documented in docs/local-environment-v1.md.
+        text += (
+            "# stripe-mock billing wiring (LOCAL_PLATFORM_STRIPE_MOCK)\n"
+            'export STRIPE_API_BASE_URL="http://stripe-mock:12111"\n'
+            'export STRIPE_SECRET_KEY="sk_test_localplatform"\n'
+            'export NEW_BILLING_PIPELINE_ENABLED="true"\n'
+        )
+    return text
+
+
+def test_env_appendix(ctx: Ctx) -> str:
+    """Lines appended to the smbe-generated test-env.sh — the platform's only
+    interface to consumers (frontend loop, simulator)."""
+    text = (
+        "\n# local-platform isolated test endpoints\n"
+        f'export WASMER_REGISTRY="http://localhost:{ctx.get("BACKEND_HTTP_PORT")}/graphql"\n'
+        'export WASMER_APP_DOMAIN="localhost"\n'
+        f'export EDGE_SERVER="http://127.0.0.1:{ctx.get("EDGE_HTTP_PORT")}"\n'
+        f'export EDGE_SSH_SERVER="ssh://127.0.0.1:{ctx.get("EDGE_SSH_PORT")}"\n'
+        f'export EDGE_DNS_SERVER="127.0.0.1:{ctx.get("EDGE_DNS_PORT")}"\n'
+        f'export CLICKHOUSE_HTTP_PORT="{ctx.get("CLICKHOUSE_HTTP_PORT")}"\n'
+        f'export LOCAL_PLATFORM_CLICKHOUSE_URL="http://localhost:{ctx.get("CLICKHOUSE_HTTP_PORT")}"\n'
+        'export LOCAL_PLATFORM_CLICKHOUSE_DATABASE="edge_metrics_local"\n'
+        'export LOCAL_PLATFORM_CLICKHOUSE_USERNAME="default"\n'
+        'export LOCAL_PLATFORM_CLICKHOUSE_PASSWORD="root"\n'
+        'export LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER="1"\n'
+        f'export LOCAL_PLATFORM_POSTGRES_URL="postgresql://postgres:postgres@localhost:{ctx.get("POSTGRES_PORT")}/wapm"\n'
+        'export LOCAL_PLATFORM_POSTGRES_USERNAME="postgres"\n'
+        'export LOCAL_PLATFORM_POSTGRES_PASSWORD="postgres"\n'
+        'export LOCAL_PLATFORM_POSTGRES_DATABASE="wapm"\n'
+    )
+    if stripe_mock_enabled(ctx):
+        stripe_mock_port = ctx.get("STRIPE_MOCK_PORT") or "12111"
+        text += f'export STRIPE_MOCK_URL="http://localhost:{stripe_mock_port}"\n'
+    return text
 
 
 def bootstrap(ctx: Ctx) -> None:
@@ -336,33 +388,11 @@ def bootstrap(ctx: Ctx) -> None:
     # tooling under /opt rather than the backend repository path assumed by
     # smbe local-dev-env.
     with open(run_dir / "backend.env", "a") as backend_env:
-        backend_env.write(
-            "\n# local-platform source build tooling\n"
-            'export PATH="/opt/source-build-tools/bin:$PATH"\n'
-            'export EDGE_GRPC_ENDPOINT="edge:9051"\n'
-            'export EDGE_GRPC_USE_INSECURE_CHANNEL="1"\n'
-            f'export EDGE_GRPC_TOKEN="{edge_grpc_token}"\n'
-            "# Production runs WordPress builds with phpix enabled; keep parity\n"
-            "# so the suite exercises the SHIPIT_PHPIX injection path.\n"
-            'export SM_APPS_PHP_USE_PHPIX="true"\n'
-        )
+        backend_env.write(backend_env_appendix(ctx, edge_grpc_token))
 
     # Ensure the generated test env contains the isolated integration-test
     # ports.
     with open(run_dir / "test-env.sh", "a") as test_env:
-        test_env.write(
-            "\n# local-platform isolated test endpoints\n"
-            f'export WASMER_REGISTRY="http://localhost:{ctx.get("BACKEND_HTTP_PORT")}/graphql"\n'
-            'export WASMER_APP_DOMAIN="localhost"\n'
-            f'export EDGE_SERVER="http://127.0.0.1:{ctx.get("EDGE_HTTP_PORT")}"\n'
-            f'export EDGE_SSH_SERVER="ssh://127.0.0.1:{ctx.get("EDGE_SSH_PORT")}"\n'
-            f'export EDGE_DNS_SERVER="127.0.0.1:{ctx.get("EDGE_DNS_PORT")}"\n'
-            f'export CLICKHOUSE_HTTP_PORT="{ctx.get("CLICKHOUSE_HTTP_PORT")}"\n'
-            f'export LOCAL_PLATFORM_CLICKHOUSE_URL="http://localhost:{ctx.get("CLICKHOUSE_HTTP_PORT")}"\n'
-            'export LOCAL_PLATFORM_CLICKHOUSE_DATABASE="edge_metrics_local"\n'
-            'export LOCAL_PLATFORM_CLICKHOUSE_USERNAME="default"\n'
-            'export LOCAL_PLATFORM_CLICKHOUSE_PASSWORD="root"\n'
-            'export LOCAL_PLATFORM_RELAX_EDGE_VERSION_HEADER="1"\n'
-        )
+        test_env.write(test_env_appendix(ctx))
 
     log("Bootstrap complete")

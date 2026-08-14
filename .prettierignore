@@ -31,3 +31,6 @@ local-platform/package-compilation-list.txt
 bin/ass
 ass/bootstrap/detect.sh
 .ass/
+
+# Prettier has no XML parser
+local-platform/clickhouse/config.d/*.xml

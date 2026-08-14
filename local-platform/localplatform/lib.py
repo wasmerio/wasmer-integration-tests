@@ -59,8 +59,17 @@ PORT_DEFAULTS: dict[str, tuple[int, str]] = {
     "CLICKHOUSE_NATIVE_PORT": (19123, "ClickHouse native"),
     "LOKI_PORT": (13100, "Loki"),
     "VECTOR_HTTP_PORT": (19089, "Vector HTTP"),
+    "STRIPE_MOCK_PORT": (12111, "stripe-mock"),
 }
 UDP_PORT_VARS = frozenset({"EDGE_DNS_PORT"})
+
+STRIPE_MOCK_FLAG = "LOCAL_PLATFORM_STRIPE_MOCK"
+STRIPE_MOCK_PROFILE = "stripe-mock"
+
+# Ports bound only when their gating flag is on; the availability preflight
+# skips them otherwise so an unrelated process on the port cannot block a
+# default boot.
+CONDITIONAL_PORT_FLAGS: dict[str, str] = {"STRIPE_MOCK_PORT": STRIPE_MOCK_FLAG}
 
 # Keys resolve() records into resolved.env / resolved.json.
 RESOLVED_ENV_KEYS = (
@@ -73,6 +82,7 @@ RESOLVED_ENV_KEYS = (
     "COMPOSE_PROJECT_NAME",
     "DOCKER_CLI_PATH",
     "DOCKER_BUILDX_PATH",
+    STRIPE_MOCK_FLAG,
     *PORT_DEFAULTS.keys(),
 )
 
@@ -91,6 +101,23 @@ def fail(message: str, code: int = 1) -> "NoReturn":  # noqa: F821
 
 def is_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
+def stripe_mock_enabled(ctx: "Ctx") -> bool:
+    return ctx.truthy(STRIPE_MOCK_FLAG)
+
+
+def apply_stripe_mock_profile(ctx: "Ctx") -> None:
+    """Activate the stripe-mock compose profile when the flag is on, so every
+    compose verb (up/down/config/logs/ps) sees the service. With the flag off
+    the profile stays inactive and the compose model is identical to a
+    checkout without the service."""
+    if not stripe_mock_enabled(ctx):
+        return
+    profiles = [p for p in ctx.get("COMPOSE_PROFILES").split(",") if p]
+    if STRIPE_MOCK_PROFILE not in profiles:
+        profiles.append(STRIPE_MOCK_PROFILE)
+    ctx.env["COMPOSE_PROFILES"] = ",".join(profiles)
 
 
 class Ctx:
@@ -225,6 +252,7 @@ class Ctx:
             self.env.update(read_resolved_json(resolved_json))
         else:
             fail(f"Missing resolved env: {resolved_env}")
+        apply_stripe_mock_profile(self)
         self.set_run_dir_env()
         self.edge_cache_dir()
         self.package_cache_dir()
@@ -245,6 +273,7 @@ def read_resolved_json(path: Path) -> dict[str, str]:
         ("compose_project_name", "COMPOSE_PROJECT_NAME"),
         ("docker_cli_path", "DOCKER_CLI_PATH"),
         ("docker_buildx_path", "DOCKER_BUILDX_PATH"),
+        ("stripe_mock", STRIPE_MOCK_FLAG),
     ):
         if json_key in data:
             flat[env_key] = str(data[json_key])
@@ -965,6 +994,9 @@ def check_required_ports_available(ctx: Ctx) -> None:
     ctx.set_default_ports()
     for var, (_default, service) in PORT_DEFAULTS.items():
         if var in UDP_PORT_VARS:
+            continue
+        gate_flag = CONDITIONAL_PORT_FLAGS.get(var)
+        if gate_flag is not None and not ctx.truthy(gate_flag):
             continue
         port = ctx.getint(var, PORT_DEFAULTS[var][0])
         if port_is_listening(port):
