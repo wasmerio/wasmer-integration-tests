@@ -263,6 +263,14 @@ jobs:
           LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
         run: make local-test
 
+      # The stack must be down before the save: a live edge keeps writing
+      # compiler_cache and tar aborts with "file changed as we read it",
+      # silently voiding the save (continue-on-error).
+      - name: Stop local platform before caching
+        if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: make local-platform-down
+
       - name: Normalize local platform cache permissions
         if: always() && steps.local-platform-cache.outputs.cache-hit != 'true'
         run: |
