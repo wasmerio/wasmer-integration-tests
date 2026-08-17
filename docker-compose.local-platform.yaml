@@ -256,6 +256,13 @@ services:
     entrypoint: ["/bin/sh", "-lc"]
     command:
       - |
+        # Fetch-cron actions resolve <app>.localhost with plain glibc, which
+        # only maps *.localhost to loopback when the host resolver does
+        # (systemd-resolved). Inside dind (ARC runners) the upstream is a VPC
+        # resolver that NXDOMAINs *.localhost, so answer it locally and
+        # forward everything else to Docker's embedded DNS.
+        dnsmasq --listen-address=127.0.0.2 --bind-interfaces --no-resolv --no-hosts --address=/localhost/127.0.0.1 --server=127.0.0.11
+        echo "nameserver 127.0.0.2" > /etc/resolv.conf
         socat TCP-LISTEN:18000,bind=127.0.0.1,fork,reuseaddr TCP:backend:8000 &
         exec /usr/local/bin/edge run --http-port 80 --https-port 443 --ssh-port 9022 --data-dir /data -c /config/platform_config.yaml
     volumes:
