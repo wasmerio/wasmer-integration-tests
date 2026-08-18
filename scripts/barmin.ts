@@ -26,6 +26,7 @@ import { z } from "zod";
 const KnownIssueSchema = z.object({
   ticket: z.string(),
   url: z.string(),
+  envs: z.array(z.string()).optional(),
   note: z.string().optional(),
 });
 
@@ -36,6 +37,7 @@ const RunRecordSchema = z.object({
   numPassedTests: z.number(),
   numFailedTests: z.number(),
   numPendingTests: z.number(),
+  environment: z.string().optional(),
   tests: z.array(
     z.object({
       file: z.string(),
@@ -43,6 +45,7 @@ const RunRecordSchema = z.object({
       status: z.string(),
       durationMs: z.number().nullable().optional(),
       knownIssue: KnownIssueSchema.optional(),
+      knownIssueOutOfScope: KnownIssueSchema.optional(),
     }),
   ),
   suiteErrors: z.array(
@@ -50,6 +53,7 @@ const RunRecordSchema = z.object({
       file: z.string(),
       message: z.string(),
       knownIssue: KnownIssueSchema.optional(),
+      knownIssueOutOfScope: KnownIssueSchema.optional(),
     }),
   ),
 });
@@ -65,6 +69,18 @@ interface Finding {
   ticket?: string;
   url?: string;
   note?: string;
+  environment?: string;
+  outOfScopeEnvs?: string[];
+}
+
+// A known issue is only "now passing" when it passed in every environment it
+// claims — one green leg of a three-leg run proves nothing on its own.
+interface RemovalCandidate {
+  ticket: string;
+  url: string;
+  name: string;
+  suite: string;
+  envs: string[];
 }
 
 interface FailedJob {
@@ -76,7 +92,7 @@ interface FailedJob {
 interface Classification {
   untracked: Finding[];
   known: Finding[];
-  fixedKnown: Finding[];
+  fixedKnown: RemovalCandidate[];
   infraJobs: FailedJob[];
   failedJobCount: number;
 }
@@ -197,38 +213,88 @@ async function classify(testRunsDir: string): Promise<Classification> {
 
   const untracked: Finding[] = [];
   const known: Finding[] = [];
-  const fixedKnown: Finding[] = [];
   const suitesWithTestFailures = new Set<string>();
+  const perIssue = new Map<
+    string,
+    {
+      ticket: string;
+      url: string;
+      name: string;
+      suite: string;
+      envs: string[] | null;
+      green: Set<string>;
+      red: Set<string>;
+    }
+  >();
 
   for (const [suite, records] of readRunRecords(testRunsDir)) {
     for (const record of records) {
+      const environment = record.environment ?? "unknown";
       for (const test of record.tests) {
+        const outOfScope = test.knownIssueOutOfScope;
         const finding: Finding = {
           suite,
           file: test.file,
           name: test.fullName,
-          ticket: test.knownIssue?.ticket,
-          url: test.knownIssue?.url,
-          note: test.knownIssue?.note,
+          ticket: test.knownIssue?.ticket ?? outOfScope?.ticket,
+          url: test.knownIssue?.url ?? outOfScope?.url,
+          note: test.knownIssue?.note ?? outOfScope?.note,
+          environment,
+          ...(outOfScope ? { outOfScopeEnvs: outOfScope.envs ?? [] } : {}),
         };
         if (test.status === "failed") {
           suitesWithTestFailures.add(suite);
           (test.knownIssue ? known : untracked).push(finding);
-        } else if (test.status === "passed" && test.knownIssue) {
-          fixedKnown.push(finding);
+        }
+        if (test.knownIssue) {
+          const key = `${test.knownIssue.ticket}::${test.file}::${test.fullName}`;
+          const seen = perIssue.get(key) ?? {
+            ticket: test.knownIssue.ticket,
+            url: test.knownIssue.url,
+            name: test.fullName,
+            suite,
+            envs: test.knownIssue.envs ?? null,
+            green: new Set<string>(),
+            red: new Set<string>(),
+          };
+          (test.status === "passed" ? seen.green : seen.red).add(environment);
+          perIssue.set(key, seen);
         }
       }
       for (const suiteError of record.suiteErrors) {
         suitesWithTestFailures.add(suite);
+        const outOfScope = suiteError.knownIssueOutOfScope;
         (suiteError.knownIssue ? known : untracked).push({
           suite,
           file: suiteError.file,
           name: `suite failed to run (${suiteError.file})`,
-          ticket: suiteError.knownIssue?.ticket,
-          url: suiteError.knownIssue?.url,
+          ticket: suiteError.knownIssue?.ticket ?? outOfScope?.ticket,
+          url: suiteError.knownIssue?.url ?? outOfScope?.url,
+          environment,
+          ...(outOfScope ? { outOfScopeEnvs: outOfScope.envs ?? [] } : {}),
         });
       }
     }
+  }
+
+  // Removal candidates: green everywhere the entry claims, red nowhere. An
+  // unscoped entry has to be green in every environment this run covered.
+  const fixedKnown: RemovalCandidate[] = [];
+  for (const seen of perIssue.values()) {
+    if (seen.red.size > 0 || seen.green.size === 0) {
+      continue;
+    }
+    const required = seen.envs ?? [...seen.green];
+    if (!required.every((environment) => seen.green.has(environment))) {
+      continue;
+    }
+    fixedKnown.push({
+      ticket: seen.ticket,
+      url: seen.url,
+      name: seen.name,
+      suite: seen.suite,
+      envs: required,
+    });
   }
 
   // A failed job whose suite reported no failing tests died outside jest:
@@ -337,6 +403,10 @@ async function getCommitInfo(): Promise<CommitInfo> {
 }
 
 function findingLine(finding: Finding): string {
+  if (finding.outOfScopeEnvs && finding.ticket && finding.url) {
+    const scope = finding.outOfScopeEnvs.join(", ") || "other environments";
+    return `• ${finding.name} — <${finding.url}|${finding.ticket}> is registered for ${scope}, not ${finding.environment ?? "this environment"} _(${finding.suite})_`;
+  }
   if (finding.ticket && finding.url) {
     return `• <${finding.url}|${finding.ticket}> ${finding.name} _(${finding.suite})_`;
   }
@@ -390,8 +460,11 @@ function composeMessage(
   if (fixedKnown.length > 0) {
     lines.push(
       "",
-      ":tada: *Now passing — remove from known-issues.jsonc:*",
-      ...fixedKnown.map(findingLine),
+      ":tada: *Green in every listed environment — candidates for removal from known-issues.jsonc:*",
+      ...fixedKnown.map(
+        (candidate) =>
+          `• <${candidate.url}|${candidate.ticket}> ${candidate.name} — green on ${candidate.envs.join(", ")} _(${candidate.suite})_`,
+      ),
     );
   }
   if (commit.mergedPrLine) {

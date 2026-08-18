@@ -28,6 +28,26 @@ flips to red the moment the bug is fixed.
    joined with single spaces; a file-only key covers suite-level load
    errors; a describe-title key covers all tests under it. Include the
    ticket ID and a one-line note.
+   Add `"envs"` when the bug is environment-specific — any of `dev`,
+   `bugt`, `prod`, `local` — and list only the environments where you
+   observed it. Omit the field when the bug is environment-independent;
+   omitting means every environment, as before. Scoping is what keeps a
+   prod-only entry from nudging on every dev run, so scope by what you
+   saw, not by what you assume:
+
+   ```jsonc
+   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
+     "ticket": "EDGE-1994",
+     "envs": ["prod", "bugt"],
+     "note": "prod red 7 of 7 nights Aug 12-18; bugt red 3 of 6 since Aug 16",
+   },
+   ```
+
+   A scoped entry that fails on an unlisted environment reports as
+   UNTRACKED with a pointer to the ticket. That is the signal to comment
+   on the ticket and widen the list — not to file a duplicate. Unmapped
+   registries (local platform) resolve to `local` and match every entry,
+   so local runs behave as they always did.
 4. **Verify the wiring**: rerun the single failing test and confirm the
    reporter prints `⚠ KNOWN ISSUE <ticket>` instead of
    `🔥 UNTRACKED FAILURE`.
@@ -37,14 +57,19 @@ flips to red the moment the bug is fixed.
 
 ## Removal
 
-When the ticket is fixed and the test passes, the reporter prints a
-"consider removing the entry" nudge and Barmin lists it under "known issues
-now passing". Delete the registry entry in the PR that confirms the fix.
+When the ticket is fixed and the test passes, the reporter prints a one-line
+nudge on the environments the entry lists. A single green environment is not
+evidence: Barmin promotes an entry to "green in every listed environment"
+only when every environment it claims passed in the same run. Delete the
+registry entry in the PR that confirms the fix, and prefer narrowing `envs`
+over deleting when only one environment recovered.
 
 ## Validate
 
 - Ticket follows the linear-ticket format and links the test as
   reproduction.
 - Registry key matches the jest fullName exactly (space-joined, no `>`).
+- `envs`, when present, lists only environments where the failure was
+  observed, and uses the tokens dev / bugt / prod / local.
 - Single-test rerun shows the KNOWN ISSUE banner with the ticket URL.
 - No `test.failing` marker on the test.

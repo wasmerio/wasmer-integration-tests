@@ -24,6 +24,12 @@ const REGISTRY_PATH = path.join(process.cwd(), ".jest-deployed-apps.jsonl");
 const KNOWN_ISSUES_PATH = path.join(process.cwd(), "known-issues.jsonc");
 const RUN_SUMMARY_PATH = path.join(process.cwd(), ".jest-run-summary.jsonl");
 const LINEAR_ISSUE_URL_BASE = "https://linear.app/wasmer/issue";
+const ENV_BY_HOST = {
+  "wasmer.wtf": "dev",
+  "wasmer.fun": "bugt",
+  "wasmer.io": "prod",
+};
+const KNOWN_ENVS = new Set(["dev", "bugt", "prod", "local"]);
 const CONSOLE_TEST_MARKER_RE = /^\[\[wasmer-test:([^\]]+)\]\]\s?/;
 const LOG_SNIPPET_MAX_CHARS = 2_000;
 
@@ -32,6 +38,40 @@ function color(code, value) {
     return value;
   }
   return `\u001b[${code}m${value}\u001b[0m`;
+}
+
+// --- environment ----------------------------------------------------------
+
+// Entries in known-issues.jsonc may scope themselves to the environments
+// where the bug reproduces. Anything that is not a known registry (local
+// platform, ad-hoc stack) resolves to "local" and matches every scoped
+// entry: a local run keeps behaving as it did before scoping existed.
+
+let currentEnvironmentCache;
+function currentEnvironment() {
+  if (currentEnvironmentCache !== undefined) {
+    return currentEnvironmentCache;
+  }
+  const raw = process.env.WASMER_REGISTRY ?? process.env.TESTED_REGISTRY ?? "";
+  const host = raw
+    .replace(/^[a-z]+:\/\//i, "")
+    .split("/")[0]
+    .replace(/^registry\./i, "")
+    .toLowerCase();
+  // Unset means the suite defaults to dev (src/env.ts).
+  currentEnvironmentCache =
+    host === "" ? "dev" : (ENV_BY_HOST[host] ?? "local");
+  return currentEnvironmentCache;
+}
+
+// An entry without "envs" applies everywhere. A scoped entry applies to the
+// environments it lists, plus any unmapped registry (see above).
+function appliesToCurrentEnvironment(entry) {
+  if (!entry?.envs) {
+    return true;
+  }
+  const env = currentEnvironment();
+  return env === "local" || entry.envs.includes(env);
 }
 
 // --- known-issues registry ------------------------------------------------
@@ -62,6 +102,7 @@ function loadKnownIssues() {
           name,
           ticket: value.ticket,
           note: value.note ?? null,
+          envs: parseEnvs(value.envs, key),
           url: `${LINEAR_ISSUE_URL_BASE}/${value.ticket}`,
         };
       });
@@ -72,6 +113,24 @@ function loadKnownIssues() {
     );
   }
   return knownIssuesCache;
+}
+
+// An unusable "envs" value degrades to an unscoped entry — a typo must not
+// silently turn a tracked failure into an UNTRACKED one — but it says so.
+function parseEnvs(value, key) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const values = Array.isArray(value) ? value : [value];
+  const valid = values.filter((env) => KNOWN_ENVS.has(env));
+  const invalid = values.filter((env) => !KNOWN_ENVS.has(env));
+  if (invalid.length > 0) {
+    process.stderr.write(
+      `failures-only-reporter: ignoring unknown envs ${JSON.stringify(invalid)} ` +
+        `on "${key}" (valid: ${[...KNOWN_ENVS].join(", ")})\n`,
+    );
+  }
+  return valid.length > 0 ? valid : null;
 }
 
 // fullName === null matches only file-level entries (suite load errors).
@@ -96,10 +155,25 @@ function findKnownIssue(testFilePath, fullName) {
   return null;
 }
 
+// knownIssue means "tracked here"; knownIssueOutOfScope records the entry
+// that exists for other environments so Barmin can cross-reference it.
+function summaryIssueFields(classified) {
+  if (classified.known) {
+    return { knownIssue: knownIssueSummaryFields(classified.known) };
+  }
+  if (classified.outOfScope) {
+    return {
+      knownIssueOutOfScope: knownIssueSummaryFields(classified.outOfScope),
+    };
+  }
+  return {};
+}
+
 function knownIssueSummaryFields(entry) {
   return {
     ticket: entry.ticket,
     url: entry.url,
+    ...(entry.envs ? { envs: entry.envs } : {}),
     ...(entry.note ? { note: entry.note } : {}),
   };
 }
@@ -269,6 +343,44 @@ function untrackedLines(indent) {
   ];
 }
 
+// The test is registered, but not for the environment under test: a tracked
+// bug reaching a new environment is an event, so it stays loud and links the
+// entry that already exists instead of inviting a duplicate ticket.
+function outOfScopeLines(entry, indent) {
+  return [
+    color(
+      "31",
+      `${indent}🔥 UNTRACKED — no Linear ticket on record for this environment.`,
+    ),
+    `${indent}  ${entry.ticket} is registered for ${entry.envs.join(", ")} — this is ${currentEnvironment()}.`,
+    `${indent}  Scope change, not a new bug: comment on ${entry.ticket} and widen`,
+    `${indent}  the envs list, or file a separate ticket if the shape differs.`,
+    `${indent}  ${entry.url}`,
+  ];
+}
+
+// KNOWN only counts in the environments the entry claims; everywhere else the
+// entry is reported as an out-of-scope sighting.
+function classifyFailure(testFilePath, fullName) {
+  const entry = findKnownIssue(testFilePath, fullName);
+  if (!entry) {
+    return { known: null, outOfScope: null };
+  }
+  return appliesToCurrentEnvironment(entry)
+    ? { known: entry, outOfScope: null }
+    : { known: null, outOfScope: entry };
+}
+
+function classifiedFailureLines(classified, indent) {
+  if (classified.known) {
+    return knownIssueLines(classified.known, indent);
+  }
+  if (classified.outOfScope) {
+    return outOfScopeLines(classified.outOfScope, indent);
+  }
+  return untrackedLines(indent);
+}
+
 function appCardLines(app, known, indent) {
   const lines = [
     `${indent}${color("36", "app")} ${app.namespace}/${app.appName} (${color("33", app.appId)})`,
@@ -320,11 +432,10 @@ function failureContextLines(testResult) {
   }
 
   for (const fullName of failingNames) {
-    const known = findKnownIssue(testResult.testFilePath, fullName);
+    const classified = classifyFailure(testResult.testFilePath, fullName);
+    const known = classified.known;
     lines.push("", color("31", `✕ ${fullName}`));
-    lines.push(
-      ...(known ? knownIssueLines(known, "  ") : untrackedLines("  ")),
-    );
+    lines.push(...classifiedFailureLines(classified, "  "));
     const apps = allApps.filter((app) =>
       matchesFailingTest(app, new Set([fullName])),
     );
@@ -335,10 +446,12 @@ function failureContextLines(testResult) {
   }
 
   if (testResult.testExecError) {
-    const known = findKnownIssue(testResult.testFilePath, null);
     lines.push("", color("31", "✕ suite failed to run"));
     lines.push(
-      ...(known ? knownIssueLines(known, "  ") : untrackedLines("  ")),
+      ...classifiedFailureLines(
+        classifyFailure(testResult.testFilePath, null),
+        "  ",
+      ),
     );
   }
 
@@ -349,7 +462,7 @@ function failureContextLines(testResult) {
       lines.push(
         ...appCardLines(
           app,
-          findKnownIssue(testResult.testFilePath, null),
+          classifyFailure(testResult.testFilePath, null).known,
           "  ",
         ),
       );
@@ -367,14 +480,19 @@ function fixedKnownIssueLines(testResult) {
     }
     const fullName = [...result.ancestorTitles, result.title].join(" ");
     const known = findKnownIssue(testResult.testFilePath, fullName);
-    if (known) {
-      lines.push(
-        color(
-          "32",
-          `✔ ${known.ticket} is listed in known-issues.jsonc but "${fullName}" passed — the issue may be fixed; consider removing the entry`,
-        ),
-      );
+    // A pass on an unmapped registry says nothing about the listed
+    // environments, so scoped entries only nudge where they are listed.
+    if (!known || (known.envs && !known.envs.includes(currentEnvironment()))) {
+      continue;
     }
+    const scope = known.envs ? known.envs.join(", ") : "all environments";
+    lines.push(
+      color(
+        "32",
+        `✔ ${known.ticket} passed here (${currentEnvironment()}) — listed for ${scope}; ` +
+          `removal is decided across every listed environment, which Barmin reports per run`,
+      ),
+    );
   }
   return lines;
 }
@@ -389,7 +507,7 @@ function collectFailures(results) {
       failures.push({
         file,
         fullName: `suite failed to run (${file})`,
-        known: findKnownIssue(suite.testFilePath, null),
+        ...classifyFailure(suite.testFilePath, null),
       });
     }
     for (const result of suite.testResults ?? []) {
@@ -400,7 +518,7 @@ function collectFailures(results) {
       failures.push({
         file,
         fullName,
-        known: findKnownIssue(suite.testFilePath, fullName),
+        ...classifyFailure(suite.testFilePath, fullName),
       });
     }
   }
@@ -416,11 +534,18 @@ function hivemindPrompt(failures) {
     ? `CI run ${runUrl} (test-run-* artifacts carry jest-output.log, .jest-run-summary.jsonl and .jest-deployed-apps.jsonl per suite)`
     : `local run in ${process.cwd()} (.jest-run-summary.jsonl, .jest-deployed-apps.jsonl)`;
   const list = failures
-    .map((failure) =>
-      failure.known
-        ? `- [KNOWN ${failure.known.ticket} ${failure.known.url}] ${failure.fullName} (${failure.file})`
-        : `- [UNTRACKED] ${failure.fullName} (${failure.file})`,
-    )
+    .map((failure) => {
+      if (failure.known) {
+        return `- [KNOWN ${failure.known.ticket} ${failure.known.url}] ${failure.fullName} (${failure.file})`;
+      }
+      if (failure.outOfScope) {
+        return (
+          `- [UNTRACKED on ${currentEnvironment()} — ${failure.outOfScope.ticket} is registered for ` +
+          `${failure.outOfScope.envs.join(", ")}] ${failure.fullName} (${failure.file})`
+        );
+      }
+      return `- [UNTRACKED] ${failure.fullName} (${failure.file})`;
+    })
     .join("\n");
   return [
     "Investigate these wasmer integration test failures (load your integration-test-failure skill).",
@@ -447,7 +572,11 @@ function runSummaryLines(failures) {
   if (untracked.length > 0) {
     lines.push(color("31", "🔥 UNTRACKED:"));
     for (const failure of untracked) {
-      lines.push(`  ✕ ${failure.fullName} — ${failure.file}`);
+      lines.push(
+        failure.outOfScope
+          ? `  ✕ ${failure.fullName} — ${failure.file} (${color("33", failure.outOfScope.ticket)} is registered for ${failure.outOfScope.envs.join(", ")}, not ${currentEnvironment()})`
+          : `  ✕ ${failure.fullName} — ${failure.file}`,
+      );
     }
   }
   if (known.length > 0) {
@@ -536,30 +665,34 @@ class FailuresOnlyReporter {
         numPassedTests: results.numPassedTests,
         numFailedTests: results.numFailedTests,
         numPendingTests: results.numPendingTests,
+        environment: currentEnvironment(),
         suiteErrors: [],
         tests: [],
       };
       for (const suite of results.testResults ?? []) {
         const file = path.relative(process.cwd(), suite.testFilePath);
         if (suite.testExecError) {
-          const known = findKnownIssue(suite.testFilePath, null);
           record.suiteErrors.push({
             file,
             message: String(
               suite.testExecError.message ?? suite.testExecError,
             ).slice(0, 2000),
-            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+            ...summaryIssueFields(classifyFailure(suite.testFilePath, null)),
           });
         }
         for (const result of suite.testResults ?? []) {
           const fullName = [...result.ancestorTitles, result.title].join(" ");
-          const known = findKnownIssue(suite.testFilePath, fullName);
+          const entry = findKnownIssue(suite.testFilePath, fullName);
           record.tests.push({
             file,
             fullName,
             status: result.status,
             durationMs: result.duration ?? null,
-            ...(known ? { knownIssue: knownIssueSummaryFields(known) } : {}),
+            ...summaryIssueFields({
+              known: entry && appliesToCurrentEnvironment(entry) ? entry : null,
+              outOfScope:
+                entry && !appliesToCurrentEnvironment(entry) ? entry : null,
+            }),
           });
         }
       }

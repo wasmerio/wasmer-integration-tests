@@ -11,6 +11,17 @@
 // Barmin can split Slack reports into known vs UNTRACKED failures. When a
 // listed test passes, the reporter nudges you to remove the entry.
 //
+// Optional "envs" scopes an entry to the environments where the bug
+// reproduces: "dev", "bugt", "prod", "local". Omit it when the bug is
+// environment-independent. A scoped entry is KNOWN only on the listed
+// environments; failing elsewhere reports as UNTRACKED with a pointer back
+// to the ticket (a tracked bug reaching a new environment is an event —
+// comment on the ticket and widen the list). Unmapped registries resolve to
+// "local" and match every entry, so local-platform runs are unaffected. The
+// "passed" nudge only fires on listed environments, and Barmin promotes an
+// entry to a removal candidate only when it was green on all of them in the
+// same run.
+//
 // Full-line comments only — no trailing comments. File tickets with the
 // linear-ticket skill; wire entries with the file-known-issue skill. Never
 // use test.failing for a product bug: it hides the failure and turns red
@@ -18,58 +29,61 @@
 {
   "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
     "ticket": "BE-1705",
-    "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
+    "envs": ["bugt", "prod"],
+    "note": "stale Edge cronjob schedules starve new fetch actions; bugt red 6 of 6 covered nights Aug 12-18, prod red 2 of 6 (Aug 12, Aug 18), dev red 2 of 7 — fix 51e05bb is on main only",
   },
   "tests/job/cronjob-config-removal.test.ts::removing a cronjob from config stops it without deleting its app": {
     "ticket": "BE-1705",
-    "note": "stale Edge cronjob schedules starve new fetch actions; initial counter never increments",
-  },
-  "tests/app/node-fixture-contract.test.ts::node-fixture-contract-endpoints": {
-    "ticket": "WAX-607",
-    "note": "prod-pinned Edge only: outbound HTTP trips a signal-handler trap under cranelift, instance exits 27; WAX-607 Done 2026-08-07, resolve_dev Edge local platform green 2026-08-10 — remove once the prod Edge build carries the fixed EdgeJS",
+    "envs": ["bugt"],
+    "note": "stale Edge cronjob schedules starve new fetch actions; bugt red 6 of 6 covered nights Aug 12-18, prod green 6 of 6, dev red 1 of 7 — kept until bugt clears",
   },
   "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
     "ticket": "BE-1705",
-    "note": "orphan schedules now starve fresh cronjobs too; the first counter increment never happens",
+    "envs": ["bugt"],
+    "note": "orphan schedules starve fresh cronjobs; bugt red 6 of 6 covered nights Aug 12-18, prod green 6 of 6, dev red 1 of 7 — kept until bugt clears",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: hexo-starter": {
     "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: js-worker": {
     "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: python-http-server": {
     "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: preact-starter": {
     "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
   },
   "tests/general/test.ts::app-info-get": {
     "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever",
+    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
   },
   "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
     "ticket": "BE-1705",
-    "note": "orphan schedules starve fresh cronjobs; the execute counter never increments (prod nightly 7 of 8 nights Aug 3-10)",
+    "envs": ["bugt", "prod"],
+    "note": "orphan schedules starve fresh cronjobs; the execute counter never increments — bugt red 6 of 6 covered nights Aug 12-18, prod red 3 of 6, dev red 1 of 7; fix 51e05bb is on main only",
   },
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
     "ticket": "BE-1705",
-    "note": "orphan schedules starve fresh cronjobs; the counter never increments (prod nightly 8 of 8 nights Aug 3-10)",
+    "envs": ["bugt", "prod"],
+    "note": "orphan schedules starve fresh cronjobs; the counter never increments — bugt red 6 of 6 covered nights Aug 12-18, prod red 2 of 6, dev red 1 of 7; fix 51e05bb is on main only",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: xmcp-starter": {
     "ticket": "SRE-1700",
-    "note": "the remote build wedges in the depot 'exporting to client directory' step and is canceled at the 600s cap; deploy reports 'Build failed with exit code 1'",
+    "envs": ["dev"],
+    "note": "the remote build wedges in the depot 'exporting to client directory' step and is canceled at the 600s cap; deploy reports 'Build failed with exit code 1'; red on dev 5 of 7 nights Aug 12-18",
   },
   "tests/general/be-1719-shared-staging-key.test.ts::be-1719-concurrent-deploys-of-identical-packages": {
     "ticket": "BE-1719",
-    "note": "concurrent deploys of one package share the tmp/<sha256> staging key; R2 throttles per key and the CLI aborts on the first 429 with no retry",
+    "note": "concurrent deploys of one package share the tmp/<sha256> staging key; R2 throttles per key and the CLI aborts on the first 429 with no retry; red on dev 7 of 7, bugt 6 of 6 and prod 6 of 7 nights Aug 12-18",
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
-    "note": "prod only: Edge never serves a cached response even with every request pinned to one node; dev and prod-backend+dev-Edge local platform cache fine, isolating the prod Edge build/config",
+    "envs": ["prod", "bugt"],
+    "note": "prod red 7 of 7 nights Aug 12-18 (never serves a cached response even pinned to one node); bugt red 3 of 6 (since Aug 16) with a different shape — caching works there, purge does not evict; dev red once, Aug 17",
   },
 }
