@@ -28,9 +28,8 @@
 // the moment the bug is fixed.
 {
   "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
-    "ticket": "BE-1705",
-    "envs": ["bugt", "prod"],
-    "note": "stale Edge cronjob schedules starve new fetch actions; bugt red 6 of 6 covered nights Aug 12-18, prod red 2 of 6 (Aug 12, Aug 18), dev red 2 of 7 — fix 51e05bb is on main only",
+    "ticket": "EDGE-2028",
+    "note": "the replaced fetch action keeps firing on Edge with no backend cronjob row - orphan survived 96 min on dev in edge run 32129652967; bugt and prod also red for the pre-fix BE-1705 shape (51e05bb is on main only)",
   },
   "tests/job/cronjob-config-removal.test.ts::removing a cronjob from config stops it without deleting its app": {
     "ticket": "BE-1705",
@@ -76,6 +75,11 @@
     "ticket": "SRE-1700",
     "envs": ["dev"],
     "note": "the remote build wedges in the depot 'exporting to client directory' step and is canceled at the 600s cap; deploy reports 'Build failed with exit code 1'; red on dev 5 of 7 nights Aug 12-18",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: mastra-starter": {
+    "ticket": "SRE-1700",
+    "envs": ["dev"],
+    "note": "same depot export stall as xmcp-starter, first seen 2026-08-18 in backend run 32143044580 (build 7wxfxpfbjk); the cap-cancel rate rose 0.1% -> 1.0% of dev builds Aug 16-18, so the ticket was reopened",
   },
   "tests/general/be-1719-shared-staging-key.test.ts::be-1719-concurrent-deploys-of-identical-packages": {
     "ticket": "BE-1719",
