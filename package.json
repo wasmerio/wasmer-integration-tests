@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "test": "jest",
+    "barmin": "tsx scripts/barmin.ts",
     "ass": "./bin/ass"
   },
   "devDependencies": {
