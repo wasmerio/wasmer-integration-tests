@@ -15,6 +15,29 @@ permissions:
   pull-requests: read
 
 on:
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: "Which registry to target, which also chooses which environment to test"
+        required: false
+        default: wasmer.wtf
+        type: choice
+        options: [wasmer.wtf, wasmer.fun, wasmer.io]
+      test_branch:
+        description: "Checkout a specific branch of the integration tests"
+        required: false
+        default: "main"
+        type: string
+      fetch_artifact:
+        description: "Set to the name of the wasmer artifact you'd like to fetch and use in the integration tests."
+        required: false
+        default: ""
+        type: string
+      provide_quality_assessment:
+        description: "Classify results against known-issues and print them in the job summary"
+        required: false
+        default: true
+        type: boolean
   workflow_call:
     inputs:
       fetch_artifact:
@@ -114,7 +137,12 @@ jobs:
       - name: Test
         env:
           WASMER_REGISTRY: https://registry.${{ inputs.registry }}/graphql
-          WASMER_TOKEN: ${{ secrets.token }}
+          # Callers pass `token`; a manual workflow_dispatch has no way to
+          # supply secrets, so fall back to the env's own CI-user secret.
+          WASMER_TOKEN: ${{ secrets.token
+            || (inputs.registry == 'wasmer.io' && secrets.PROD_BACKEND_CIUSER_TOKEN)
+            || (inputs.registry == 'wasmer.fun' && secrets.BUGT_BACKEND_CIUSER_TOKEN)
+            || secrets.DEV_BACKEND_CIUSER_TOKEN }}
         # Brace group so multi-line test_command values pipe every command's
         # output; pipefail keeps the jest exit code through tee.
         run: |
