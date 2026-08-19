@@ -1112,6 +1112,10 @@ def wait_url(url: str, timeout_ms: int) -> None:
     last_error = "not attempted"
     attempt = 0
     last_progress_at = 0.0
+    # Ramp from a tight poll to a calm one: a service that is already up
+    # should not cost a fixed two-second sleep, and a slow one should not be
+    # polled hard for two minutes.
+    poll_seconds = 0.1
 
     log(f"waiting for {url} (timeout {format_duration(timeout_ms)})")
     while time.monotonic() < deadline:
@@ -1164,7 +1168,8 @@ def wait_url(url: str, timeout_ms: int) -> None:
                 f"{format_duration((now - started) * 1000)} "
                 f"(attempt {attempt}, last error: {last_error})"
             )
-        time.sleep(2)
+        time.sleep(poll_seconds)
+        poll_seconds = min(poll_seconds * 1.5, 1.0)
 
     fail(
         f"Timed out waiting for {url} after "

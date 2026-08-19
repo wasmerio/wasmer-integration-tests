@@ -25,6 +25,24 @@ def stop_log_follower(ctx: Ctx) -> None:
     pid_file.unlink(missing_ok=True)
 
 
+def stop(ctx: Ctx) -> None:
+    """Suspend the stack: containers and volumes stay, so `up` resumes this
+    same run - with its migrated database, its bootstrapped admin token and
+    whatever state was seeded into it - in seconds instead of rebuilding it
+    from an empty volume. `down` remains the destructive verb."""
+    if ctx.run_dir is None:
+        current = ctx.current_run_dir()
+        if current is None or not (current / "resolved.env").is_file():
+            fail("No current local platform run found")
+        ctx.run_dir = current
+    ctx.load_resolved_env()
+    # The default SIGTERM grace is ten seconds per container and most of
+    # them exit immediately; three keeps the suspend snappy without cutting
+    # a database off mid-flush.
+    compose(ctx, "stop", "--timeout", ctx.get("LOCAL_PLATFORM_STOP_TIMEOUT") or "3")
+    stop_log_follower(ctx)
+
+
 def down(ctx: Ctx, *, skip_collect: bool | None = None) -> None:
     if ctx.run_dir is None:
         current = ctx.current_run_dir()
@@ -44,5 +62,12 @@ def down(ctx: Ctx, *, skip_collect: bool | None = None) -> None:
         except Exception as error:
             log_warn(f"Log collection failed: {error}")
 
-    compose(ctx, "down", "--remove-orphans", "--volumes")
+    compose(
+        ctx,
+        "down",
+        "--remove-orphans",
+        "--volumes",
+        "--timeout",
+        ctx.get("LOCAL_PLATFORM_STOP_TIMEOUT") or "3",
+    )
     stop_log_follower(ctx)

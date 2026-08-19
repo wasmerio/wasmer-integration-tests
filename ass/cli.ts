@@ -31,6 +31,7 @@ import { runScenario, type RunnerDeps } from "./engine/runner";
 import { colorEnabled } from "./report/style";
 import { Presenter } from "./report/presenter";
 import { ExecutorProfileError } from "./executors/jest";
+import type { SimulatorDeps } from "./simulator/deps";
 
 export interface CliIo {
   out(line: string): void;
@@ -44,6 +45,8 @@ export interface CliOptions {
   runnerDeps?: RunnerDeps;
   /** Test seam: fake the toolchain probes doctor runs. */
   doctor?: Omit<DoctorOptions, "cwd">;
+  /** Test seam: fake the simulator's platform driver / probe / registries. */
+  simulatorDeps?: SimulatorDeps;
   /** Colorize output. Defaults to sniffing `process.stdout`, which is only
    * the right question when `io` is unset and actually writes there. */
   color?: boolean;
@@ -402,6 +405,257 @@ export async function runCli(
           `then commit and run: pnpm ass run ${result.slug}`,
       );
     });
+  // Engine selection: v2 (the reconciler) is the default; `--engine v1` or
+  // SIM_ENGINE=v1 falls back to the v1 rebuild-shaped seeder.
+  const engineChoice = (flag: string | undefined): "v1" | "v2" =>
+    (flag ?? process.env["SIM_ENGINE"] ?? "v2") === "v1" ? "v1" : "v2";
+
+  // Simulator lifecycle verbs (business-simulator-v1 §2.1). Deliberately no
+  // --env/--component/--edge/--backend/--cpus: the simulator declares no
+  // component pins, is local-only by construction, and must never mutate
+  // local.env or the compose file (harness hermeticity).
+  program
+    .command("up")
+    .description(
+      "Seed and hold simulated product state on the local platform " +
+        "(declaration file with assSchema: 1)",
+    )
+    .requiredOption("--file <path>", "simulator declaration to seed")
+    .option(
+      "--set <path=value>",
+      "tweak the declaration without editing the file (repeatable), e.g. " +
+        "--set apps.count=13 --set telemetry.rps.perApp.my-app=2",
+      (value: string, previous: string[]) => [...previous, value],
+      [] as string[],
+    )
+    .option(
+      "--plan",
+      "validate and print the resolved expansion; write nothing",
+    )
+    .option(
+      "--verbose",
+      "show everything the platform tooling prints, not just notable lines",
+    )
+    .option(
+      "--exact",
+      "two-sided telemetry diffing (CI's mode, not a developer's)",
+    )
+    .option(
+      "--verify",
+      "re-observe after applying; the plan must come back empty (I1)",
+    )
+    .option("--anchor <iso>", "pin the reconcile anchor (tests)")
+    .option("--workers <n>", "global worker width", (value: string) =>
+      Number(value),
+    )
+    .option("--workers-sdk <n>", "SDK lane width", (value: string) =>
+      Number(value),
+    )
+    .option(
+      "--workers-clickhouse <n>",
+      "ClickHouse lane width",
+      (value: string) => Number(value),
+    )
+    .option("--workers-postgres <n>", "Postgres lane width", (value: string) =>
+      Number(value),
+    )
+    .option("--engine <v1|v2>", "state engine (default: v2, the reconciler)")
+    .action(
+      async (flags: {
+        file: string;
+        set: string[];
+        plan?: boolean;
+        verbose?: boolean;
+        exact?: boolean;
+        verify?: boolean;
+        anchor?: string;
+        workers?: number;
+        workersSdk?: number;
+        workersClickhouse?: number;
+        workersPostgres?: number;
+        engine?: string;
+      }) => {
+        if (engineChoice(flags.engine) === "v1") {
+          const { runUp } = await import("./simulator/up");
+          code = await runUp({
+            file: flags.file,
+            set: flags.set,
+            plan: flags.plan === true,
+            verbose: flags.verbose === true,
+            cwd,
+            io,
+            deps: options.simulatorDeps,
+          });
+          return;
+        }
+        const { runUpV2 } = await import("./simulator/v2/verbs");
+        code = await runUpV2({
+          ...flags,
+          cwd,
+          io,
+          deps: options.simulatorDeps,
+        });
+      },
+    );
+  program
+    .command("down [slug]")
+    .description(
+      "Release held simulated state (replays the teardown descriptor)",
+    )
+    .option("--file <path>", "declaration file; used only to locate the slug")
+    .option("--verbose", "show teardown detail")
+    .option(
+      "--engine <v1|v2>",
+      "state engine (default: whichever holds the slug)",
+    )
+    .action(
+      async (
+        slug: string | undefined,
+        flags: { file?: string; verbose?: boolean; engine?: string },
+      ) => {
+        // A v2 hold is released by reconciling to the empty set; a v1 hold
+        // still replays its recorded teardown entries.
+        const { resolveDownEngine } = await import("./simulator/v2/dispatch");
+        const engine =
+          flags.engine ?? (await resolveDownEngine(cwd, slug, flags.file));
+        if (engine === "v2") {
+          const { runDownV2 } = await import("./simulator/v2/verbs");
+          const { slugOfFile } = await import("./simulator/v2/dispatch");
+          code = await runDownV2({
+            slug: slug ?? (await slugOfFile(cwd, flags.file)),
+            verbose: flags.verbose === true,
+            cwd,
+            io,
+            color,
+            deps: options.simulatorDeps,
+          });
+          return;
+        }
+        const { runDown } = await import("./simulator/down");
+        code = await runDown({
+          file: flags.file,
+          slug,
+          verbose: flags.verbose === true,
+          cwd,
+          io,
+          deps: options.simulatorDeps,
+        });
+      },
+    );
+
+  const diffFlags = (
+    command: import("commander").Command,
+  ): import("commander").Command =>
+    command
+      .requiredOption(
+        "--file <path>",
+        "simulator declaration to compare against",
+      )
+      .option(
+        "--set <path=value>",
+        "tweak the declaration without editing the file (repeatable)",
+        (value: string, previous: string[]) => [...previous, value],
+        [] as string[],
+      )
+      .option("--exact", "two-sided telemetry diffing; surplus becomes a plan")
+      .option("--anchor <iso>", "pin the reconcile anchor (tests)")
+      .option("--verbose", "show engine detail");
+
+  diffFlags(
+    program
+      .command("diff")
+      .description(
+        "Print what `ass up` would change; write nothing (the kubectl diff of the simulator)",
+      ),
+  ).action(async (flags: Record<string, unknown>) => {
+    const { runDiffV2 } = await import("./simulator/v2/verbs");
+    code = await runDiffV2({
+      ...(flags as object),
+      cwd,
+      io,
+      color,
+      deps: options.simulatorDeps,
+    } as never);
+  });
+
+  diffFlags(
+    program
+      .command("verify")
+      .description(
+        "Like `diff`, but exits non-zero when the plan is not empty (the I1 gate for CI)",
+      ),
+  ).action(async (flags: Record<string, unknown>) => {
+    const { runDiffV2 } = await import("./simulator/v2/verbs");
+    code = await runDiffV2({
+      ...(flags as object),
+      verifyMode: true,
+      cwd,
+      io,
+      color,
+      deps: options.simulatorDeps,
+    } as never);
+  });
+  program
+    .command("status")
+    .description("Show held scenarios and platform liveness (always exits 0)")
+    .option("--json", "stable machine-readable output")
+    .action(async (flags: { json?: boolean }) => {
+      const { runStatus } = await import("./simulator/status");
+      code = await runStatus({
+        json: flags.json === true,
+        cwd,
+        io,
+        deps: options.simulatorDeps,
+      });
+    });
+
+  program
+    .command("present")
+    .description(
+      "Render piped output inside the ass table (a dev loop's servers, a " +
+        "chained tool) - noise stays behind --verbose",
+    )
+    .option("--id <id>", "banner id", "ass")
+    .option("--title <text>", "banner title", "")
+    .option(
+      "--block <key=value>",
+      "a phase and its rows; extra rows are newline-separated (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [] as string[],
+    )
+    .option("--step <name>", "phase the streamed lines are quoted under")
+    .option("--highlight <regex>", "always show lines matching this")
+    .option(
+      "--collapse <text>",
+      "when nothing worth showing appears, print this one line instead of a frame",
+    )
+    .option("--verbose", "show every streamed line, not just notable ones")
+    .action(
+      async (flags: {
+        id: string;
+        title: string;
+        block: string[];
+        step?: string;
+        highlight?: string;
+        collapse?: string;
+        verbose?: boolean;
+      }) => {
+        const { runPresent } = await import("./report/stream");
+        code = await runPresent({
+          id: flags.id,
+          title: flags.title,
+          blocks: flags.block,
+          step: flags.step,
+          highlight: flags.highlight,
+          collapse: flags.collapse,
+          verbose: flags.verbose === true || isTruthy(process.env["VERBOSE"]),
+          color,
+          io,
+          animate: process.stdout.isTTY === true ? process.stdout : undefined,
+        });
+      },
+    );
+
   program
     .command("doctor")
     .description("Report environment capabilities and how to fix them")

@@ -1,4 +1,4 @@
-.PHONY: fmt fmt-check check lint test clean all ass local-test local-platform-prepare local-platform-up local-platform-down local-platform-logs local-platform-status
+.PHONY: fmt fmt-check check lint test clean all ass local-test local-platform-prepare local-platform-up local-platform-down local-platform-stop local-platform-logs local-platform-status
 JSPATHS = ./src ./tests ./bin ./ass
 JEST_ARGS ?=
 PYTHON ?= python3
@@ -43,6 +43,12 @@ local-platform-up:
 
 local-platform-down:
 	$(LOCAL_PLATFORM_CLI) down
+
+# Suspend instead of destroy: containers and volumes stay, so the next
+# `local-platform-up` resumes this run (migrated, bootstrapped, seeded) in
+# seconds rather than rebuilding it.
+local-platform-stop:
+	$(LOCAL_PLATFORM_CLI) stop
 
 local-platform-logs:
 	$(LOCAL_PLATFORM_CLI) logs

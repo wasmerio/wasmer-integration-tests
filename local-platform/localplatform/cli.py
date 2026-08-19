@@ -9,7 +9,16 @@ from pathlib import Path
 
 from .lib import Ctx, Fail, log_emit
 
-COMMANDS = ("up", "down", "local-test", "prepare", "logs", "collect-logs", "status")
+COMMANDS = (
+    "up",
+    "down",
+    "stop",
+    "local-test",
+    "prepare",
+    "logs",
+    "collect-logs",
+    "status",
+)
 
 
 def _make_ctx() -> Ctx:
@@ -42,6 +51,11 @@ def main(argv: list[str] | None = None) -> int:
             from .down import down
 
             down(ctx)
+            return 0
+        if args.command == "stop":
+            from .down import stop
+
+            stop(ctx)
             return 0
         if args.command == "local-test":
             from .local_test import local_test

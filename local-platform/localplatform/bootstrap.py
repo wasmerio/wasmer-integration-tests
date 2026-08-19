@@ -27,6 +27,39 @@ from .lib import (
 )
 
 
+def _capability_cache_path(ctx: Ctx) -> Path:
+    cache = ctx.repo_dir / ".local-platform" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache / "backend-image-capabilities.json"
+
+
+def _cached_capabilities(ctx: Ctx, image_ref: str) -> dict[str, object] | None:
+    """Probing the backend image for its CLI shape costs two container
+    starts (~2.5s) and the answer only changes when the image does. Cache it
+    by image ref so a repeat boot pays nothing."""
+    try:
+        cached = json.loads(_capability_cache_path(ctx).read_text())
+    except Exception:
+        return None
+    entry = cached.get(image_ref)
+    return entry if isinstance(entry, dict) else None
+
+
+def _store_capabilities(ctx: Ctx, image_ref: str, capabilities: dict[str, object]) -> None:
+    path = _capability_cache_path(ctx)
+    try:
+        cached = json.loads(path.read_text())
+        if not isinstance(cached, dict):
+            cached = {}
+    except Exception:
+        cached = {}
+    cached[image_ref] = capabilities
+    try:
+        path.write_text(json.dumps(cached, indent=2) + "\n")
+    except Exception as error:  # a cache that cannot be written is not fatal
+        log_warn(f"Could not cache backend image capabilities: {error}")
+
+
 def _detect_mysql_app_host(ctx: Ctx) -> str:
     host = ctx.get("LOCAL_PLATFORM_MYSQL_APP_HOST")
     if host:
@@ -228,9 +261,23 @@ def bootstrap(ctx: Ctx) -> None:
     bootstrap_raw = run_dir / ".bootstrap.raw.log"
     mysql_app_host = _detect_mysql_app_host(ctx)
 
-    dev_env_cmd = _smbe_dev_env_subcommand(ctx, image_ref)
-    log(f"Using smbe subcommand: {' '.join(dev_env_cmd)}")
-    skip_templates_args = _skip_templates_args(ctx, image_ref, dev_env_cmd)
+    # Both probes are container starts against an image whose CLI shape
+    # cannot change without the ref changing, so the answer is cached.
+    cached = _cached_capabilities(ctx, image_ref)
+    if cached is not None and not ctx.truthy("LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER"):
+        dev_env_cmd = [str(part) for part in cached.get("dev_env_cmd", [])]
+        skip_templates_args = [str(part) for part in cached.get("skip_templates_args", [])]
+        log(f"Using cached smbe subcommand: {' '.join(dev_env_cmd)}")
+    else:
+        dev_env_cmd = _smbe_dev_env_subcommand(ctx, image_ref)
+        log(f"Using smbe subcommand: {' '.join(dev_env_cmd)}")
+        skip_templates_args = _skip_templates_args(ctx, image_ref, dev_env_cmd)
+        if not ctx.truthy("LOCAL_PLATFORM_USE_BACKEND_TEMPLATE_SEEDER"):
+            _store_capabilities(
+                ctx,
+                image_ref,
+                {"dev_env_cmd": dev_env_cmd, "skip_templates_args": skip_templates_args},
+            )
 
     bootstrap_cmd = [
         "docker",
