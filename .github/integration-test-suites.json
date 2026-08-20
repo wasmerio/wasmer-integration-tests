@@ -62,6 +62,10 @@
     "python_version": "3.13"
   },
   {
+    "id": "packages",
+    "test_command": "npx jest tests/package/"
+  },
+  {
     "id": "stackmachine-sdk",
     "test_command": "npx jest tests/stackmachine/"
   }
