@@ -27,49 +27,15 @@
 // use test.failing for a product bug: it hides the failure and turns red
 // the moment the bug is fixed.
 {
-  "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
-    "ticket": "EDGE-2028",
-    "note": "the replaced fetch action keeps firing on Edge with no backend cronjob row - orphan survived 96 min on dev in edge run 32129652967; bugt and prod also red for the pre-fix BE-1705 shape (51e05bb is on main only)",
-  },
-  "tests/job/cronjob-config-removal.test.ts::removing a cronjob from config stops it without deleting its app": {
-    "ticket": "BE-1705",
-    "envs": ["bugt"],
-    "note": "stale Edge cronjob schedules starve new fetch actions; bugt red 6 of 6 covered nights Aug 12-18, prod green 6 of 6, dev red 1 of 7 — kept until bugt clears",
-  },
-  "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
-    "ticket": "BE-1705",
-    "envs": ["bugt"],
-    "note": "orphan schedules starve fresh cronjobs; bugt red 6 of 6 covered nights Aug 12-18, prod green 6 of 6, dev red 1 of 7 — kept until bugt clears",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: hexo-starter": {
-    "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: js-worker": {
-    "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: python-http-server": {
-    "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: preact-starter": {
-    "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
-  },
-  "tests/general/test.ts::app-info-get": {
-    "ticket": "BE-1647",
-    "note": "EntityLog cursor race skips the router of a concurrently-committed deploy; app stays unknown_domain forever — rare, roughly one red leg per test per week (last: js-worker on prod 2026-08-17); backend #2916 landed on main 2026-08-17 and is not on the production branch yet",
-  },
   "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
     "ticket": "BE-1705",
-    "envs": ["bugt", "prod"],
-    "note": "orphan schedules starve fresh cronjobs; the execute counter never increments — bugt red 6 of 6 covered nights Aug 12-18, prod red 3 of 6, dev red 1 of 7; fix 51e05bb is on main only",
+    "envs": ["prod"],
+    "note": "pre-existing orphan schedules starve fresh cronjobs on prod even after fix 51e05bb reached production 2026-08-21 (execute counter timed out in that run); dev green — bugt dropped from scope with the nightly sweep 2026-08-24",
   },
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
     "ticket": "BE-1705",
-    "envs": ["bugt", "prod"],
-    "note": "orphan schedules starve fresh cronjobs; the counter never increments — bugt red 6 of 6 covered nights Aug 12-18, prod red 2 of 6, dev red 1 of 7; fix 51e05bb is on main only",
+    "envs": ["prod"],
+    "note": "pre-existing orphan schedules starve fresh cronjobs; prod red 2 of 6 nights Aug 12-18 and only one green prod leg since fix 51e05bb shipped 2026-08-21 — bugt dropped from scope with the nightly sweep 2026-08-24",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: xmcp-starter": {
     "ticket": "SRE-1700",
@@ -87,7 +53,7 @@
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
-    "envs": ["prod", "bugt"],
-    "note": "prod red 7 of 7 nights Aug 12-18 (never serves a cached response even pinned to one node); bugt red 3 of 6 (since Aug 16) with a different shape — caching works there, purge does not evict; dev red once, Aug 17",
+    "envs": ["prod"],
+    "note": "prod never serves a cached response even pinned to one node — red 7 of 7 nights Aug 12-18 and again in the 2026-08-21 production deploy run; bugt dropped from scope with the nightly sweep 2026-08-24",
   },
 }
