@@ -10,8 +10,8 @@ import { getAllLogs } from "../../src/log";
 //
 // Each assert* function covers one contract capability and reads as a
 // linear arrange-act-assert scenario. Fixtures implementing only a subset
-// of the spec (e.g. the Python toolbox) call the individual functions;
-// full implementations run assertFixtureContract.
+// of the spec call the individual functions; full implementations (node,
+// python, php) run assertFixtureContract.
 //
 // All assertions are idempotent per app: counters assert relative
 // increments and named counters use a caller-supplied unique name, so the
@@ -109,23 +109,25 @@ export async function assertLiveness(
 }
 
 /**
- * GET /db-env reports exactly the injected DB_* environment: all five when
- * the app has a database capability, none otherwise. The password is only
- * ever reported as a boolean.
+ * GET /db-env reports an internally consistent DB_* environment: the five
+ * required vars are all present or all missing, never partially injected.
+ * The password is only ever reported as a boolean. Which of the two states
+ * applies is derived from the report itself — a caller that knows the
+ * deployment's intent asserts it on the returned report.
  */
 export async function assertDatabaseEnvReport(
   target: FixtureContractTarget,
-  options: { expectDatabase: boolean },
 ): Promise<DbEnvReport> {
   const report = await getJson<DbEnvReport>(target, "/db-env");
-  if (options.expectDatabase) {
-    expect(report.missing).toEqual([]);
-    expect(report.present.sort()).toEqual(REQUIRED_DB_VARS);
+  expect([...report.present, ...report.missing].sort()).toEqual(
+    REQUIRED_DB_VARS,
+  );
+  if (report.missing.length === 0) {
+    expect(report.present.length).toBe(REQUIRED_DB_VARS.length);
     expect(report.hasPassword).toBe(true);
     expect(report.host).toBeTruthy();
   } else {
     expect(report.present).toEqual([]);
-    expect(report.missing.sort()).toEqual(REQUIRED_DB_VARS);
     expect(report.hasPassword).toBe(false);
     expect(report.host).toBeNull();
   }
@@ -134,15 +136,16 @@ export async function assertDatabaseEnvReport(
 
 /**
  * GET /results opens a real database connection from inside the app using
- * the injected credentials — `OK` with a database, the missing env vars
- * named without one.
+ * the injected credentials — `OK` with credentials injected, the missing
+ * env vars named without them. The expectation is derived from /db-env, so
+ * an app with credentials must actually reach its database.
  */
 export async function assertDatabaseConnectivity(
   target: FixtureContractTarget,
-  options: { expectDatabase: boolean },
 ): Promise<void> {
+  const report = await getJson<DbEnvReport>(target, "/db-env");
   const body = await getTextOk(target, "/results");
-  if (options.expectDatabase) {
+  if (report.missing.length === 0) {
     expect(body).toBe("OK");
   } else {
     expect(body).toContain("Missing required SQL environment variables");
@@ -314,15 +317,73 @@ export async function assertCatchAllLogging(
   );
 }
 
+export interface SelfTestCheck {
+  name: string;
+  ok: boolean;
+  elapsed_ms: number;
+  error?: string;
+}
+
+export interface SelfTestReport {
+  ok: boolean;
+  checks: SelfTestCheck[];
+  unique_hash: string;
+}
+
+/**
+ * Check names every implementation's /self-test must report. The set is
+ * deliberately limited to what an instance can verify without opening a
+ * connection back to itself: guest loopback is not routable on Edge, and
+ * any other outbound target would tie the probe to something outside the
+ * node. Outbound HTTP and WebSocket stay covered by their own endpoints.
+ */
+export const SELF_TEST_CHECKS = [
+  "counter-default",
+  "counter-invalid-name",
+  "counter-named",
+  "db-connect",
+  "db-env",
+  "echo",
+];
+
+/**
+ * GET /self-test runs every inside-runnable contract check and reports 200
+ * with an all-green report: the shape probes (e.g. cloudprober) rely on.
+ */
+export async function assertSelfTest(
+  target: FixtureContractTarget,
+): Promise<SelfTestReport> {
+  const res = await target.fetch("/self-test");
+  const report = (await res.json()) as SelfTestReport;
+  // The report first: on failure it names the failing check, which is far
+  // more actionable than a bare status mismatch.
+  expect(report.checks.filter((c) => !c.ok)).toEqual([]);
+  expect(report.ok).toBe(true);
+  expect(res.status).toBe(200);
+
+  const names = report.checks.map((c) => c.name);
+  expect(new Set(names).size).toBe(names.length);
+  expect([...names].sort()).toEqual([...SELF_TEST_CHECKS].sort());
+
+  for (const check of report.checks) {
+    expect(typeof check.elapsed_ms).toBe("number");
+    expect(check.error).toBeUndefined();
+  }
+  expect(typeof report.unique_hash).toBe("string");
+  expect(report.unique_hash.length).toBeGreaterThan(0);
+  return report;
+}
+
 /**
  * Validate the full contract against a target, walking every capability in
  * fixtures/openapi.yaml. `uniqueSuffix` must be fresh per run (e.g. a
- * random app name) so counter and echo assertions stay idempotent.
+ * random app name) so counter and echo assertions stay idempotent. The
+ * database expectation is derived from the app's own /db-env report;
+ * callers assert deployment intent on that report separately.
  */
 export async function assertFixtureContract(
   target: FixtureContractTarget,
   options: {
-    expectDatabase: boolean;
     uniqueSuffix: string;
     /** Assert the catch-all log line via platform logs (needs appName). */
     checkLogs?: boolean;
@@ -332,10 +393,10 @@ export async function assertFixtureContract(
   await assertLiveness(target);
 
   console.log("== contract: database-environment ==");
-  await assertDatabaseEnvReport(target, options);
+  await assertDatabaseEnvReport(target);
 
   console.log("== contract: database-connectivity ==");
-  await assertDatabaseConnectivity(target, options);
+  await assertDatabaseConnectivity(target);
 
   console.log("== contract: durable-state ==");
   await assertDurableCounters(target, {
@@ -344,6 +405,9 @@ export async function assertFixtureContract(
 
   console.log("== contract: outbound-http ==");
   await assertOutboundHttp(target);
+
+  console.log("== contract: self-test ==");
+  await assertSelfTest(target);
 
   console.log("== contract: catch-all ==");
   const echoPath = await assertCatchAllEcho(target, {

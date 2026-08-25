@@ -25,6 +25,11 @@ Contract notes specific to this implementation:
   and answers `426`. Ping/pong and the closing handshake are handled by
   `ws` itself; the contract asserts them anyway, because a proxy in front
   of the app is what usually breaks them.
+- `/self-test` runs the contract's inside-verifiable checks and answers
+  200/500 with the aggregate report, for uptime probes. It never opens a
+  connection back to the instance: guest loopback is not routable on
+  Edge, and any other target would tie the probe to something outside
+  the node.
 
 Run locally:
 

@@ -182,6 +182,8 @@ async function checkDbConnection() {
 
 // The server is a single process, so a per-counter promise chain makes
 // read-modify-write cycles atomic under concurrent requests.
+const COUNTER_NAME_RE = /^[a-z-]+$/;
+
 const counterLocks = new Map();
 
 function withCounterLock(name, fn) {
@@ -212,7 +214,7 @@ function counterValue(name, increment) {
 
 async function handleCounter(req, res, segments) {
   const name = segments[1] ?? "counter";
-  if (segments.length > 2 || !/^[a-z-]+$/.test(name)) {
+  if (segments.length > 2 || !COUNTER_NAME_RE.test(name)) {
     return text(res, "Not Found", 404);
   }
   let increment;
@@ -505,14 +507,122 @@ wss.on("connection", (socket) => {
 
 // --- catch-all ------------------------------------------------------------
 
+function echoPayload(pathname) {
+  return {
+    echo: pathname.replace(/^\/+|\/+$/g, ""),
+    unique_hash: UNIQUE_HASH,
+  };
+}
+
 function handleEcho(req, res, pathname) {
   const line = `${timestamp()} - ${req.url}`;
   process.stdout.write(line + "\n");
   process.stderr.write(line + "\n");
-  return json(res, {
-    echo: pathname.replace(/^\/+|\/+$/g, ""),
-    unique_hash: UNIQUE_HASH,
-  });
+  return json(res, echoPayload(pathname));
+}
+
+// --- self-test ------------------------------------------------------------
+
+// Aggregate probe endpoint (openapi.yaml selfTest): every inside-runnable
+// contract check in one report, 200 only when all pass. No check opens a
+// connection back to the instance — guest loopback is not routable on Edge.
+async function runCheck(name, fn) {
+  const start = performance.now();
+  const elapsed = () => Math.round(performance.now() - start);
+  try {
+    await fn();
+    return { name, ok: true, elapsed_ms: elapsed() };
+  } catch (err) {
+    return {
+      name,
+      ok: false,
+      elapsed_ms: elapsed(),
+      error: String(err instanceof Error ? err.message : err),
+    };
+  }
+}
+
+function checkExpect(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+async function checkCounter(name) {
+  const before = await counterValue(name, false);
+  const after = await counterValue(name, true);
+  checkExpect(
+    Number.isInteger(before) && Number.isInteger(after),
+    `counter ${name} did not read as an integer`,
+  );
+  // Strictly greater rather than +1: concurrent probes may interleave.
+  checkExpect(
+    after > before,
+    `counter ${name} did not advance (${before} -> ${after})`,
+  );
+}
+
+async function handleSelfTest(res) {
+  const checks = [];
+
+  checks.push(
+    await runCheck("db-env", () => {
+      const report = dbEnvReport();
+      checkExpect(
+        report.present.length + report.missing.length ===
+          REQUIRED_DB_VARS.length,
+        "db-env report does not partition the required vars",
+      );
+      checkExpect(
+        report.present.length === 0 || report.missing.length === 0,
+        `partial DB_* injection: missing ${report.missing.join(", ")}`,
+      );
+    }),
+  );
+  checks.push(
+    await runCheck("db-connect", async () => {
+      const result = await checkDbConnection();
+      if (dbEnvReport().missing.length === 0) {
+        checkExpect(result === "OK", result);
+      } else {
+        checkExpect(
+          result.startsWith("Missing required SQL environment variables"),
+          result,
+        );
+      }
+    }),
+  );
+  checks.push(
+    await runCheck("counter-default", () => checkCounter("counter")),
+  );
+  checks.push(
+    await runCheck("counter-named", () => checkCounter("self-test")),
+  );
+  checks.push(
+    await runCheck("counter-invalid-name", () => {
+      checkExpect(
+        !COUNTER_NAME_RE.test("NOT-VALID") && COUNTER_NAME_RE.test("self-test"),
+        "counter name validation does not enforce ^[a-z-]+$",
+      );
+    }),
+  );
+  checks.push(
+    await runCheck("echo", () => {
+      const payload = echoPayload("/self-test/echo/");
+      checkExpect(
+        payload.echo === "self-test/echo",
+        `echo did not strip surrounding slashes: ${payload.echo}`,
+      );
+      checkExpect(
+        typeof payload.unique_hash === "string" &&
+          payload.unique_hash.length > 0,
+        "unique_hash is empty",
+      );
+    }),
+  );
+
+  const ok = checks.every((check) => check.ok);
+  return json(res, { ok, checks, unique_hash: UNIQUE_HASH }, ok ? 200 : 500);
 }
 
 // --- router ---------------------------------------------------------------
@@ -539,6 +649,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === "/sync" && req.method === "POST") {
       return await handleProxy(req, res, "sync");
+    }
+    // Excluded from the catch-all and never logged, like /ws.
+    if (pathname === "/self-test" && req.method === "GET") {
+      return await handleSelfTest(res);
     }
     // Reserved by fixtures/asyncapi.yaml: refused without an upgrade, and
     // never logged, so it stays out of the catch-all entirely.

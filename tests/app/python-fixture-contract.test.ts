@@ -4,10 +4,10 @@ import {
   postgresRegionCandidates,
 } from "../utils/app-databases";
 import {
-  REMOTE_BUILD_TIMEOUT,
-  deployNodeFixture,
-  prepareNodeFixtureDir,
-} from "../utils/node-fixture";
+  PYTHON_REMOTE_BUILD_TIMEOUT,
+  deployPythonFixture,
+  preparePythonFixtureDir,
+} from "../utils/python-fixture";
 import {
   assertDatabaseConnectivity,
   assertDatabaseEnvReport,
@@ -17,23 +17,22 @@ import {
 } from "../utils/fixture-contract";
 
 // Validates the language-agnostic fixture contract (fixtures/openapi.yaml)
-// against its Node implementation (fixtures/node), deployed through the
-// remote-build (autobuild) pipeline from nothing but package.json + app.yaml.
+// against its Python implementation (fixtures/python/toolbox), deployed
+// through the remote-build (Anybuild) pipeline from the FastAPI sources.
 //
-// The contract assertions themselves live in tests/utils/fixture-contract.ts
-// and are implementation-agnostic — this file only owns deploying the Node
+// The contract assertions live in tests/utils/fixture-contract.ts and are
+// implementation-agnostic — this file only owns deploying the Python
 // fixture in its three configurations (volume-only, MySQL, PostgreSQL).
-// Database connectivity is asserted *from inside the app* (/results), which
-// the psql/sql suites deliberately do not cover: they round-trip from the
-// test runner only.
+// Database connectivity is asserted *from inside the app* (/results) via
+// the pure-Python pg8000/PyMySQL drivers.
 
 test.concurrent(
-  "node-fixture-contract-endpoints",
+  "python-fixture-contract-endpoints",
   async () => {
     const env = TestEnv.fromEnv();
 
-    console.log("== Deploying the Node fixture via remote build ==");
-    const app = await deployNodeFixture(
+    console.log("== Deploying the Python fixture via remote build ==");
+    const app = await deployPythonFixture(
       env,
       `volumes:
   - name: data
@@ -42,14 +41,19 @@ test.concurrent(
     );
 
     try {
-      // The contract only ever sees the deployed app's URL; the Node
+      // The contract only ever sees the deployed app's URL; the Python
       // implementation behind it is invisible to the assertions.
       const target = targetFromUrl(env, app.url, {
         appName: app.version.name,
       });
-      // Deployment intent: volume-only, so the app must be cleanly DB-less.
+      // Deployment intent: the app.yaml requests no database, but anybuild's
+      // python provider auto-provisions MySQL because `pymysql` (needed by
+      // /results) is in pyproject (`detect_database` over MYSQL_DEPS in
+      // anybuild providers/python.rs) — and `python_database` has no value
+      // that disables detection. So this deployment *does* carry injected
+      // credentials, and the contract requires them to actually work.
       const report = await assertDatabaseEnvReport(target);
-      expect(report.present).toEqual([]);
+      expect(report.missing).toEqual([]);
       await assertFixtureContract(target, {
         uniqueSuffix: randomContractSuffix(),
         checkLogs: true,
@@ -58,20 +62,20 @@ test.concurrent(
       await env.deleteApp(app);
     }
   },
-  REMOTE_BUILD_TIMEOUT,
+  PYTHON_REMOTE_BUILD_TIMEOUT,
 );
 
 test.concurrent(
-  "node-fixture-mysql-connectivity",
+  "python-fixture-mysql-connectivity",
   async () => {
     const env = TestEnv.fromEnv();
 
-    console.log("== Deploying the Node fixture with a MySQL database ==");
+    console.log("== Deploying the Python fixture with a MySQL database ==");
     // Omitted engine provisions MySQL (compatibility commitment covered by
     // psql.test.ts). Pinned to a database-capable region: unpinned apps can
     // land on unhealthy Edge capacity and never become reachable.
     const candidates = await postgresRegionCandidates(env);
-    const app = await deployNodeFixture(
+    const app = await deployPythonFixture(
       env,
       `capabilities:
   database: {}
@@ -90,11 +94,11 @@ ${candidates.length > 0 ? `locality:\n  regions:\n    - ${candidates[0]}\n` : ""
       await env.deleteApp(app);
     }
   },
-  REMOTE_BUILD_TIMEOUT,
+  PYTHON_REMOTE_BUILD_TIMEOUT,
 );
 
 test.concurrent(
-  "node-fixture-postgres-connectivity",
+  "python-fixture-postgres-connectivity",
   async () => {
     const env = TestEnv.fromEnv();
 
@@ -106,13 +110,15 @@ test.concurrent(
       return;
     }
 
-    console.log("== Deploying the Node fixture with a PostgreSQL database ==");
+    console.log(
+      "== Deploying the Python fixture with a PostgreSQL database ==",
+    );
     // Region fallback mirrors deployPostgresAppWithRegionFallback, which only
     // supports AppDefinition specs; this deploy goes through a directory.
     let app: AppInfo | undefined;
     for (const region of candidates) {
       const appName = randomAppName();
-      const dir = await prepareNodeFixtureDir(
+      const dir = await preparePythonFixtureDir(
         env,
         appName,
         `capabilities:
@@ -161,5 +167,5 @@ locality:
       await env.deleteApp(app);
     }
   },
-  REMOTE_BUILD_TIMEOUT,
+  PYTHON_REMOTE_BUILD_TIMEOUT,
 );

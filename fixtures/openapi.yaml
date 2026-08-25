@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Integration Test Fixture Contract
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Language-agnostic functional contract for the integration-test fixture
     app. Implementations of this spec are generated as stubs for each
@@ -12,8 +12,9 @@ info:
 
     Capabilities covered: instance liveness, environment introspection for
     managed databases, database connectivity, durable state via persistent
-    counters, outbound HTTP (blocking and non-blocking), and a catch-all
-    path echo with request logging.
+    counters, outbound HTTP (blocking and non-blocking), an aggregate
+    self-test built for uptime probes, and a catch-all path echo with
+    request logging.
 
     The `/ws` path is reserved for the WebSocket contract in
     `asyncapi.yaml` and is excluded from the catch-all. A fixture that
@@ -47,6 +48,12 @@ tags:
     description: >-
       Perform outbound HTTP requests from inside the instance, in both
       blocking and non-blocking mode, with a caller-controlled timeout.
+  - name: self-test
+    description: >-
+      Run every contract check the instance can verify from the inside and
+      aggregate the outcome into one report, so a single periodic request
+      per node (e.g. a cloudprober probe) verifies that all functionality
+      is online.
   - name: websocket-upgrade
     description: >-
       Path reserved for the WebSocket contract in `asyncapi.yaml`, held
@@ -187,6 +194,55 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/ProxyResult"
+  /self-test:
+    get:
+      tags: [self-test]
+      operationId: selfTest
+      summary: Run every inside-runnable contract check and report the outcome
+      description: >-
+        Executes the contract's capabilities from inside the instance and
+        aggregates the outcome into one machine-readable report. Responds
+        `200` only when every check passes and `500` otherwise, so a plain
+        status-code validator can drive alerting; the body carries the same
+        report either way.
+
+        Check names are fixed across implementations: `db-env` (the
+        getDbEnvReport data is internally consistent — the five required
+        vars all present or all absent, never partially injected),
+        `db-connect` (with credentials injected a real connection must
+        succeed, mirroring checkDbConnection; without them the check passes
+        as cleanly database-less), `counter-default` and `counter-named`
+        (a read and an increment behave per durable-state; the named check
+        uses the reserved counter name `self-test`), `counter-invalid-name`
+        (a name outside `^[a-z-]+$` is rejected), and `echo` (the
+        catch-all payload is well-formed, unique hash included).
+        Implementations may not add further checks; a report is comparable
+        across languages.
+
+        Every check is verifiable purely from inside the instance; the
+        self-test never opens a connection back to itself. Guest loopback
+        is not routable on Edge, and any other outbound target would tie
+        the probe's health to something outside the node — so the
+        outbound-http and WebSocket capabilities are deliberately excluded
+        here and covered by their own endpoints instead.
+
+        The counter checks mutate durable state — each run increments the
+        default counter and the `self-test` counter — every other check is
+        side-effect free. Like `/ws`, this path is excluded from the
+        catch-all and emits no catch-all log line.
+      responses:
+        "200":
+          description: Every check passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelfTestReport"
+        "500":
+          description: At least one check failed; same report shape
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SelfTestReport"
   /ws:
     get:
       tags: [websocket-upgrade]
@@ -319,6 +375,35 @@ components:
                     description: Wall-clock duration until the failure
                 required: [error, status_code, elapsed_time_ms]
   schemas:
+    SelfTestCheck:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Stable check identifier, unique within a report
+        ok:
+          type: boolean
+        elapsed_ms:
+          type: integer
+          description: Wall-clock duration of the check
+        error:
+          type: string
+          description: Failure reason; present only when `ok` is false
+      required: [name, ok, elapsed_ms]
+    SelfTestReport:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: True when every check passed
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SelfTestCheck"
+        unique_hash:
+          type: string
+          description: Per-deployment unique value injected at deploy time
+      required: [ok, checks, unique_hash]
     DbEnvReport:
       type: object
       properties:
