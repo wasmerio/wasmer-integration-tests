@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 info:
   title: Integration Test Fixture WebSocket Contract
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Language-agnostic WebSocket contract for the integration-test fixture app.
     A fixture that implements this contract must also implement the HTTP

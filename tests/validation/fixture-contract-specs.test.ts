@@ -4,6 +4,7 @@ import * as pathModule from "node:path";
 import yaml from "js-yaml";
 
 import { projectRoot } from "../utils/path";
+import { SELF_TEST_CHECKS } from "../utils/fixture-contract";
 import {
   BINARY_HEADER_BYTES,
   MAX_BINARY_PAYLOAD,
@@ -83,6 +84,24 @@ test("the /ws channel address is reserved by both specs", () => {
   expect(Object.keys(openapi.paths)).toContain("/ws");
   expect(openapi.paths["/ws"].get.responses["426"]).toBeDefined();
   expect(openapi.paths["/{path}"].get.description).toContain("/ws");
+});
+
+test("the self-test operation reports both outcomes and the fixed checks", () => {
+  const selfTest = openapi.paths["/self-test"];
+  expect(selfTest).toBeDefined();
+  // 200 all-green / 500 otherwise is what lets a plain status-code
+  // validator (e.g. cloudprober's default) drive alerting.
+  expect(selfTest.get.responses["200"]).toBeDefined();
+  expect(selfTest.get.responses["500"]).toBeDefined();
+
+  // The operation description is the only place the fixed check names are
+  // stated; the shared assertions must not drift from it.
+  for (const name of SELF_TEST_CHECKS) {
+    expect(selfTest.get.description).toContain(`\`${name}\``);
+  }
+  // The self-test must never dial the instance itself (guest loopback is
+  // not routable on Edge) nor any outside target.
+  expect(selfTest.get.description).toContain("never opens a connection");
 });
 
 test("every channel message is carried by exactly one operation", () => {

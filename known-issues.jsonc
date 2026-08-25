@@ -29,23 +29,17 @@
 {
   "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
     "ticket": "BE-1705",
-    "envs": [
-      "prod"
-    ],
+    "envs": ["prod"],
     "note": "pre-existing orphan schedules starve fresh cronjobs on prod even after fix 51e05bb reached production 2026-08-21 (execute counter timed out in that run); dev green — bugt dropped from scope with the nightly sweep 2026-08-24",
   },
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
     "ticket": "BE-1705",
-    "envs": [
-      "prod"
-    ],
+    "envs": ["prod"],
     "note": "pre-existing orphan schedules starve fresh cronjobs; prod red 2 of 6 nights Aug 12-18 and only one green prod leg since fix 51e05bb shipped 2026-08-21 — bugt dropped from scope with the nightly sweep 2026-08-24",
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
-    "envs": [
-      "prod"
-    ],
+    "envs": ["prod"],
     "note": "prod never serves a cached response even pinned to one node — red 7 of 7 nights Aug 12-18 and again in the 2026-08-21 production deploy run; bugt dropped from scope with the nightly sweep 2026-08-24",
   },
 }
