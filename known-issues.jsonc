@@ -29,31 +29,23 @@
 {
   "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
     "ticket": "BE-1705",
-    "envs": ["prod"],
+    "envs": [
+      "prod"
+    ],
     "note": "pre-existing orphan schedules starve fresh cronjobs on prod even after fix 51e05bb reached production 2026-08-21 (execute counter timed out in that run); dev green — bugt dropped from scope with the nightly sweep 2026-08-24",
   },
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
     "ticket": "BE-1705",
-    "envs": ["prod"],
+    "envs": [
+      "prod"
+    ],
     "note": "pre-existing orphan schedules starve fresh cronjobs; prod red 2 of 6 nights Aug 12-18 and only one green prod leg since fix 51e05bb shipped 2026-08-21 — bugt dropped from scope with the nightly sweep 2026-08-24",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: xmcp-starter": {
-    "ticket": "SRE-1700",
-    "envs": ["dev"],
-    "note": "the remote build wedges in the depot 'exporting to client directory' step and is canceled at the 600s cap; deploy reports 'Build failed with exit code 1'; red on dev 5 of 7 nights Aug 12-18",
-  },
-  "tests/app/templates.test.ts::app templates deploy Template remote build: mastra-starter": {
-    "ticket": "SRE-1700",
-    "envs": ["dev"],
-    "note": "same depot export stall as xmcp-starter, first seen 2026-08-18 in backend run 32143044580 (build 7wxfxpfbjk); the cap-cancel rate rose 0.1% -> 1.0% of dev builds Aug 16-18, so the ticket was reopened",
-  },
-  "tests/general/be-1719-shared-staging-key.test.ts::be-1719-concurrent-deploys-of-identical-packages": {
-    "ticket": "BE-1719",
-    "note": "concurrent deploys of one package share the tmp/<sha256> staging key; R2 throttles per key and the CLI aborts on the first 429 with no retry; red on dev 7 of 7, bugt 6 of 6 and prod 6 of 7 nights Aug 12-18",
   },
   "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
     "ticket": "EDGE-1994",
-    "envs": ["prod"],
+    "envs": [
+      "prod"
+    ],
     "note": "prod never serves a cached response even pinned to one node — red 7 of 7 nights Aug 12-18 and again in the 2026-08-21 production deploy run; bugt dropped from scope with the nightly sweep 2026-08-24",
   },
 }
