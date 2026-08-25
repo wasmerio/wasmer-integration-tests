@@ -21,7 +21,7 @@ jobs:
       test_branch: ${{ github.head_ref }}
     secrets:
       token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
-      # test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
+      test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
   prod-environment:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
@@ -29,6 +29,4 @@ jobs:
       registry: wasmer.io
     secrets:
       token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
-      # Disabled for now due to spam. Too many failing tests for too long. Alert fatigue!
-      # Tracked in https://linear.app/wasmer/issue/QA-669/re-enable-prod-integ-test-failures-in-dev
-      # test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
+      test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
