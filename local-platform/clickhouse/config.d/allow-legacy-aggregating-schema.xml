@@ -1,0 +1,13 @@
+<!-- ClickHouse 26.7+ rejects AggregatingMergeTree dimension columns that are
+     not part of the sorting key (BAD_ARGUMENTS on CREATE). The generated
+     edge-metrics schema (initdb.d/010) predates that validation and its
+     dimension columns (e.g. app_owner_is_user) are functionally dependent on
+     the sorting key, so allow them as a MergeTree default. Without this the
+     initdb run aborts at 0012_create_request_log_daily_by_owner and every
+     later table is silently missing — the backend's analytics/usage GraphQL
+     then fails with "Unknown table expression". -->
+<clickhouse>
+  <merge_tree>
+    <allow_dimensions_outside_sorting_key>1</allow_dimensions_outside_sorting_key>
+  </merge_tree>
+</clickhouse>

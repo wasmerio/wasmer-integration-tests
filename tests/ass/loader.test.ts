@@ -13,12 +13,12 @@ import {
   ScenarioLoadError,
   ScenarioNotFoundError,
 } from "../../ass/scenario/loader";
-import { addScenario, DRAFT_YAML, makeRoot, PERSISTED_YAML } from "./helpers";
+import { addScenario, DRAFT_TOML, makeRoot, PERSISTED_TOML } from "./helpers";
 
 describe("resolveSlug", () => {
   test("slugs resolve case-insensitively against lowercase directories", () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     const ref = resolveSlug(rootsFrom(root), "repro", "WAX-600");
     expect(ref.slug).toBe("wax-600");
     expect(ref.dir).toBe(path.join(root, "repros", "wax-600"));
@@ -26,7 +26,7 @@ describe("resolveSlug", () => {
 
   test("unknown slug raises a not-found error naming the searched boundary", () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     let error: unknown;
     try {
       resolveSlug(rootsFrom(root), "experiment", "wax-600");
@@ -40,9 +40,9 @@ describe("resolveSlug", () => {
 
   test("case-colliding directories raise a deterministic ambiguity error", () => {
     const root = makeRoot();
-    addScenario(root, "repros", "wax-601", PERSISTED_YAML);
+    addScenario(root, "repros", "wax-601", PERSISTED_TOML);
     try {
-      addScenario(root, "repros", "WAX-601", PERSISTED_YAML);
+      addScenario(root, "repros", "WAX-601", PERSISTED_TOML);
     } catch {
       // Case-insensitive filesystem: the collision cannot exist here.
       return;
@@ -57,7 +57,7 @@ describe("resolveSlug", () => {
     expect((error as Error).message).toContain("WAX-601, wax-601");
   });
 
-  test("a directory without scenario.yaml is not a scenario", () => {
+  test("a directory without scenario.toml is not a scenario", () => {
     const root = makeRoot();
     mkdirSync(path.join(root, "repros", "not-a-scenario"), { recursive: true });
     expect(() =>
@@ -69,10 +69,10 @@ describe("resolveSlug", () => {
 describe("listScenarios", () => {
   test("lists the union of both boundaries, sorted, with kinds", () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "exp-b", DRAFT_YAML);
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
-    addScenario(root, "experiments", "exp-a", DRAFT_YAML);
-    mkdirSync(path.join(root, "repros", "no-yaml-here"));
+    addScenario(root, "experiments", "exp-b", DRAFT_TOML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
+    addScenario(root, "experiments", "exp-a", DRAFT_TOML);
+    mkdirSync(path.join(root, "repros", "no-toml-here"));
     expect(listScenarios(rootsFrom(root)).map((r) => [r.slug, r.kind])).toEqual(
       [
         ["exp-a", "experiment"],
@@ -90,8 +90,8 @@ describe("listScenarios", () => {
 describe("loadScenario", () => {
   test("experiments load with draft validation, repros with strict validation", () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "exp-1", DRAFT_YAML);
-    addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+    addScenario(root, "experiments", "exp-1", DRAFT_TOML);
+    addScenario(root, "repros", "wax-600", PERSISTED_TOML);
     const draft = loadScenario(rootsFrom(root), "experiment", "exp-1");
     expect(draft.scenario.meta.lifecycle).toEqual({ state: "open" });
     const persisted = loadScenario(rootsFrom(root), "repro", "wax-600");
@@ -100,7 +100,7 @@ describe("loadScenario", () => {
 
   test("a draft in repros/ fails strict validation with actionable issues", () => {
     const root = makeRoot();
-    addScenario(root, "repros", "exp-1", DRAFT_YAML);
+    addScenario(root, "repros", "exp-1", DRAFT_TOML);
     let error: unknown;
     try {
       loadScenario(rootsFrom(root), "repro", "exp-1");
@@ -114,11 +114,11 @@ describe("loadScenario", () => {
     expect(message).toContain("verdict: persisted scenarios require a verdict");
   });
 
-  test("invalid YAML produces an actionable error naming the file", () => {
+  test("invalid TOML produces an actionable error naming the file", () => {
     const root = makeRoot();
     const dir = path.join(root, "experiments", "broken");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "scenario.yaml"), "meta: [unclosed");
+    writeFileSync(path.join(dir, "scenario.toml"), "meta = [unclosed");
     let error: unknown;
     try {
       loadScenario(rootsFrom(root), "experiment", "broken");
@@ -126,7 +126,7 @@ describe("loadScenario", () => {
       error = err;
     }
     expect(error).toBeInstanceOf(ScenarioLoadError);
-    expect((error as Error).message).toContain("invalid YAML");
-    expect((error as Error).message).toContain("scenario.yaml");
+    expect((error as Error).message).toContain("invalid TOML");
+    expect((error as Error).message).toContain("scenario.toml");
   });
 });

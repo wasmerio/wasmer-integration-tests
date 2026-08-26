@@ -22,9 +22,7 @@ const DEFAULT_MESSAGE_TIMEOUT_MS = 30_000;
 const HANDSHAKE_TIMEOUT_MS = 60_000;
 
 export type ErrorCode =
-  | "requested_failure"
-  | "unknown_message_type"
-  | "invalid_payload";
+  "requested_failure" | "unknown_message_type" | "invalid_payload";
 
 export interface EchoResponse {
   type: "echo.response";

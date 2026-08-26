@@ -30,7 +30,7 @@ describe("presenter", () => {
     // Every column carries a glyph: it can neither wrap nor trail a space.
     expect(lines()[0]).toHaveLength(80);
     expect(lines()[0]).toBe(lines()[0].trimEnd());
-    expect(lines()[1]).toMatch(/^ass {2}WAX-600 {2}Edge wasix/);
+    expect(lines()[1]).toMatch(/^ASS {2}WAX-600 {2}Edge wasix/);
     expect(lines()[2]).toMatch(/^─+┬─+$/);
   });
 

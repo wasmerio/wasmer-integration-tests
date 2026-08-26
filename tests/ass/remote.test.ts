@@ -11,7 +11,7 @@ import {
   makeFakeHarness,
   makeRoot,
   snapshotTree,
-  PERSISTED_YAML,
+  PERSISTED_TOML,
 } from "./helpers";
 import {
   captureRemote,
@@ -32,37 +32,40 @@ const HEALTHY_MARKER = "ASS-VERDICT: not-reproduced all primitives ok";
 
 /** A wax-603-shaped scenario: deployed probe, artillery over it, the D11
  * verdict on both channels, D13 single-instance pin. */
-const REMOTE_PROBE_YAML = `
-meta:
-  id: RM-1
-  title: remote probe scenario
-  lifecycle: { state: open }
-fixtures:
-  probes:
-    matrix:
-      source: package:./probe
-      config: { max_instances: 1 }
-  components:
-    python: registry:python/python@=3.13.5
-load:
-  executor: artillery-http
-  artillery-http:
-    target: "{{ matrix.url }}"
-    phases: [{ duration: 1, arrivalCount: 1 }]
-    scenarios:
-      - flow: [{ get: { url: "/" } }]
-verdict:
-  probe:
-    channels:
-      - { type: log, stream: stderr }
-      - { type: http, match: body }
-  baseline:
-    waived: native leg exercised by the raw-wasmer profile locally
+const REMOTE_PROBE_TOML = `
+[meta]
+id = "RM-1"
+title = "remote probe scenario"
+lifecycle = { state = "open" }
+
+[fixtures.probes.matrix]
+source = "package:./probe"
+config = { max_instances = 1 }
+
+[fixtures.components]
+python = "registry:python/python@=3.13.5"
+
+[load]
+executor = "artillery-http"
+
+[load.artillery-http]
+target = "{{ matrix.url }}"
+phases = [{ duration = 1, arrivalCount = 1 }]
+scenarios = [{ flow = [{ get = { url = "/" } }] }]
+
+[verdict.probe]
+channels = [
+  { type = "log", stream = "stderr" },
+  { type = "http", match = "body" },
+]
+
+[verdict.baseline]
+waived = "native leg exercised by the raw-wasmer profile locally"
 `;
 
-function probeRoot(yaml: string = REMOTE_PROBE_YAML): string {
+function probeRoot(toml: string = REMOTE_PROBE_TOML): string {
   const root = makeRoot();
-  addScenario(root, "repros", "remmy", yaml);
+  addScenario(root, "repros", "remmy", toml);
   return root;
 }
 
@@ -199,9 +202,9 @@ describe("remote runs through the TestEnv seam (Phase 5)", () => {
 
   test("config.max_instances > 1 fails preflight naming fixture and target", async () => {
     const root = probeRoot(
-      REMOTE_PROBE_YAML.replace(
-        "config: { max_instances: 1 }",
-        "config: { max_instances: 3 }",
+      REMOTE_PROBE_TOML.replace(
+        "config = { max_instances = 1 }",
+        "config = { max_instances = 3 }",
       ),
     );
     const harness = makeFakeHarness();
@@ -219,7 +222,7 @@ describe("remote runs through the TestEnv seam (Phase 5)", () => {
 
   test("a platform-process predicate fails preflight before fixture work", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "edgy", PERSISTED_YAML);
+    addScenario(root, "repros", "edgy", PERSISTED_TOML);
     const harness = makeFakeHarness();
     const result = await cli(
       root,
@@ -234,26 +237,26 @@ describe("remote runs through the TestEnv seam (Phase 5)", () => {
 
   test("remote app-instance log predicates read the D14 capture", async () => {
     const root = probeRoot(`
-meta:
-  id: RM-2
-  title: remote log_matches scenario
-  lifecycle: { state: open }
-fixtures:
-  probes:
-    matrix:
-      source: package:./probe
-load:
-  executor: artillery-http
-  artillery-http:
-    target: "{{ matrix.url }}"
-    scenarios:
-      - flow: [{ get: { url: "/" } }]
-verdict:
-  reproduced_when:
-    any:
-      - log_matches: { stream: app, pattern: "deadlock detected" }
-  baseline:
-    waived: no native analogue
+[meta]
+id = "RM-2"
+title = "remote log_matches scenario"
+lifecycle = { state = "open" }
+
+[fixtures.probes.matrix]
+source = "package:./probe"
+
+[load]
+executor = "artillery-http"
+
+[load.artillery-http]
+target = "{{ matrix.url }}"
+scenarios = [{ flow = [{ get = { url = "/" } }] }]
+
+[[verdict.reproduced_when.any]]
+log_matches = { stream = "app", pattern = "deadlock detected" }
+
+[verdict.baseline]
+waived = "no native analogue"
 `);
     const harness = makeFakeHarness({
       remoteLogs: "worker 3: deadlock detected after 30s\n",
@@ -299,9 +302,9 @@ describe("production gates (Phase 5)", () => {
 
   test("a stress profile refuses before the confirmation prompt", async () => {
     const root = probeRoot(
-      REMOTE_PROBE_YAML.replace(
-        "phases: [{ duration: 1, arrivalCount: 1 }]",
-        "phases: [{ duration: 30, arrivalRate: 100 }]",
+      REMOTE_PROBE_TOML.replace(
+        "phases = [{ duration = 1, arrivalCount = 1 }]",
+        "phases = [{ duration = 30, arrivalRate = 100 }]",
       ),
     );
     const harness = makeFakeHarness({ confirmProdAnswer: true });
@@ -323,20 +326,22 @@ describe("production gates (Phase 5)", () => {
       "repros",
       "jesty",
       `
-meta:
-  id: RM-3
-  title: jest on prod
-  lifecycle: { state: open }
-load:
-  executor: jest
-  jest:
-    spec: tests/x.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - output_matches: { pattern: kaboom }
-  baseline:
-    waived: n/a
+[meta]
+id = "RM-3"
+title = "jest on prod"
+lifecycle = { state = "open" }
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/x.test.ts"
+
+[[verdict.reproduced_when.any]]
+output_matches = { pattern = "kaboom" }
+
+[verdict.baseline]
+waived = "n/a"
 `,
     );
     const harness = makeFakeHarness({ confirmProdAnswer: true });

@@ -12,7 +12,6 @@ flake.nix
 flake.lock
 Makefile
 pnpm-lock.yaml
-local.env.example
 local-platform/**/*.py
 local-platform/**/Dockerfile
 local-platform/**/*.toml
@@ -30,4 +29,8 @@ local-platform/package-compilation-list.txt
 # Shell entry points: Prettier has no parser for them.
 bin/ass
 ass/bootstrap/detect.sh
+local-platform/scripts/*.sh
 .ass/
+
+# Prettier has no XML parser
+local-platform/clickhouse/config.d/*.xml

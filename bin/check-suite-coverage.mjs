@@ -2,7 +2,9 @@
 // Guard against test-suite drift: every tests/**/*.test.ts must be selected
 // by at least one test_command in .github/integration-test-suites.json, which
 // drives BOTH the PR local-platform pipeline and the nightly dev/bugt/prod
-// pipelines. Files not matched there never run in any CI (found 2026-07-23:
+// pipelines. Entries with `platform: false` (fake-deps unit suites) are
+// filtered out of those matrices and run in the Code QA workflow instead.
+// Files not matched anywhere never run in any CI (found 2026-07-23:
 // seven test files had silently accumulated outside the matrix).
 //
 // Runs as part of `make check` / `make lint`, so a PR adding a test file

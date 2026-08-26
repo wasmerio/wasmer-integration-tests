@@ -1,7 +1,7 @@
 [
   {
     "id": "general",
-    "test_command": "npx jest ./tests/general/ ./tests/utils/ ./tests/ass/ ./tests/validation/fixture-contract-specs.test.ts"
+    "test_command": "npx jest ./tests/general/ ./tests/utils/ ./tests/validation/fixture-contract-specs.test.ts"
   },
   {
     "id": "jobs",
@@ -64,5 +64,10 @@
   {
     "id": "stackmachine-sdk",
     "test_command": "npx jest tests/stackmachine/"
+  },
+  {
+    "id": "ass-unit",
+    "platform": false,
+    "test_command": "WASMER_TOKEN=dummy npx jest ./tests/ass/"
   }
 ]

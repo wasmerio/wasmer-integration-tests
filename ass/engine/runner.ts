@@ -448,8 +448,8 @@ export async function runScenario(
     deps.driver ?? new LocalPlatformDriver(cwd, { io: resolveIo, onLine });
 
   // Ctrl-C during a boot that takes minutes must not leave the checkout
-  // mutated (integration contract: never leave local.env or the compose file
-  // changed). Restoration here is deliberately synchronous and file-only —
+  // mutated (integration contract: never leave the compose file changed).
+  // Restoration here is deliberately synchronous and file-only —
   // an interrupt does not get to wait out a ~45s container teardown, so the
   // stack is reported as still running instead.
   const trap = deps.signals ?? processSignalTrap();
@@ -764,7 +764,7 @@ export async function runScenario(
         slug: loaded.slug,
         recordedAt: new Date().toISOString(),
         declarationDigest: digestDeclaration(
-          readFileSync(path.join(loaded.dir, "scenario.yaml"), "utf8"),
+          readFileSync(path.join(loaded.dir, "scenario.toml"), "utf8"),
         ),
         env: overrides.env,
         mode,

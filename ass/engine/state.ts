@@ -12,7 +12,7 @@ import type { AssessmentKind, RunMode } from "./assessment";
 export interface TryState {
   slug: string;
   recordedAt: string;
-  /** Digest of the scenario.yaml that produced this run. Promotion refuses a
+  /** Digest of the scenario.toml that produced this run. Promotion refuses a
    * record whose declaration has since been edited — the pins below would
    * then describe a different experiment. */
   declarationDigest: string;

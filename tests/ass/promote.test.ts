@@ -4,25 +4,25 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { load as parseYaml } from "js-yaml";
+import { parse as parseToml } from "smol-toml";
 import { readTryState } from "../../ass/engine/state";
 import {
   addScenario,
   cli,
-  DRAFT_YAML,
+  DRAFT_TOML,
   makeFakeHarness,
   makeRoot,
-  PROMOTABLE_DRAFT_YAML,
+  PROMOTABLE_DRAFT_TOML,
   snapshotTree,
 } from "./helpers";
 
 /** A root whose draft has been run once, the way promotion expects. */
 async function makeTriedRoot(
   slug = "wax-999",
-  yaml = PROMOTABLE_DRAFT_YAML,
+  toml = PROMOTABLE_DRAFT_TOML,
 ): Promise<string> {
   const root = makeRoot();
-  addScenario(root, "experiments", slug, yaml);
+  addScenario(root, "experiments", slug, toml);
   const result = await cli(root, ["try", slug], makeFakeHarness().deps);
   expect(result.code).toBe(0);
   return root;
@@ -48,7 +48,7 @@ describe("recorded try state", () => {
 
   test("a draft run never alerts, however quiet it is", async () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_YAML);
+    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_TOML);
     const harness = makeFakeHarness({
       composeLog: "edge-1  | all healthy\n",
       workload: { code: 0, stdout: "1 passed\n", stderr: "" },
@@ -69,11 +69,11 @@ describe("ass promote", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("promoted wax-999");
 
-    const promotedPath = path.join(root, "repros", "wax-999", "scenario.yaml");
+    const promotedPath = path.join(root, "repros", "wax-999", "scenario.toml");
     const text = readFileSync(promotedPath, "utf8");
     expect(text).toContain("# floating on purpose while hunting");
-    expect(text).toContain("lifecycle: { state: open }");
-    const scenario = parseYaml(text) as {
+    expect(text).toContain(`lifecycle = { state = "open" }`);
+    const scenario = parseToml(text) as unknown as {
       meta: { lifecycle: { state: string } };
       fixtures: { components: Record<string, string> };
     };
@@ -94,7 +94,7 @@ describe("ass promote", () => {
       path.join(root, "repros", "wax-999", "README.md"),
       "utf8",
     );
-    expect(readme).toContain("experiments/wax-999/scenario.yaml"); // source draft
+    expect(readme).toContain("experiments/wax-999/scenario.toml"); // source draft
     expect(readme).toContain("v2026-08-05_1_419b336_dev1"); // resolved version
     expect(readme).toContain("`local`, mode `floating`"); // target
     expect(readme).toContain("templates.test.ts"); // workload
@@ -114,7 +114,7 @@ describe("ass promote", () => {
 
   test("a draft with no recorded run explains the prerequisite", async () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_YAML);
+    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_TOML);
     const before = snapshotTree(root, ["experiments", "repros"]);
     const result = await cli(root, ["promote", "wax-999"]);
     expect(result.code).toBe(1);
@@ -126,7 +126,7 @@ describe("ass promote", () => {
 
   test("a draft edited since its run is refused", async () => {
     const root = await makeTriedRoot();
-    const draft = path.join(root, "experiments", "wax-999", "scenario.yaml");
+    const draft = path.join(root, "experiments", "wax-999", "scenario.toml");
     writeFileSync(
       draft,
       readFileSync(draft, "utf8") + "\n# one more thought\n",
@@ -139,7 +139,7 @@ describe("ass promote", () => {
 
   test("a run that did not reproduce is not promotable", async () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_YAML);
+    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_TOML);
     await cli(
       root,
       ["try", "wax-999"],
@@ -152,7 +152,7 @@ describe("ass promote", () => {
   });
 
   test("a verdict-less draft is not promotable", async () => {
-    const root = await makeTriedRoot("exp-1", DRAFT_YAML);
+    const root = await makeTriedRoot("exp-1", DRAFT_TOML);
     const result = await cli(root, ["promote", "exp-1"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("declares no verdict");
@@ -160,11 +160,11 @@ describe("ass promote", () => {
   });
 
   test("a draft without a baseline or waiver is not promotable (D10)", async () => {
-    const yaml = PROMOTABLE_DRAFT_YAML.replace(
-      / {2}baseline:\n {4}waived:.*\n/,
+    const toml = PROMOTABLE_DRAFT_TOML.replace(
+      /\[verdict\.baseline\]\nwaived = .*\n/,
       "",
     );
-    const root = await makeTriedRoot("wax-999", yaml);
+    const root = await makeTriedRoot("wax-999", toml);
     const result = await cli(root, ["promote", "wax-999"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("verdict.baseline");
@@ -175,18 +175,19 @@ describe("ass promote", () => {
     // A declared engine that is not installed leaves the native-vs-guest
     // divergence unproven; persisting it would make the corpus claim a
     // differential it never ran.
-    const yaml = PROMOTABLE_DRAFT_YAML.replace(
-      / {2}baseline:\n {4}waived:.*\n/,
-      "  baseline:\n    engine: go\n    entry: [main.go]\n",
+    const toml = PROMOTABLE_DRAFT_TOML.replace(
+      /\[verdict\.baseline\]\nwaived = .*\n/,
+      '[verdict.baseline]\nengine = "go"\nentry = ["main.go"]\n',
     ).replace(
       // A host process produces no edge log, so the verdict needs one
       // executor-observable predicate for the baseline to be judgeable.
-      "          pattern: object used with the wrong context\n",
-      "          pattern: object used with the wrong context\n" +
-        "      - output_matches: { pattern: kaboom }\n",
+      'pattern = "object used with the wrong context"\n',
+      'pattern = "object used with the wrong context"\n\n' +
+        "[[verdict.reproduced_when.any]]\n" +
+        'output_matches = { pattern = "kaboom" }\n',
     );
     const root = makeRoot();
-    addScenario(root, "experiments", "wax-999", yaml);
+    addScenario(root, "experiments", "wax-999", toml);
     const harness = makeFakeHarness();
     harness.deps.enginePresence = () => false;
     expect((await cli(root, ["try", "wax-999"], harness.deps)).code).toBe(0);
@@ -200,7 +201,7 @@ describe("ass promote", () => {
 
   test("a selector that resolved to something unpinnable fails before the move", async () => {
     const root = makeRoot();
-    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_YAML);
+    addScenario(root, "experiments", "wax-999", PROMOTABLE_DRAFT_TOML);
     const harness = makeFakeHarness();
     // A local build is what a fix-verification run resolves to: concrete on
     // this machine, meaningless in a committed scenario.
@@ -214,7 +215,7 @@ describe("ass promote", () => {
     expect(result.stderr).toContain("path: points at a local build");
     expect(existsSync(path.join(root, "repros", "wax-999"))).toBe(false);
     expect(
-      existsSync(path.join(root, "experiments", "wax-999", "scenario.yaml")),
+      existsSync(path.join(root, "experiments", "wax-999", "scenario.toml")),
     ).toBe(true);
   });
 
@@ -223,9 +224,9 @@ describe("ass promote", () => {
   // draft does not name, so keeping the declaration would persist evidence
   // from a version that was never booted.
   describe("a component overridden at try time (R4-01)", () => {
-    const PINNED_DRAFT = PROMOTABLE_DRAFT_YAML.replace(
-      "edge: resolve_prod",
-      "edge: github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge",
+    const PINNED_DRAFT = PROMOTABLE_DRAFT_TOML.replace(
+      'edge = "resolve_prod"',
+      'edge = "github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge"',
     );
     const OVERRIDE =
       "github-release:wasmerio/edge:v2026-08-05_1_419b336_dev1:edge";
@@ -254,10 +255,10 @@ describe("ass promote", () => {
       expect(result.code).toBe(0);
       // The declared 07-16 build was never booted; it must not survive.
       const text = readFileSync(
-        path.join(root, "repros", "wax-998", "scenario.yaml"),
+        path.join(root, "repros", "wax-998", "scenario.toml"),
         "utf8",
       );
-      const scenario = parseYaml(text) as {
+      const scenario = parseToml(text) as unknown as {
         fixtures: { components: Record<string, string> };
       };
       expect(scenario.fixtures.components.edge).toBe(OVERRIDE);
@@ -289,7 +290,7 @@ describe("ass promote", () => {
       expect(result.stderr).toContain("which is not a pin");
       expect(existsSync(path.join(root, "repros", "wax-998"))).toBe(false);
       expect(
-        existsSync(path.join(root, "experiments", "wax-998", "scenario.yaml")),
+        existsSync(path.join(root, "experiments", "wax-998", "scenario.toml")),
       ).toBe(true);
     });
 
@@ -300,12 +301,12 @@ describe("ass promote", () => {
       const result = await cli(root, ["promote", "wax-998"]);
       expect(result.code).toBe(0);
       expect(result.stdout).toContain("kept edge (already pinned)");
-      const scenario = parseYaml(
+      const scenario = parseToml(
         readFileSync(
-          path.join(root, "repros", "wax-998", "scenario.yaml"),
+          path.join(root, "repros", "wax-998", "scenario.toml"),
           "utf8",
         ),
-      ) as { fixtures: { components: Record<string, string> } };
+      ) as unknown as { fixtures: { components: Record<string, string> } };
       expect(scenario.fixtures.components.edge).toBe(
         "github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge",
       );
@@ -324,13 +325,13 @@ describe("ass promote", () => {
     expect(result.stderr).toContain("the partial copy removed");
     expect(existsSync(path.join(root, "repros", "wax-999"))).toBe(false);
     // The draft, and its recorded run, survive for the retry.
-    expect(existsSync(path.join(scenarioDir, "scenario.yaml"))).toBe(true);
+    expect(existsSync(path.join(scenarioDir, "scenario.toml"))).toBe(true);
     expect(readTryState(root, "wax-999")).not.toBeNull();
   });
 
   test("promotion never overwrites an existing repro", async () => {
     const root = await makeTriedRoot();
-    addScenario(root, "repros", "wax-999", PROMOTABLE_DRAFT_YAML);
+    addScenario(root, "repros", "wax-999", PROMOTABLE_DRAFT_TOML);
     const result = await cli(root, ["promote", "wax-999"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("already exists");

@@ -19,7 +19,7 @@ export const defaultWorkloadExec: WorkloadExec = (argv, opts) =>
       stdio: ["ignore", "pipe", "pipe"],
     });
     // The full stream is always captured to disk; what reaches the terminal
-    // goes through the presenter so the workload speaks in ass's voice.
+    // goes through the presenter so the workload speaks in ASS's voice.
     const mirror = (file: NodeJS.WritableStream): ((chunk: Buffer) => void) => {
       let buffer = "";
       return (chunk: Buffer) => {

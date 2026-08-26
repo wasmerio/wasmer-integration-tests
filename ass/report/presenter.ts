@@ -76,7 +76,7 @@ const NOISE = /^(\s*$|\[\+\]|\s*[✔✘⠿]\s|Container\s|Volume\s|Network\s)/;
 const PLATFORM_PREFIX =
   /^(?:\d{2}:\d{2}:\d{2}\s+)?(?:(WARNING|ERROR|INFO)\s+)?(?:\[local-platform\]\s*)?/;
 
-/** Marks the start of ass's output: a wave of arches rising, levelling and
+/** Marks the start of ASS's output: a wave of arches rising, levelling and
  * dipping, deliberately a different texture from the table's solid `─` so it
  * reads as "a new program is speaking" rather than more frame. The shape is
  * also a nod to the tool's name, which we will not be elaborating on. */
@@ -187,11 +187,11 @@ export class Presenter {
     return this.width - GUTTER - 5;
   }
 
-  /** Opens the table the summary later closes. The start rule and `ass` label
+  /** Opens the table the summary later closes. The start rule and `ASS` label
    * mark where our output begins: `pnpm run` prints its own two-line preamble
    * before we get control, and only `pnpm -s ass` or `./bin/ass` avoid it. */
   banner(id: string, title: string): void {
-    const label = this.s(this.frame("ass"), "bold");
+    const label = this.s(this.frame("ASS"), "bold");
     this.out(this.frame(startRule(this.width)));
     this.out(
       `${label}  ${this.s(id, "bold")}  ` +
@@ -252,7 +252,7 @@ export class Presenter {
     this.out(text.length > 0 ? `  ${key} ${bar} ${text}` : `  ${key} ${bar}`);
   }
 
-  /** Something ass itself has to say, under the current phase. */
+  /** Something ASS itself has to say, under the current phase. */
   note(text: string): void {
     for (const line of wrap(text, this.valueWidth)) {
       this.row(line);
@@ -272,7 +272,7 @@ export class Presenter {
   }
 
   /** A line from a chained program. Indented a step further so it reads as
-   * quoted rather than spoken by ass, and dropped when it is noise. */
+   * quoted rather than spoken by ASS, and dropped when it is noise. */
   child(raw: string): void {
     const text = stripAnsi(raw).replace(/\s+$/, "");
     if (NOISE.test(text)) {
@@ -300,6 +300,19 @@ export class Presenter {
       this.notable.push(message);
     }
     const tone = level === "ERROR" ? "red" : notable ? "yellow" : undefined;
+    // A prefix-free line that fits keeps the child's own colors and
+    // indentation (a table's alignment is part of what it says). Lines that
+    // must wrap fall back to the stripped text: ANSI breaks the width math.
+    const rawLine = raw.replace(/\s+$/, "");
+    const unprefixed = text.replace(PLATFORM_PREFIX, "") === text;
+    if (
+      tone === undefined &&
+      unprefixed &&
+      text.length <= this.valueWidth - 2
+    ) {
+      this.row(`  ${this.s.enabled ? rawLine : text}`);
+      return;
+    }
     for (const line of wrap(message, this.valueWidth - 2)) {
       this.row(`  ${tone === undefined ? line : this.s(line, tone)}`);
     }
@@ -340,7 +353,10 @@ export class Presenter {
 }
 
 function terminalWidth(): number {
-  return process.stdout.columns && process.stdout.columns > 0
-    ? process.stdout.columns
-    : 100;
+  if (process.stdout.columns && process.stdout.columns > 0) {
+    return process.stdout.columns;
+  }
+  // Piped: a quoting parent (the local platform) forwards the real width.
+  const forwarded = Number(process.env["COLUMNS"]);
+  return Number.isFinite(forwarded) && forwarded > 0 ? forwarded : 100;
 }

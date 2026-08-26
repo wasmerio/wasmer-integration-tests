@@ -9,7 +9,6 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { dump as dumpYaml } from "js-yaml";
 import { z } from "zod";
 import {
   profileError,
@@ -161,12 +160,16 @@ export async function executeArtilleryHttp(
   );
   mkdirSync(state.artifactsDir, { recursive: true });
   const label = ctx.label ?? "workload";
-  const scriptPath = path.join(state.artifactsDir, `${label}.artillery.yaml`);
+  const scriptPath = path.join(state.artifactsDir, `${label}.artillery.json`);
   const reportPath = path.join(
     state.artifactsDir,
     `${label}.artillery-report.json`,
   );
-  writeFileSync(scriptPath, dumpYaml(buildArtilleryScript(profile)));
+  // Artillery accepts JSON scripts natively; no YAML serializer needed.
+  writeFileSync(
+    scriptPath,
+    JSON.stringify(buildArtilleryScript(profile), null, 2),
+  );
 
   const outcome = await runCaptured({
     argv: [

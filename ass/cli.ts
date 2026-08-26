@@ -1,4 +1,4 @@
-// ass CLI: list | try | run | promote | doctor (docs/anti-slop-shield-v1.md
+// ASS CLI: list | try | run | promote | doctor (docs/anti-slop-shield-v1.md
 // §3/§5). `try` and `run` are the same engine over the same file format —
 // what differs is the boundary they search and the assessment they derive
 // (D6) — and they share one override surface (D12). Command routing is
@@ -31,6 +31,7 @@ import { runScenario, type RunnerDeps } from "./engine/runner";
 import { colorEnabled } from "./report/style";
 import { Presenter } from "./report/presenter";
 import { ExecutorProfileError } from "./executors/jest";
+import type { SimulatorDeps } from "./simulator/deps";
 
 export interface CliIo {
   out(line: string): void;
@@ -44,6 +45,8 @@ export interface CliOptions {
   runnerDeps?: RunnerDeps;
   /** Test seam: fake the toolchain probes doctor runs. */
   doctor?: Omit<DoctorOptions, "cwd">;
+  /** Test seam: fake the simulator's platform driver / probe / registries. */
+  simulatorDeps?: SimulatorDeps;
   /** Colorize output. Defaults to sniffing `process.stdout`, which is only
    * the right question when `io` is unset and actually writes there. */
   color?: boolean;
@@ -270,6 +273,10 @@ export async function runCli(
 
   const program = new Command("ass")
     .description("(a)nti (s)lop (s)hield — declarative failure reproductions")
+    .addHelpText(
+      "after",
+      '\n"ass" is what you type — in writing, the tool is ASS (Anti-Slop Shield).',
+    )
     .exitOverride()
     .configureOutput({
       writeOut: (s) => io.out(chomp(s)),
@@ -402,6 +409,216 @@ export async function runCli(
           `then commit and run: pnpm ass run ${result.slug}`,
       );
     });
+  // Simulator lifecycle verbs (business-simulator-v1 §2.1). Deliberately no
+  // --env/--component/--edge/--backend/--cpus: the simulator declares no
+  // component pins, is local-only by construction, and must never mutate
+  // the compose file (harness hermeticity).
+  program
+    .command("up")
+    .description(
+      "Reconcile the local platform to a simulator declaration and hold it " +
+        "(TOML file with assSchema = 1 or 2)",
+    )
+    .requiredOption("--file <path>", "simulator declaration to seed")
+    .option(
+      "--set <path=value>",
+      "tweak the declaration without editing the file (repeatable), e.g. " +
+        "--set apps.count=13 --set telemetry.rps.perApp.my-app=2",
+      (value: string, previous: string[]) => [...previous, value],
+      [] as string[],
+    )
+    .option(
+      "--plan",
+      "validate and print the resolved expansion; write nothing",
+    )
+    .option(
+      "--verbose",
+      "show everything the platform tooling prints, not just notable lines",
+    )
+    .option(
+      "--exact",
+      "two-sided telemetry diffing (CI's mode, not a developer's)",
+    )
+    .option(
+      "--verify",
+      "re-observe after applying; the plan must come back empty (I1)",
+    )
+    .option("--anchor <iso>", "pin the reconcile anchor (tests)")
+    .option("--workers <n>", "global worker width", (value: string) =>
+      Number(value),
+    )
+    .option("--workers-sdk <n>", "SDK lane width", (value: string) =>
+      Number(value),
+    )
+    .option(
+      "--workers-clickhouse <n>",
+      "ClickHouse lane width",
+      (value: string) => Number(value),
+    )
+    .option("--workers-postgres <n>", "Postgres lane width", (value: string) =>
+      Number(value),
+    )
+    .action(
+      async (flags: {
+        file: string;
+        set: string[];
+        plan?: boolean;
+        verbose?: boolean;
+        exact?: boolean;
+        verify?: boolean;
+        anchor?: string;
+        workers?: number;
+        workersSdk?: number;
+        workersClickhouse?: number;
+        workersPostgres?: number;
+      }) => {
+        const { runUp } = await import("./simulator/verbs");
+        code = await runUp({
+          ...flags,
+          cwd,
+          io,
+          deps: options.simulatorDeps,
+        });
+      },
+    );
+  program
+    .command("down [slug]")
+    .description(
+      "Release held simulated state (reconciles the world to the empty set)",
+    )
+    .option("--file <path>", "declaration file; used only to locate the slug")
+    .option("--verbose", "show teardown detail")
+    .action(
+      async (
+        slug: string | undefined,
+        flags: { file?: string; verbose?: boolean },
+      ) => {
+        const { runDown } = await import("./simulator/verbs");
+        code = await runDown({
+          slug,
+          file: flags.file,
+          verbose: flags.verbose === true,
+          cwd,
+          io,
+          color,
+          deps: options.simulatorDeps,
+        });
+      },
+    );
+
+  const diffFlags = (
+    command: import("commander").Command,
+  ): import("commander").Command =>
+    command
+      .requiredOption(
+        "--file <path>",
+        "simulator declaration to compare against",
+      )
+      .option(
+        "--set <path=value>",
+        "tweak the declaration without editing the file (repeatable)",
+        (value: string, previous: string[]) => [...previous, value],
+        [] as string[],
+      )
+      .option("--exact", "two-sided telemetry diffing; surplus becomes a plan")
+      .option("--anchor <iso>", "pin the reconcile anchor (tests)")
+      .option("--verbose", "show engine detail");
+
+  diffFlags(
+    program
+      .command("diff")
+      .description(
+        "Print what `ass up` would change; write nothing (the kubectl diff of the simulator)",
+      ),
+  ).action(async (flags: Record<string, unknown>) => {
+    const { runDiff } = await import("./simulator/verbs");
+    code = await runDiff({
+      ...(flags as object),
+      cwd,
+      io,
+      color,
+      deps: options.simulatorDeps,
+    } as never);
+  });
+
+  diffFlags(
+    program
+      .command("verify")
+      .description(
+        "Like `diff`, but exits non-zero when the plan is not empty (the I1 gate for CI)",
+      ),
+  ).action(async (flags: Record<string, unknown>) => {
+    const { runDiff } = await import("./simulator/verbs");
+    code = await runDiff({
+      ...(flags as object),
+      verifyMode: true,
+      cwd,
+      io,
+      color,
+      deps: options.simulatorDeps,
+    } as never);
+  });
+  program
+    .command("status")
+    .description("Show held scenarios and platform liveness (always exits 0)")
+    .option("--json", "stable machine-readable output")
+    .action(async (flags: { json?: boolean }) => {
+      const { runStatus } = await import("./simulator/status");
+      code = await runStatus({
+        json: flags.json === true,
+        cwd,
+        io,
+        deps: options.simulatorDeps,
+      });
+    });
+
+  program
+    .command("present")
+    .description(
+      "Render piped output inside the ASS table (a dev loop's servers, a " +
+        "chained tool) - noise stays behind --verbose",
+    )
+    .option("--id <id>", "banner id", "ass")
+    .option("--title <text>", "banner title", "")
+    .option(
+      "--block <key=value>",
+      "a phase and its rows; extra rows are newline-separated (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [] as string[],
+    )
+    .option("--step <name>", "phase the streamed lines are quoted under")
+    .option("--highlight <regex>", "always show lines matching this")
+    .option(
+      "--collapse <text>",
+      "when nothing worth showing appears, print this one line instead of a frame",
+    )
+    .option("--verbose", "show every streamed line, not just notable ones")
+    .action(
+      async (flags: {
+        id: string;
+        title: string;
+        block: string[];
+        step?: string;
+        highlight?: string;
+        collapse?: string;
+        verbose?: boolean;
+      }) => {
+        const { runPresent } = await import("./report/stream");
+        code = await runPresent({
+          id: flags.id,
+          title: flags.title,
+          blocks: flags.block,
+          step: flags.step,
+          highlight: flags.highlight,
+          collapse: flags.collapse,
+          verbose: flags.verbose === true || isTruthy(process.env["VERBOSE"]),
+          color,
+          io,
+          animate: process.stdout.isTTY === true ? process.stdout : undefined,
+        });
+      },
+    );
+
   program
     .command("doctor")
     .description("Report environment capabilities and how to fix them")

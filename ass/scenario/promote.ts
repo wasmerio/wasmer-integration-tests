@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { load as parseYaml } from "js-yaml";
+import { parseToml } from "./toml";
 import {
   forgetTryState,
   readTryState,
@@ -46,23 +46,10 @@ export interface PromoteResult {
   overridden: Record<string, string>;
 }
 
-/** A value that survives a YAML round-trip as itself. Plain scalars are left
- * alone (they read better in a reviewed artifact); anything YAML would
- * reinterpret — an alias `*`, a flow collection, an inline comment — is
- * double-quoted. */
-function yamlScalar(value: string): string {
-  const needsQuotes =
-    value.length === 0 ||
-    /^[\s>|*&!%@`'"[{]/.test(value) ||
-    /: |\s#|[\][{},]/.test(value) ||
-    value !== value.trim();
-  return needsQuotes ? JSON.stringify(value) : value;
-}
-
-const KEY_LINE = /^(\s*)(["']?)([A-Za-z0-9_.-]+)\2:(\s*)(.*)$/;
+const KEY_LINE = /^(\s*)(["']?)([A-Za-z0-9_.-]+)\2\s*=\s*(.*)$/;
 
 /** Replace component selectors in place, preserving comments, ordering, and
- * quoting style of everything untouched. A structural rewrite through js-yaml
+ * everything untouched. A structural rewrite through a TOML serializer
  * would drop the comments that explain why a pin is what it is. */
 function rewriteComponents(
   text: string,
@@ -72,72 +59,80 @@ function rewriteComponents(
     return text;
   }
   const lines = text.split("\n");
-  let componentsIndent: number | null = null;
+  let inComponents = false;
   const remaining = new Set(Object.keys(replacements));
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (componentsIndent === null) {
-      const match = /^(\s+)components:\s*$/.exec(line);
-      if (match) {
-        componentsIndent = match[1].length;
+    if (!inComponents) {
+      if (/^\s*\[fixtures\.components\]\s*(#.*)?$/.test(line)) {
+        inComponents = true;
       }
       continue;
     }
     if (line.trim() === "" || line.trim().startsWith("#")) {
       continue;
     }
-    const indent = line.length - line.trimStart().length;
-    if (indent <= componentsIndent) {
-      break; // out of the components block
+    if (/^\s*\[/.test(line)) {
+      break; // next table header — out of the components block
     }
     const entry = KEY_LINE.exec(line);
     if (entry === null || !remaining.has(entry[3])) {
       continue;
     }
-    const trailingComment = / +#.*$/.exec(entry[5]);
+    const trailingComment = / +#.*$/.exec(entry[4]);
     lines[i] =
-      `${entry[1]}${entry[2]}${entry[3]}${entry[2]}:${entry[4]}` +
-      yamlScalar(replacements[entry[3]]) +
+      `${entry[1]}${entry[2]}${entry[3]}${entry[2]} = ` +
+      JSON.stringify(replacements[entry[3]]) +
       (trailingComment ? trailingComment[0] : "");
     remaining.delete(entry[3]);
   }
   if (remaining.size > 0) {
     throw new PromoteError(
       "could not locate component " +
-        `${Array.from(remaining).sort().join(", ")} under fixtures.components ` +
-        "in the draft; pin it by hand and re-run promote",
+        `${Array.from(remaining).sort().join(", ")} under ` +
+        "[fixtures.components] in the draft; pin it by hand and re-run " +
+        "promote",
     );
   }
   return lines.join("\n");
 }
 
-/** Stamp `lifecycle: {state: open}` — a promoted reproduction is by
+/** Stamp `lifecycle = { state = "open" }` — a promoted reproduction is by
  * definition an open bug until someone proves otherwise (D6). */
 function stampLifecycle(text: string): string {
   const lines = text.split("\n");
-  const metaIndex = lines.findIndex((line) => /^meta:\s*$/.test(line));
+  const metaIndex = lines.findIndex((line) =>
+    /^\s*\[meta\]\s*(#.*)?$/.test(line),
+  );
   if (metaIndex === -1) {
-    throw new PromoteError("the draft has no top-level meta: block");
+    throw new PromoteError("the draft has no [meta] table");
   }
   let insertAt = metaIndex + 1;
-  let indent = "  ";
   for (let i = metaIndex + 1; i < lines.length; i++) {
-    const entry = KEY_LINE.exec(lines[i]);
-    if (entry === null || entry[1].length === 0) {
+    const line = lines[i];
+    if (line.trim() === "" || line.trim().startsWith("#")) {
+      continue;
+    }
+    if (/^\s*\[/.test(line)) {
+      break; // next table header — out of the meta table
+    }
+    const entry = KEY_LINE.exec(line);
+    if (entry === null) {
       break;
     }
-    indent = entry[1];
     insertAt = i + 1;
     if (entry[3] === "title") {
       break;
     }
   }
-  lines.splice(insertAt, 0, `${indent}lifecycle: { state: open }`);
+  lines.splice(insertAt, 0, `lifecycle = { state = "open" }`);
   return lines.join("\n");
 }
 
 function declaredLifecycle(text: string): boolean {
-  const data = parseYaml(text) as { meta?: { lifecycle?: unknown } } | null;
+  const data = parseToml(text, "draft") as {
+    meta?: { lifecycle?: unknown };
+  } | null;
   return data?.meta?.lifecycle !== undefined;
 }
 
@@ -314,7 +309,7 @@ ${components.join("\n")}
 
 | Field | Value |
 | ----- | ----- |
-| Source draft | \`experiments/${slug}/scenario.yaml\` |
+| Source draft | \`experiments/${slug}/scenario.toml\` |
 | Recorded run | ${state.recordedAt} (\`${reportPath}\`) |
 | Target | \`${state.env}\`, mode \`${state.mode}\` |
 | Workload | \`${state.executor}\`: \`${JSON.stringify(profile)}\` |
@@ -322,7 +317,7 @@ ${components.join("\n")}
 | Baseline (D10) | ${baseline} |
 
 The reproduction above is what the recorded run observed on the pinned
-selectors. Edit this file freely — only \`scenario.yaml\` is machine-owned.
+selectors. Edit this file freely — only \`scenario.toml\` is machine-owned.
 `;
 }
 
@@ -330,7 +325,7 @@ export function promoteScenario(cwd: string, slug: string): PromoteResult {
   const roots = rootsFrom(cwd);
   const ref = resolveSlug(roots, "experiment", slug);
   const loaded = loadScenario(roots, "experiment", slug);
-  const source = path.join(ref.dir, "scenario.yaml");
+  const source = path.join(ref.dir, "scenario.toml");
   const text = readFileSync(source, "utf8");
 
   const state = readTryState(cwd, ref.slug);
@@ -343,7 +338,7 @@ export function promoteScenario(cwd: string, slug: string): PromoteResult {
   }
   if (state.declarationDigest !== digestDeclaration(text)) {
     throw new PromoteError(
-      `experiments/${ref.slug}/scenario.yaml has changed since the recorded ` +
+      `experiments/${ref.slug}/scenario.toml has changed since the recorded ` +
         `run (${state.recordedAt}), so its resolved pins may describe a ` +
         "different experiment; re-run `ass try` and promote again",
     );
@@ -369,7 +364,10 @@ export function promoteScenario(cwd: string, slug: string): PromoteResult {
   // validation *and* say what we intended it to say.
   let promoted: Scenario;
   try {
-    promoted = parseScenario(parseYaml(rewritten), "persisted");
+    promoted = parseScenario(
+      parseToml(rewritten, "promoted draft"),
+      "persisted",
+    );
   } catch (err) {
     throw new PromoteError(
       "the promoted scenario does not pass persisted validation, so nothing " +
@@ -406,7 +404,7 @@ export function promoteScenario(cwd: string, slug: string): PromoteResult {
   // half-built repro to trip the retry over "already exists".
   try {
     cpSync(ref.dir, target, { recursive: true });
-    writeFileSync(path.join(target, "scenario.yaml"), rewritten);
+    writeFileSync(path.join(target, "scenario.toml"), rewritten);
     const notes = path.join(ref.dir, "README.md");
     const draftNotes = existsSync(notes)
       ? readFileSync(notes, "utf8").trim()

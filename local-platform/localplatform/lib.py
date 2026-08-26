@@ -15,6 +15,10 @@ import threading
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
 
 DEFAULT_TEST_COMMAND = "pnpm exec jest"
 
@@ -59,8 +63,17 @@ PORT_DEFAULTS: dict[str, tuple[int, str]] = {
     "CLICKHOUSE_NATIVE_PORT": (19123, "ClickHouse native"),
     "LOKI_PORT": (13100, "Loki"),
     "VECTOR_HTTP_PORT": (19089, "Vector HTTP"),
+    "STRIPE_MOCK_PORT": (12111, "stripe-mock"),
 }
 UDP_PORT_VARS = frozenset({"EDGE_DNS_PORT"})
+
+STRIPE_MOCK_FLAG = "LOCAL_PLATFORM_STRIPE_MOCK"
+STRIPE_MOCK_PROFILE = "stripe-mock"
+
+# Ports bound only when their gating flag is on; the availability preflight
+# skips them otherwise so an unrelated process on the port cannot block a
+# default boot.
+CONDITIONAL_PORT_FLAGS: dict[str, str] = {"STRIPE_MOCK_PORT": STRIPE_MOCK_FLAG}
 
 # Keys resolve() records into resolved.env / resolved.json.
 RESOLVED_ENV_KEYS = (
@@ -73,6 +86,7 @@ RESOLVED_ENV_KEYS = (
     "COMPOSE_PROJECT_NAME",
     "DOCKER_CLI_PATH",
     "DOCKER_BUILDX_PATH",
+    STRIPE_MOCK_FLAG,
     *PORT_DEFAULTS.keys(),
 )
 
@@ -93,12 +107,30 @@ def is_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() not in ("", "0", "false", "no", "off")
 
 
+def stripe_mock_enabled(ctx: "Ctx") -> bool:
+    return ctx.truthy(STRIPE_MOCK_FLAG)
+
+
+def apply_stripe_mock_profile(ctx: "Ctx") -> None:
+    """Activate the stripe-mock compose profile when the flag is on, so every
+    compose verb (up/down/config/logs/ps) sees the service. With the flag off
+    the profile stays inactive and the compose model is identical to a
+    checkout without the service."""
+    if not stripe_mock_enabled(ctx):
+        return
+    profiles = [p for p in ctx.get("COMPOSE_PROFILES").split(",") if p]
+    if STRIPE_MOCK_PROFILE not in profiles:
+        profiles.append(STRIPE_MOCK_PROFILE)
+    ctx.env["COMPOSE_PROFILES"] = ",".join(profiles)
+
+
 class Ctx:
     """One tooling invocation: repo paths plus the effective environment.
 
     `env` mirrors what the bash scripts kept as exported shell variables: it
-    starts as a copy of os.environ, `local.env` is layered on top by up(), and
-    resolve() adds the resolved configuration. Every subprocess we spawn
+    starts as a copy of os.environ, the TOML config layers knobs under it via
+    apply_config() (env wins), and resolve() adds the resolved
+    configuration. Every subprocess we spawn
     receives this mapping, so docker compose interpolation and helper scripts
     see exactly what the previous implementation exported.
     """
@@ -110,6 +142,8 @@ class Ctx:
         self.local_platform_dir = self.repo_dir / ".local-platform"
         self.compose_file = self.repo_dir / "docker-compose.local-platform.yaml"
         self.env: dict[str, str] = dict(env if env is not None else os.environ)
+        # The merged config layers; set by apply_config() (None until then).
+        self.config: "Config | None" = None
         self.run_dir: Path | None = None
         self.timings: list[dict[str, object]] = []
         self._timings_lock = threading.Lock()
@@ -225,6 +259,7 @@ class Ctx:
             self.env.update(read_resolved_json(resolved_json))
         else:
             fail(f"Missing resolved env: {resolved_env}")
+        apply_stripe_mock_profile(self)
         self.set_run_dir_env()
         self.edge_cache_dir()
         self.package_cache_dir()
@@ -245,6 +280,7 @@ def read_resolved_json(path: Path) -> dict[str, str]:
         ("compose_project_name", "COMPOSE_PROJECT_NAME"),
         ("docker_cli_path", "DOCKER_CLI_PATH"),
         ("docker_buildx_path", "DOCKER_BUILDX_PATH"),
+        ("stripe_mock", STRIPE_MOCK_FLAG),
     ):
         if json_key in data:
             flat[env_key] = str(data[json_key])
@@ -275,7 +311,7 @@ _ANSI_C_ESCAPES = {
 
 class _EnvFileScanner:
     """Quote-aware tokenizer for the shell env files this tooling reads
-    (`local.env`, the generated `test-env.sh`, `resolved.env`).
+    (the generated `test-env.sh` and `resolved.env`).
 
     Follows POSIX shell word rules closely enough for these files: single
     quotes are literal, double quotes and bare words expand `$VAR`/`${VAR}`/
@@ -283,7 +319,7 @@ class _EnvFileScanner:
     `printf %q` output, which legacy resolved.env files contain), `#`
     comments, and quoted values spanning lines. Command substitution and
     other shell constructs raise a clear error instead of being silently
-    mangled — precompute such values before putting them in local.env.
+    mangled.
     """
 
     def __init__(self, text: str, expand):
@@ -463,13 +499,17 @@ def write_env_file(path: Path, values: Mapping[str, str]) -> None:
 _progress_line_active = False
 _log_lock = threading.Lock()
 
-# Logging switches read os.environ dynamically (not snapshotted at import):
-# up() propagates VERBOSE/NO_COLOR/LOCAL_PLATFORM_DISABLE_INLINE_PROGRESS from
-# local.env into os.environ, matching bash's `set -a; source local.env`.
+# Logging switches read os.environ dynamically (not snapshotted at import).
 
 
 def use_color(stream) -> bool:
-    return stream.isatty() and not os.environ.get("NO_COLOR")
+    # Same precedence as ASS's style.ts: NO_COLOR wins, FORCE_COLOR forces
+    # (so a presenter quoting us through a pipe can keep our colors).
+    if os.environ.get("NO_COLOR"):
+        return False
+    if is_truthy(os.environ.get("FORCE_COLOR") or "0"):
+        return True
+    return stream.isatty()
 
 
 def log_use_color() -> bool:
@@ -516,13 +556,13 @@ def _render_progress_line(text: str) -> None:
     _progress_line_active = True
 
 
-def log_emit(level: str, message: str) -> None:
+def log_emit(level: str, message: str, *, persist: bool = False) -> None:
     global _progress_line_active
     if level == "DEBUG" and not log_is_verbose():
         return
 
     with _log_lock:
-        if log_progress_enabled() and level in ("INFO", "DEBUG"):
+        if not persist and log_progress_enabled() and level in ("INFO", "DEBUG"):
             _render_progress_line(f"[local-platform] {message}")
             return
 
@@ -539,6 +579,11 @@ def log_emit(level: str, message: str) -> None:
 
 def log(message: str) -> None:
     log_emit("INFO", message)
+
+
+def log_step(message: str) -> None:
+    """INFO that survives in scrollback even when inline progress is on."""
+    log_emit("INFO", message, persist=True)
 
 
 def log_debug(message: str) -> None:
@@ -720,6 +765,10 @@ class _LinePrefixer:
     def write(self, chunk: bytes) -> None:
         self._pending += chunk
         *lines, self._pending = self._pending.split(b"\n")
+        if lines:
+            # The shared progress line dangles on stderr without a newline;
+            # clear it or our first line glues onto its tail.
+            log_clear()
         for line in lines:
             self._stream.write(self._prefix + line + b"\n")
 
@@ -728,6 +777,7 @@ class _LinePrefixer:
 
     def finish(self) -> None:
         if self._pending:
+            log_clear()
             self._stream.write(self._prefix + self._pending + b"\n")
             self._pending = b""
         self._stream.flush()
@@ -811,9 +861,9 @@ def run_streaming(
     """Run `cmd`, teeing combined stdout+stderr to log_file and our stdout.
     `echo_prefix` labels each echoed line (log_file stays unprefixed)."""
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    echo = sys.stdout.buffer
-    if echo_prefix is not None:
-        echo = _LinePrefixer(echo, echo_prefix)
+    # Always line-wrapped: clears the dangling progress line per batch and
+    # newline-terminates a partial last line (prefix "" = raw passthrough).
+    echo = _LinePrefixer(sys.stdout.buffer, echo_prefix or "")
     with open(log_file, "wb") as log_handle:
         process = subprocess.Popen(
             list(cmd),
@@ -966,6 +1016,9 @@ def check_required_ports_available(ctx: Ctx) -> None:
     for var, (_default, service) in PORT_DEFAULTS.items():
         if var in UDP_PORT_VARS:
             continue
+        gate_flag = CONDITIONAL_PORT_FLAGS.get(var)
+        if gate_flag is not None and not ctx.truthy(gate_flag):
+            continue
         port = ctx.getint(var, PORT_DEFAULTS[var][0])
         if port_is_listening(port):
             owner = port_owner_hint(ctx, port)
@@ -1080,6 +1133,10 @@ def wait_url(url: str, timeout_ms: int) -> None:
     last_error = "not attempted"
     attempt = 0
     last_progress_at = 0.0
+    # Ramp from a tight poll to a calm one: a service that is already up
+    # should not cost a fixed two-second sleep, and a slow one should not be
+    # polled hard for two minutes.
+    poll_seconds = 0.1
 
     log(f"waiting for {url} (timeout {format_duration(timeout_ms)})")
     while time.monotonic() < deadline:
@@ -1132,7 +1189,8 @@ def wait_url(url: str, timeout_ms: int) -> None:
                 f"{format_duration((now - started) * 1000)} "
                 f"(attempt {attempt}, last error: {last_error})"
             )
-        time.sleep(2)
+        time.sleep(poll_seconds)
+        poll_seconds = min(poll_seconds * 1.5, 1.0)
 
     fail(
         f"Timed out waiting for {url} after "

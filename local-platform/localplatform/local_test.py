@@ -54,7 +54,7 @@ def local_test(ctx: Ctx) -> int:
     """Returns the process exit status."""
     prepare_only = ctx.truthy("LOCAL_PLATFORM_PREPARE_ONLY", "0")
     auto_down = ctx.truthy("LOCAL_PLATFORM_AUTO_DOWN", "0")
-    # The caller's LOCAL_TEST_COMMAND wins over the value local.env/resolve
+    # The caller's LOCAL_TEST_COMMAND wins over the value config/resolve
     # record, so `LOCAL_TEST_COMMAND=... make local-test` always runs exactly
     # what was asked.
     requested_test_command = os.environ.get("LOCAL_TEST_COMMAND", "")

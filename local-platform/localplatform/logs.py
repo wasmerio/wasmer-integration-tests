@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from .lib import Ctx, compose_cmd, fail, log, tail_lines
+from .lib import Ctx, compose_cmd, fail, log, stripe_mock_enabled, tail_lines
 
 SERVICES = (
     "backend",
@@ -19,6 +19,12 @@ SERVICES = (
     "loki",
     "vector",
 )
+
+
+def _services(ctx: Ctx) -> tuple[str, ...]:
+    if stripe_mock_enabled(ctx):
+        return SERVICES + ("stripe-mock",)
+    return SERVICES
 
 
 def _capture(ctx: Ctx, cmd: list[str], destination) -> None:
@@ -93,7 +99,7 @@ def collect_logs(ctx: Ctx) -> None:
             diagnostics_dir / "docker-stats.txt",
         )
 
-    for service in SERVICES:
+    for service in _services(ctx):
         _capture(
             ctx,
             compose_cmd(ctx, "logs", "--no-color", "--timestamps", service),

@@ -24,8 +24,10 @@ from .lib import (
     ANSI_GREEN,
     ANSI_RESET,
     ANSI_YELLOW,
+    STRIPE_MOCK_FLAG,
     Ctx,
     Fail,
+    apply_stripe_mock_profile,
     check_required_ports_available,
     compose,
     compose_cmd,
@@ -35,6 +37,7 @@ from .lib import (
     describe_edge_version,
     ensure_github_token,
     fail,
+    is_truthy,
     log,
     log_clear,
     log_use_color,
@@ -43,10 +46,12 @@ from .lib import (
     process_is_running,
     require_cmd,
     run_quietly,
+    stripe_mock_enabled,
     try_output,
     wait_url,
 )
 from .logs import collect_logs
+from .seed import run_post_up_hook, seed_scenarios
 
 DEPENDENCY_SERVICES = (
     "postgres",
@@ -60,28 +65,17 @@ DEPENDENCY_SERVICES = (
     "vector",
 )
 
+
+def _dependency_services(ctx: Ctx) -> tuple[str, ...]:
+    if stripe_mock_enabled(ctx):
+        return DEPENDENCY_SERVICES + ("stripe-mock",)
+    return DEPENDENCY_SERVICES
+
 # Selectors that need a GitHub token to resolve or download.
 _BACKEND_TOKEN_SELECTORS = ("resolve_dev", "latest_dev", "latest-dev")
 _BACKEND_TOKEN_PREFIXES = ("artifact:", "github-artifact:", "github-release:")
 _EDGE_TOKEN_SELECTORS = ("resolve_prod", "resolve_dev", "latest_dev", "latest-dev")
 _EDGE_TOKEN_PREFIXES = ("github-artifact:", "github-release:")
-
-
-def load_local_env(ctx: Ctx) -> None:
-    """Layer local.env over the caller environment (matching the previous
-    `set -a; source local.env` semantics: local.env values win)."""
-    local_env_file = ctx.repo_dir / "local.env"
-    if not local_env_file.is_file():
-        return
-    log("Loading local.env")
-    values = parse_env_file(local_env_file, base_env=ctx.env)
-    ctx.env.update(values)
-    # The logging helpers read these from os.environ (they have no ctx);
-    # propagate them so a VERBOSE=true in local.env affects our own output,
-    # like sourcing did.
-    for name in ("VERBOSE", "NO_COLOR", "LOCAL_PLATFORM_DISABLE_INLINE_PROGRESS"):
-        if name in values:
-            os.environ[name] = values[name]
 
 
 def start_compose_log_follow(ctx: Ctx) -> None:
@@ -276,17 +270,23 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
     except Exception as error:
         log_warn(f"Could not read {existing_resolved_env}: {error}")
         existing = {}
-    if existing.get("BACKEND_VERSION") != ctx.get("BACKEND_VERSION") or existing.get(
-        "EDGE_VERSION"
-    ) != ctx.get("EDGE_VERSION"):
+    if (
+        existing.get("BACKEND_VERSION") != ctx.get("BACKEND_VERSION")
+        or existing.get("EDGE_VERSION") != ctx.get("EDGE_VERSION")
+        # The flag reshapes backend.env and the compose service set, so a
+        # change needs a re-bootstrap exactly like a version-selector change.
+        or is_truthy(existing.get(STRIPE_MOCK_FLAG)) != stripe_mock_enabled(ctx)
+    ):
         log("Stopping existing local platform run because the requested selectors changed")
         log(
             f"Existing selectors: backend={existing.get('BACKEND_VERSION', '')} "
-            f"edge={existing.get('EDGE_VERSION', '')}"
+            f"edge={existing.get('EDGE_VERSION', '')} "
+            f"stripe_mock={is_truthy(existing.get(STRIPE_MOCK_FLAG))}"
         )
         log(
             f"Requested selectors: backend={ctx.get('BACKEND_VERSION')} "
-            f"edge={ctx.get('EDGE_VERSION')}"
+            f"edge={ctx.get('EDGE_VERSION')} "
+            f"stripe_mock={stripe_mock_enabled(ctx)}"
         )
         # Tear down with a separate context: down() loads the OLD run's
         # resolved env, which must not clobber the freshly requested selectors
@@ -305,7 +305,11 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
     ctx.load_resolved_env()
 
     if not compose_project_has_running_containers(ctx):
-        return False
+        # Nothing running, but the project may simply be stopped (`stop`
+        # rather than `down`). Resuming it skips migrations, bootstrap and
+        # package seeding entirely, and brings back whatever state the run
+        # was holding.
+        return _resume_stopped_run(ctx)
 
     (ctx.require_run_dir() / "logs").mkdir(parents=True, exist_ok=True)
     log(f"Reusing existing local platform run: {ctx.require_run_dir()}")
@@ -315,14 +319,40 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
         and compose_service_is_running(ctx, "edge")
     ):
         log("Found a partially running Compose project; ensuring services are up")
-        compose(ctx, "up", "-d", *DEPENDENCY_SERVICES)
+        compose(ctx, "up", "-d", *_dependency_services(ctx))
         compose(ctx, "up", "-d", "backend")
         _wait_for_backend(ctx)
         compose(ctx, "up", "-d", "edge")
         _wait_for_edge(ctx)
 
     start_compose_log_follow(ctx)
-    print_access_summary(ctx)
+    return True
+
+
+def _compose_project_has_containers(ctx: Ctx) -> bool:
+    output = try_output(compose_cmd(ctx, "ps", "--all", "--quiet"), env=ctx.env)
+    return bool(output and output.strip())
+
+
+def _resume_stopped_run(ctx: Ctx) -> bool:
+    """Restart a stopped project in place. Everything a fresh boot spends
+    its time on - the migrated schema, the bootstrapped env, the seeded
+    packages - is already in the volumes."""
+    if not ctx.truthy("LOCAL_PLATFORM_RESUME_STOPPED", "1"):
+        return False
+    if not _compose_project_has_containers(ctx):
+        return False
+    if not (ctx.require_run_dir() / "test-env.sh").is_file():
+        return False
+    log(f"Resuming stopped local platform run: {ctx.require_run_dir()}")
+    started = time.monotonic()
+    _compose_up(ctx, "Resume", "[resume] ", *_dependency_services(ctx), "backend", "edge")
+    start_compose_log_follow(ctx)
+    _wait_for_backend(ctx)
+    _wait_for_edge(ctx)
+    ctx.record_timing("resume", time.monotonic() - started)
+    ctx.write_timings()
+    log(f"Local platform resumed in {time.monotonic() - started:.1f}s")
     return True
 
 
@@ -430,10 +460,29 @@ def _compose_up(ctx: Ctx, label: str, prefix: str, *services: str) -> None:
         fail(f"{label} failed to start with status {status}", status)
 
 
+#: The only dependency the migration and bootstrap steps need. Everything
+#: else can still be coming up while they run.
+_FIRST_WAVE_SERVICES = ("postgres",)
+
+
 def _start_dependency_services(ctx: Ctx) -> None:
-    log("Starting dependency services")
-    _compose_up(ctx, "Dependency services", "[deps] ", *DEPENDENCY_SERVICES)
+    """Two waves. Migrations need Postgres and nothing else, so Postgres is
+    started (and healthy) first while the rest of the stack comes up behind
+    it - previously the boot waited ~9s for ClickHouse, MinIO, Loki and the
+    app databases before running a Postgres-only migration."""
+    log("Starting Postgres")
+    _compose_up(ctx, "Postgres", "[deps] ", *_FIRST_WAVE_SERVICES)
     start_compose_log_follow(ctx)
+
+
+def _start_remaining_dependency_services(ctx: Ctx) -> None:
+    remaining = tuple(
+        service for service in _dependency_services(ctx) if service not in _FIRST_WAVE_SERVICES
+    )
+    if not remaining:
+        return
+    log("Starting the remaining dependency services")
+    _compose_up(ctx, "Dependency services", "[deps] ", *remaining)
 
 
 def _build_edge_helper(ctx: Ctx) -> None:
@@ -461,7 +510,9 @@ def _start_backend(ctx: Ctx) -> None:
 
 def _start_edge(ctx: Ctx) -> None:
     log("Starting Edge")
-    compose(ctx, "up", "-d", "edge")
+    # Captured and prefixed like the other parallel steps: Edge now starts
+    # while package seeding is still writing to the terminal.
+    _compose_up(ctx, "Edge", "[edge] ", "edge")
     _wait_for_edge(ctx)
 
 
@@ -527,7 +578,8 @@ def _seed_templates(ctx: Ctx) -> None:
 
 
 def _seed_packages(ctx: Ctx) -> None:
-    if not ctx.truthy("LOCAL_PLATFORM_SEED_PACKAGES", "1"):
+    mode = (ctx.get("LOCAL_PLATFORM_SEED_PACKAGES") or "1").strip().lower()
+    if mode != "priority" and not ctx.truthy("LOCAL_PLATFORM_SEED_PACKAGES", "1"):
         log(
             "Skipping package dependency seeding because LOCAL_PLATFORM_SEED_PACKAGES="
             f"{ctx.get('LOCAL_PLATFORM_SEED_PACKAGES')}"
@@ -548,6 +600,33 @@ def _seed_packages(ctx: Ctx) -> None:
     )
     if status != 0:
         fail(f"Package seeding failed with status {status}", status)
+
+
+def _prefetch_packages(ctx: Ctx) -> None:
+    """Download the packages this boot will publish, into the shared cache,
+    while the image pull and the migrations are still running. It talks only
+    to the public source registry, so it needs neither the backend nor
+    test-env.sh - and on a cold cache it takes the download off the critical
+    path entirely."""
+    mode = (ctx.get("LOCAL_PLATFORM_SEED_PACKAGES") or "1").strip().lower()
+    if mode not in ("priority", "1", "true", "yes", "on"):
+        return
+    status = run_quietly(
+        "Package prefetch",
+        ctx.require_run_dir() / "logs" / "package-prefetch.log",
+        [
+            "node",
+            str(ctx.repo_dir / "local-platform" / "scripts" / "seed-packages.mjs"),
+            str(ctx.repo_dir),
+            str(ctx.require_run_dir()),
+        ],
+        env={**ctx.env, "LOCAL_PLATFORM_PACKAGE_PREFETCH": "1"},
+        echo_prefix="[prefetch] ",
+    )
+    if status != 0:
+        # Never fatal: the seeding step downloads whatever is missing and
+        # fails there with the real diagnosis.
+        log_warn(f"Package prefetch exited {status}; seeding will download what is missing")
 
 
 def _persist_relay_queries(ctx: Ctx) -> None:
@@ -606,7 +685,7 @@ def up(ctx: Ctx) -> None:
     require_cmd("docker")
     require_cmd("node")
 
-    load_local_env(ctx)
+    apply_stripe_mock_profile(ctx)
 
     if not ctx.is_ci():
         # Treat empty as unset, like `${BACKEND_VERSION:-resolve_prod}` did.
@@ -623,6 +702,9 @@ def up(ctx: Ctx) -> None:
     ctx.edge_cache_dir()
 
     if reuse_existing_run_if_running(ctx):
+        # Re-running up on a live platform re-runs the seed list; the
+        # reconciler makes same-scenario re-seeds cheap no-ops (D-5).
+        _finish_up(ctx)
         return
 
     check_required_ports_available(ctx)
@@ -649,6 +731,7 @@ def up(ctx: Ctx) -> None:
 
     try:
         _boot(ctx)
+        _finish_up(ctx)
     except BaseException as error:
         if isinstance(error, KeyboardInterrupt):
             exit_code = 130
@@ -662,16 +745,29 @@ def up(ctx: Ctx) -> None:
             log_warn(f"Cleanup after failure itself failed: {cleanup_error}")
         raise
 
+
+def _finish_up(ctx: Ctx) -> None:
+    """The platform boots inhabited: seed the declared scenarios, run the
+    consumer's post_up hook, then print the access summary (D-5/D-6)."""
+    seed_scenarios(ctx)
+    run_post_up_hook(ctx)
     print_access_summary(ctx)
 
 
 def _boot(ctx: Ctx) -> None:
     """Fresh-boot pipeline. Independent steps run concurrently:
 
-        resolve ─┬─ fetch backend image ─┬─ migrations ─ bootstrap ─ templates ─ backend ─┬─ packages ─┬─ precompile ─ edge
-                 ├─ dependency services ─┘                                                └─ relay ────┤
-                 ├─ fetch edge binary ─────────────────────────────────────────────────────(barrier)───┤
-                 └─ edge helper build ──────────────────────────────────────────────────────────────────┘
+        resolve ─┬─ fetch backend image ─┬─ migrations ─ bootstrap ─ templates ─ backend ─┬─ packages ─┬─ (precompile ─ edge)
+                 ├─ postgres ────────────┘        │                                       └─ relay ────┤
+                 ├─ other dependencies ───────────┘                                                    │
+                 ├─ fetch edge binary ──────────┬── edge (when precompilation is off) ─────────────────┤
+                 └─ edge helper build ──────────┘                                                      │
+                                                                                          (barrier) ───┘
+
+    Three orderings earn their keep and are load-bearing rather than
+    incidental: migrations need Postgres and nothing else, bootstrap writes
+    `backend.env` and must precede the backend container, and precompilation
+    needs the seeded packages. Everything else overlaps.
     """
     boot_started = time.monotonic()
 
@@ -688,7 +784,7 @@ def _boot(ctx: Ctx) -> None:
     fetch_mod.preflight_backend_registry(ctx)
 
     log("Fetching artifacts and starting dependency services (in parallel)")
-    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="boot") as pool:
+    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="boot") as pool:
         futures: dict[str, Future] = {
             "backend-image": pool.submit(
                 _step, ctx, "fetch-backend-image", lambda: fetch_mod.fetch_backend_image(ctx)
@@ -699,14 +795,26 @@ def _boot(ctx: Ctx) -> None:
             "dependencies": pool.submit(
                 _step, ctx, "dependency-services", lambda: _start_dependency_services(ctx)
             ),
+            "package-prefetch": pool.submit(
+                _step, ctx, "package-prefetch", lambda: _prefetch_packages(ctx)
+            ),
         }
-        if ctx.truthy("LOCAL_PLATFORM_ENSURE_COMPILED", "1"):
-            futures["edge-helper-build"] = pool.submit(
-                _step, ctx, "edge-helper-build", lambda: _build_edge_helper(ctx)
-            )
+        # Always pre-built, not just when precompiling: `compose up edge`
+        # builds the image otherwise, and it does it at the very end of the
+        # boot where nothing can overlap it.
+        futures["edge-helper-build"] = pool.submit(
+            _step, ctx, "edge-helper-build", lambda: _build_edge_helper(ctx)
+        )
         try:
             _await_steps(futures, "backend-image", "dependencies")
+            futures["dependencies-rest"] = pool.submit(
+                _step,
+                ctx,
+                "dependency-services-rest",
+                lambda: _start_remaining_dependency_services(ctx),
+            )
             _step(ctx, "migrations", lambda: _run_migrations(ctx))
+            _await_steps(futures, "dependencies-rest")
             _step(ctx, "bootstrap", lambda: bootstrap_mod.bootstrap(ctx))
 
             # Repo-owned template seeding (bootstrap passes --skip-templates
@@ -714,8 +822,18 @@ def _boot(ctx: Ctx) -> None:
             # backend start, like the original flow: the backend may read
             # templates as it comes up. Package seeding and Relay persistence
             # both need the running backend and overlap with each other.
+            if not ctx.truthy("LOCAL_PLATFORM_ENSURE_COMPILED", "1"):
+                # Without precompilation Edge needs only its binary and its
+                # image - it reaches the backend at request time, not at
+                # start - so it boots alongside the backend and the package
+                # seeding instead of after both.
+                _await_steps(futures, "edge-binary", "edge-helper-build")
+                futures["edge"] = pool.submit(_step, ctx, "edge-start", lambda: _start_edge(ctx))
             _step(ctx, "template-seeding", lambda: _seed_templates(ctx))
             _step(ctx, "backend-start", lambda: _start_backend(ctx))
+            # The publish step must not race its own prefetch: both would
+            # download the same bytes and halve the effective bandwidth.
+            _await_steps(futures, "package-prefetch")
             futures["packages"] = pool.submit(
                 _step, ctx, "package-seeding", lambda: _seed_packages(ctx)
             )
@@ -723,11 +841,14 @@ def _boot(ctx: Ctx) -> None:
                 _step, ctx, "relay-persistence", lambda: _persist_relay_queries(ctx)
             )
 
-            # Precompilation needs everything that is still in flight: the
-            # Edge binary + helper image, and the package-seed diagnostics.
-            _await_steps(futures, *list(futures.keys()))
-            _step(ctx, "precompile", lambda: ensure_compiled_mod.ensure_compiled(ctx))
-            _step(ctx, "edge-start", lambda: _start_edge(ctx))
+            if ctx.truthy("LOCAL_PLATFORM_ENSURE_COMPILED", "1"):
+                # Precompilation needs everything that is still in flight:
+                # the Edge binary + helper image, and the seeded packages.
+                _await_steps(futures, *list(futures.keys()))
+                _step(ctx, "precompile", lambda: ensure_compiled_mod.ensure_compiled(ctx))
+                _step(ctx, "edge-start", lambda: _start_edge(ctx))
+            else:
+                _await_steps(futures, *list(futures.keys()))
         except BaseException:
             _drain_remaining(futures)
             raise

@@ -32,11 +32,11 @@ export function addScenario(
   root: string,
   boundary: "experiments" | "repros",
   slug: string,
-  yaml: string,
+  toml: string,
 ): string {
   const dir = path.join(root, boundary, slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "scenario.yaml"), yaml);
+  writeFileSync(path.join(dir, "scenario.toml"), toml);
   return dir;
 }
 
@@ -96,72 +96,80 @@ export function snapshotTree(
   return snapshot;
 }
 
-export const DRAFT_YAML = `
-meta:
-  id: EXP-1
-  title: an in-progress draft
-fixtures:
-  components:
-    edge: resolve_prod
-load:
-  executor: jest
-  jest:
-    spec: tests/app/templates.test.ts
+export const DRAFT_TOML = `
+[meta]
+id = "EXP-1"
+title = "an in-progress draft"
+
+[fixtures.components]
+edge = "resolve_prod"
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/app/templates.test.ts"
 `;
 
 /** A draft that is ready to graduate: floating edge, a verdict, and a waived
  * baseline (D10). Its comment is what proves promotion is a text edit. */
-export const PROMOTABLE_DRAFT_YAML = `
-meta:
-  id: WAX-999
-  title: a draft that reproduces
-fixtures:
-  components:
-    # floating on purpose while hunting
-    edge: resolve_prod
-load:
-  executor: jest
-  jest:
-    spec: tests/app/templates.test.ts
-verdict:
-  reproduced_when:
-    any:
-      - log_matches:
-          stream: edge
-          pattern: object used with the wrong context
-  baseline:
-    waived: platform-level bug - no native analogue
+export const PROMOTABLE_DRAFT_TOML = `
+[meta]
+id = "WAX-999"
+title = "a draft that reproduces"
+
+[fixtures.components]
+# floating on purpose while hunting
+edge = "resolve_prod"
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/app/templates.test.ts"
+
+[[verdict.reproduced_when.any]]
+[verdict.reproduced_when.any.log_matches]
+stream = "edge"
+pattern = "object used with the wrong context"
+
+[verdict.baseline]
+waived = "platform-level bug - no native analogue"
 `;
 
-export const PERSISTED_YAML = `
-meta:
-  id: WAX-600
-  title: Edge wasix cross-Store panic under CPU starvation
-  lifecycle: { state: open }
-  links:
-    linear: https://linear.app/wasmer/issue/WAX-600
-fixtures:
-  apps:
-    victim:
-      source: template:next-react-server-components
-  components:
-    edge: github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge
-    backend: "github-release:wasmerio/backend:v2026-07-15_2_9a6c3d4:*image*.tar*"
-  perturbations:
-    edge: { cpus: 1, wipe_caches: [compiler_cache, webc_cache] }
-load:
-  executor: jest
-  jest:
-    spec: tests/app/templates.test.ts
-    testNamePattern: next-react-server-components
-verdict:
-  reproduced_when:
-    any:
-      - log_matches:
-          stream: edge
-          pattern: object used with the wrong context
-  baseline:
-    waived: platform-level bug - no native analogue
+export const PERSISTED_TOML = `
+[meta]
+id = "WAX-600"
+title = "Edge wasix cross-Store panic under CPU starvation"
+lifecycle = { state = "open" }
+
+[meta.links]
+linear = "https://linear.app/wasmer/issue/WAX-600"
+
+[fixtures.apps.victim]
+source = "template:next-react-server-components"
+
+[fixtures.components]
+edge = "github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge"
+backend = "github-release:wasmerio/backend:v2026-07-15_2_9a6c3d4:*image*.tar*"
+
+[fixtures.perturbations]
+edge = { cpus = 1, wipe_caches = ["compiler_cache", "webc_cache"] }
+
+[load]
+executor = "jest"
+
+[load.jest]
+spec = "tests/app/templates.test.ts"
+testNamePattern = "next-react-server-components"
+
+[[verdict.reproduced_when.any]]
+[verdict.reproduced_when.any.log_matches]
+stream = "edge"
+pattern = "object used with the wrong context"
+
+[verdict.baseline]
+waived = "platform-level bug - no native analogue"
 `;
 
 // -- fake execution harness (Phase 2) ---------------------------------------

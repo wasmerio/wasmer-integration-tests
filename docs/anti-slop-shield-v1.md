@@ -54,7 +54,7 @@ shape. Its properties are the requirements this design has to meet:
 | `CPUS=1` knob, cache wipe before run                                                                       | **Environment perturbation is part of the scenario.** Resource caps, cold caches, and similar triggers are declared, not tribal knowledge.                                        |
 | `JEST_CMD` reuses an existing integration test as the workload                                             | **Existing tests are workloads.** The Jest suite is a library of known-good traffic generators; ASS drives them rather than re-implementing them.                                 |
 | `grep "object used with the wrong context"` verdict block                                                  | **Machine-checkable failure signature.** A run ends in `REPRODUCED` / `NOT REPRODUCED`, not a wall of logs.                                                                       |
-| Backup/trap/restore of `local.env` and compose file                                                        | **Runs are hermetic.** State mutation is owned by the harness, never left for the operator to undo.                                                                               |
+| Backup/trap/restore of the env file and compose file                                                       | **Runs are hermetic.** State mutation is owned by the harness, never left for the operator to undo.                                                                               |
 | Header comment: Linear link, knobs, hivemind pointer                                                       | **Self-documentation.** A scenario carries its own provenance and usage.                                                                                                          |
 | Runs from repo root with only `gh` + the standard toolchain                                                | **Near-zero setup.** One command from a fresh checkout.                                                                                                                           |
 
@@ -108,7 +108,7 @@ technical fork.
 ### Phase 1 — Experimentation (`experiments/`, drafts, `ass try`)
 
 The developer (or an agent) is hunting. A draft is a directory of files —
-`experiments/<slug>/scenario.yaml` plus any payloads/fixtures it needs —
+`experiments/<slug>/scenario.toml` plus any payloads/fixtures it needs —
 edited freely between `ass try <slug>` invocations. Drafts are relaxed:
 component versions may float (`resolve_prod`, `latest`, a local `path:`),
 the `verdict` block may be absent (the run just surfaces logs and metrics),
@@ -167,7 +167,7 @@ suite the way [`tests/superpanics/`](../tests/superpanics) tests were.
 
 ```text
 Phase 1                                    Phase 2
-experiments/wax-600/  (edit ⇄ ass try)  ──►  ass promote wax-600  ──►  repros/wax-600/scenario.yaml
+experiments/wax-600/  (edit ⇄ ass try)  ──►  ass promote wax-600  ──►  repros/wax-600/scenario.toml
                                                                        repros/wax-600/README.md
                                                                        (reviewed, committed, scheduled)
 ```
@@ -182,40 +182,46 @@ historically skip.
 One file, three strictly separated sections, per the QA-634 acceptance
 criteria ("fixture preparation completes before workload measurement begins"):
 
-```yaml
-# repros/wax-600/scenario.yaml
-meta:
-  id: WAX-600
-  title: Edge wasix 759ca9d cross-Store panic under CPU starvation
-  lifecycle: { state: open } # open | fixed | retired — see "Lifecycle and assessment"
-  links:
-    linear: https://linear.app/wasmer/issue/WAX-600
-    notes: hivemind knowledge/04-codebases/edge/2026-07-16-wasix-759ca9d-cross-store-panic.md
+```toml
+# repros/wax-600/scenario.toml
+[meta]
+id = "WAX-600"
+title = "Edge wasix 759ca9d cross-Store panic under CPU starvation"
+lifecycle = { state = "open" } # open | fixed | retired — see "Lifecycle and assessment"
 
-fixtures: # prepared BEFORE measurement (QA-635)
-  apps:
-    victim:
-      source: template:next-react-server-components
-      # alternative sources: fixture:./fixtures/php/…, backup:ass-store://wp-cust-123@v2 (QA-636)
-  components: # version pins, any resolver selector the local platform accepts
-    edge: github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge
-    backend: github-release:wasmerio/backend:v2026-07-15_2_9a6c3d4:*image*.tar*
-  perturbations: # environment triggers, local-only section
-    edge: { cpus: 1, wipe_caches: [compiler_cache, webc_cache] }
+[meta.links]
+linear = "https://linear.app/wasmer/issue/WAX-600"
+notes = "hivemind knowledge/04-codebases/edge/2026-07-16-wasix-759ca9d-cross-store-panic.md"
 
-load: # measured workload, executed by ONE executor (QA-637/638/639/640)
-  executor: jest # jest | artillery-http | raw-wasmer
-  jest:
-    spec: tests/app/templates.test.ts
-    testNamePattern: next-react-server-components
+# fixtures: prepared BEFORE measurement (QA-635)
+[fixtures.apps.victim]
+source = "template:next-react-server-components"
+# alternative sources: fixture:./fixtures/php/…, backup:ass-store://wp-cust-123@v2 (QA-636)
 
-verdict: # machine-checkable outcome
-  reproduced_when:
-    - log_matches:
-        stream: edge
-        pattern: "object used with the wrong context"
-  collect: # evidence retained either way (QA-641)
-    - edge_panic_context: { pattern: "panicked at", before: 1, after: 4 }
+# version pins, any resolver selector the local platform accepts
+[fixtures.components]
+edge = "github-release:wasmerio/edge:v2026-07-16_1_fcdd9c4_dev1:edge"
+backend = "github-release:wasmerio/backend:v2026-07-15_2_9a6c3d4:*image*.tar*"
+
+# environment triggers, local-only section
+[fixtures.perturbations]
+edge = { cpus = 1, wipe_caches = ["compiler_cache", "webc_cache"] }
+
+# load: measured workload, executed by ONE executor (QA-637/638/639/640)
+[load]
+executor = "jest" # jest | artillery-http | raw-wasmer
+
+[load.jest]
+spec = "tests/app/templates.test.ts"
+testNamePattern = "next-react-server-components"
+
+# verdict: machine-checkable outcome
+[[verdict.reproduced_when]]
+log_matches = { stream = "edge", pattern = "object used with the wrong context" }
+
+# evidence retained either way (QA-641)
+[[verdict.collect]]
+edge_panic_context = { pattern = "panicked at", before = 1, after = 4 }
 ```
 
 Section contracts:
@@ -225,7 +231,7 @@ Section contracts:
   by the state manager (QA-635); output is a bag of resolved variables
   (`{{ victim.url }}` etc.) handed to the executor. Failures here are _setup
   failures_, reported distinctly from load failures.
-- **`load`** — exactly one executor block. Changing `executor:` (or the target
+- **`load`** — exactly one executor block. Changing `executor` (or the target
   env at the CLI) must not require rewriting `fixtures` or `verdict` — this is
   the QA-637 contract. Executor-specific sub-keys are allowed; fixtures may
   declare executor compatibility (QA-635 AC). App and probe entries may
@@ -286,19 +292,20 @@ exactly-once evaluation.
 The grammar is transport-agnostic; _where_ the harness listens is a typed
 channel object, deliberately an open union so new transports are additive:
 
-```yaml
-verdict:
-  probe: # built-in contract; replaces hand-written output_matches pairs
-    channels:
-      - { type: log, stream: stderr } # process capture locally; Vector→Loki app logs when deployed
-      - { type: http, match: body } # encoded in the served response
+```toml
+# built-in contract; replaces hand-written output_matches pairs
+[verdict.probe]
+channels = [
+  { type = "log", stream = "stderr" }, # process capture locally; Vector→Loki app logs when deployed
+  { type = "http", match = "body" },   # encoded in the served response
+]
 ```
 
-`type: log` covers both direct process capture (raw-wasmer, host-process,
+`type = "log"` covers both direct process capture (raw-wasmer, host-process,
 jest) and deployed probes — instance stderr rides the Vector→Loki funnel and
 is readable via app logs on every environment, so the stderr contract works
-even on prod. `type: http` reads the probe's response body (a dedicated
-verdict endpoint or header can join the union later; so can `type: file`
+even on prod. `type = "http"` reads the probe's response body (a dedicated
+verdict endpoint or header can join the union later; so can `type = "file"`
 sidecars for rich per-check detail). Exit codes are deliberately **not** a
 verdict channel: 8 bits with colonized semantics (`1` = generic exception,
 `126`/`127` = exec failures, `128+n` = signals) that wrappers and shells
@@ -343,13 +350,13 @@ For HTTP load, the `load` block is Artillery-native rather than a bespoke DSL
 (WARP-71's explicit recommendation — don't invent a scenario format too
 early):
 
-```yaml
-load:
-  executor: artillery-http
-  artillery:
-    phases: [{ duration: 30, arrivalRate: 100 }]
-    scenarios:
-      - flow: [{ get: { url: "{{ victim.url }}/a" } }]
+```toml
+[load]
+executor = "artillery-http"
+
+[load.artillery-http]
+phases = [{ duration = 30, arrivalRate = 100 }]
+scenarios = [{ flow = [{ get = { url = "{{ victim.url }}/a" } }] }]
 ```
 
 `raw-wasmer` covers Artem's "pure wasmer" wishlist item (QA-541, QA-639):
@@ -363,54 +370,60 @@ The second exemplar translates into everything above plus three additions:
 a probe fixture with two affordances, declared load _profiles_, and a
 positive health signal. The full declaration:
 
-```yaml
-# repros/wax-603/scenario.yaml
-meta:
-  id: WAX-603
-  title: WASIX timed waits on threading primitives never expire
-  lifecycle: { state: open }
-  links:
-    linear: https://linear.app/wasmer/issue/WAX-603
+```toml
+# repros/wax-603/scenario.toml
+[meta]
+id = "WAX-603"
+title = "WASIX timed waits on threading primitives never expire"
+lifecycle = { state = "open" }
 
-fixtures:
-  probes:
-    matrix:
-      source: package:./probe # repro.py + wasmer.toml, in the scenario dir
-      # {{ matrix.path }} always resolves; {{ matrix.url }} deploys the probe
-      # as an app on demand — harness-owned lifecycle, replacing WAX-603's
-      # hand-deployed "temporary — delete when done" apps
-  components:
-    python: registry:python/python@=3.13.5 # package under test; path:… verifies a fix
+[meta.links]
+linear = "https://linear.app/wasmer/issue/WAX-603"
 
-load: # one ACTIVE profile per run; --executor selects among those declared
-  executor: raw-wasmer # default profile: `ass run wax-603`
-  raw-wasmer: # the WAX-603 script's own invocation, declared
-    package: "{{ component.python }}" # the interpreter under test
-    volumes: { "{{ matrix.path }}": /work }
-    args: [/work/repro.py, --once]
-  artillery-http: # `ass run wax-603 --env dev --executor artillery-http`
-    target: "{{ matrix.url }}"
-    scenarios:
-      - flow: [{ get: { url: "/" } }]
+[fixtures.probes.matrix]
+source = "package:./probe" # repro.py + wasmer.toml, in the scenario dir
+# {{ matrix.path }} always resolves; {{ matrix.url }} deploys the probe
+# as an app on demand — harness-owned lifecycle, replacing WAX-603's
+# hand-deployed "temporary — delete when done" apps
 
-verdict:
-  probe: # ASS-VERDICT contract (see "Probe verdict contract"); the probe
-    channels: # emits one line; the harness listens on the declared channels
-      - { type: log, stream: stderr } # local wasmer run / host-process capture
-      - { type: http, match: body } # deployed-probe runs on Edge
-  baseline: # native-engine differential (WAX-603's MODE=native) — see below
-    engine: python3 # host toolchain: python3 | node | go | cargo | binary
-    entry: [repro.py, --once]
-    workdir: "{{ matrix.path }}"
-    expect: not-reproduced # violated => inconclusive (broken probe, not fixed bug)
+[fixtures.components]
+python = "registry:python/python@=3.13.5" # package under test; path:… verifies a fix
+
+# load: one ACTIVE profile per run; --executor selects among those declared
+[load]
+executor = "raw-wasmer" # default profile: `ass run wax-603`
+
+[load.raw-wasmer] # the WAX-603 script's own invocation, declared
+package = "{{ component.python }}" # the interpreter under test
+volumes = { "{{ matrix.path }}" = "/work" }
+args = ["/work/repro.py", "--once"]
+
+[load.artillery-http] # `ass run wax-603 --env dev --executor artillery-http`
+target = "{{ matrix.url }}"
+scenarios = [{ flow = [{ get = { url = "/" } }] }]
+
+# ASS-VERDICT contract (see "Probe verdict contract"); the probe emits one
+# line; the harness listens on the declared channels
+[verdict.probe]
+channels = [
+  { type = "log", stream = "stderr" }, # local wasmer run / host-process capture
+  { type = "http", match = "body" },   # deployed-probe runs on Edge
+]
+
+# native-engine differential (WAX-603's MODE=native) — see below
+[verdict.baseline]
+engine = "python3" # host toolchain: python3 | node | go | cargo | binary
+entry = ["repro.py", "--once"]
+workdir = "{{ matrix.path }}"
+expect = "not-reproduced" # violated => inconclusive (broken probe, not fixed bug)
 ```
 
 Three rules fall out of it. **Profiles**: the load block may declare several
-executor configurations, but exactly one is _active_ per run (`executor:`
+executor configurations, but exactly one is _active_ per run (`executor`
 names the default, `--executor` selects) — this amends the earlier "exactly
 one executor block" phrasing and is what makes MODE=local vs. MODE=dev1 a
 re-run instead of a second scenario. A profile is named after the executor
-that runs it; a profile that names one explicitly (`executor: raw-wasmer`
+that runs it; a profile that names one explicitly (`executor = "raw-wasmer"`
 _inside_ the profile) may be called anything, which is how a scenario
 declares two profiles of the same executor — the shape a "compare two guest
 engine versions" control needs. **Package components**: a component that is
@@ -438,7 +451,7 @@ the native engine; WAX-603's `MODE=native` is that proof, and it is the
 shape ~99% of scenarios should carry. The schema therefore treats the
 baseline as the default requirement, not an optional extra:
 
-- **`verdict.baseline`** declares the native engine (`engine:` names a host
+- **`verdict.baseline`** declares the native engine (`engine` names a host
   toolchain — `python3`, `node`, `go`, `cargo`, or `binary` with an explicit
   `command:` escape hatch), the entry point, and the expected outcome
   (default `not-reproduced`). The engine list is open but known to
@@ -446,7 +459,7 @@ baseline as the default requirement, not an optional extra:
   missing engine degrades the scenario ("baseline not runnable here"), it
   does not block the main load.
 - A persisted scenario must either declare a baseline or **waive it with a
-  reason**: `baseline: { waived: platform-level bug — no native analogue }`.
+  reason**: `baseline = { waived = "platform-level bug — no native analogue" }`.
   WAX-600 waives (there is no "native Edge"); WAX-603 declares `python3`.
   `ass promote` refuses a draft with neither, and records baseline evidence
   (or the waiver) in the provenance README.
@@ -466,7 +479,7 @@ Recommended home: **this repo** (`wasmer-integration-tests`), not
 already lives here — `TestEnv` ([`src/env.ts`](../src/env.ts)) with its
 registry/namespace/token/edge plumbing for all four environments, the
 disposable local platform ([`local-platform/`](../local-platform)) with its
-component-version resolvers (`local.env`, `BACKEND_VERSION`/`EDGE_VERSION`),
+component-version resolvers (`BACKEND_VERSION`/`EDGE_VERSION`),
 Artillery, the Jest suite that doubles as a workload library, and the
 `repros/` convention itself. Rebuilding those in the Edge repo would be pure
 duplication. _Accepted 2026-07-30 by the WARP-71 owner; the repo itself may
@@ -482,10 +495,10 @@ ass/                      # the harness package (QA-634 "stable boundaries")
   report/                 # run report writer (QA-641)
   bootstrap/              # `make ass` detector + SETUP.md agent contract (§7)
 experiments/
-  <slug>/scenario.yaml        # Phase 1 drafts; floats allowed, verdict optional,
+  <slug>/scenario.toml        # Phase 1 drafts; floats allowed, verdict optional,
   <slug>/…                    # never scheduled; ALWAYS committed (see §3)
 repros/
-  <slug>/scenario.yaml        # Phase 2 artifacts, one dir per investigation; pins mandatory
+  <slug>/scenario.toml        # Phase 2 artifacts, one dir per investigation; pins mandatory
   <slug>/README.md            # provenance, generated by `ass promote`, human-edited
 ```
 
@@ -602,8 +615,8 @@ The `repros/` corpus is designed to be operated by agents as much as humans:
   `(scenario, env, executor, thresholds)` as inputs, so any committed repro
   is schedulable (nightly on Bugtopia per QA-643) without further glue.
 - **Promotion path.** A fixed bug's scenario either stays in `repros/` on a
-  schedule (`lifecycle: fixed`, watched for regression), or its workload
-  graduates into the blocking Jest suite (`lifecycle: retired`, pattern:
+  schedule (`lifecycle` fixed, watched for regression), or its workload
+  graduates into the blocking Jest suite (`lifecycle` retired, pattern:
   [`tests/superpanics/`](../tests/superpanics)) — recorded in the typed
   `meta.lifecycle` field, not free-form notes (§4).
 - **`ass audit`.** Because lifecycle is typed, the corpus is a queryable
@@ -617,12 +630,12 @@ The `repros/` corpus is designed to be operated by agents as much as humans:
 
 | Ticket          | Deliverable in this design                                                                                                                                                                                                                |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| QA-634          | `ass/` package skeleton, scenario schema (§4), CLI `list`/`try`/`run`/`promote` on the `local` target with the `jest` executor — enough to replace the WAX-600 shell script with `repros/wax-600/scenario.yaml` as the reference scenario |
+| QA-634          | `ass/` package skeleton, scenario schema (§4), CLI `list`/`try`/`run`/`promote` on the `local` target with the `jest` executor — enough to replace the WAX-600 shell script with `repros/wax-600/scenario.toml` as the reference scenario |
 | QA-635          | `ass/fixtures/` state manager; Doppler identity; template/fixture/package sources                                                                                                                                                         |
 | QA-636          | `backup:` fixture source + `ass fixture export`; blocked on BE-666                                                                                                                                                                        |
 | QA-637          | `executors/contract.ts` — `ResolvedState`/`RunOutcome` types (§5)                                                                                                                                                                         |
 | QA-638          | `artillery-http` executor; generalize the ECO-403 WordPress crawler into a reusable flow generator                                                                                                                                        |
-| QA-639          | `raw-wasmer` executor (binary selection, process-level load) + `host-process` control micro-executor; `repros/wax-603/scenario.yaml` replaces the WAX-603 script's local/native modes as the reference                                    |
+| QA-639          | `raw-wasmer` executor (binary selection, process-level load) + `host-process` control micro-executor; `repros/wax-603/scenario.toml` replaces the WAX-603 script's local/native modes as the reference                                    |
 | QA-640          | remote env targeting (dev/Bugtopia/prod-capped) for all executors; harness-owned probe deployment replaces WAX-603's hand-deployed apps; remote log adapters flagged as follow-up                                                         |
 | QA-641          | report writer (verdict fact + assessment + lifecycle), both reference scenarios (`wax-600`, `wax-603`), `ass audit` local checks, this document's successor                                                                               |
 | QA-642 / QA-643 | pipeline workflow + Bugtopia qualification                                                                                                                                                                                                |

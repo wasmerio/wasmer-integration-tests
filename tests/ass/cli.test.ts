@@ -8,17 +8,17 @@ import path from "node:path";
 import {
   addScenario,
   cli,
-  DRAFT_YAML,
+  DRAFT_TOML,
   makeFakeHarness,
   makeRoot,
-  PERSISTED_YAML,
+  PERSISTED_TOML,
   snapshotTree,
 } from "./helpers";
 
 function makePopulatedRoot(): string {
   const root = makeRoot();
-  addScenario(root, "experiments", "exp-1", DRAFT_YAML);
-  addScenario(root, "repros", "wax-600", PERSISTED_YAML);
+  addScenario(root, "experiments", "exp-1", DRAFT_TOML);
+  addScenario(root, "repros", "wax-600", PERSISTED_TOML);
   return root;
 }
 
@@ -67,7 +67,7 @@ describe("command-to-loader boundary selection", () => {
 
   test("an invalid declaration is an actionable error, exit 1", async () => {
     const root = makeRoot();
-    addScenario(root, "repros", "broken", DRAFT_YAML);
+    addScenario(root, "repros", "broken", DRAFT_TOML);
     const result = await cli(root, ["run", "broken"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("persisted validation");
@@ -154,7 +154,7 @@ describe("override surface (D12)", () => {
   });
 
   test("environment-unevaluable verdicts fail preflight at the CLI", async () => {
-    // PERSISTED_YAML's verdict greps the edge process stream: local-only (D7).
+    // PERSISTED_TOML's verdict greps the edge process stream: local-only (D7).
     const root = makePopulatedRoot();
     const result = await cli(root, ["run", "wax-600", "--env", "dev"]);
     expect(result.code).toBe(1);

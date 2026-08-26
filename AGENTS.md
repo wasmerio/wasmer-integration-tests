@@ -32,9 +32,9 @@ Notes:
 - Run tests by name: npx jest -t "partial test name"
 - Increase logging: VERBOSE=true npx jest … (command/env output is truncated unless VERBOSE=true)
 
-### Failure reproductions (ass)
+### Failure reproductions (ASS)
 
-- `ass` is the declarative failure-reproduction harness (`ass/`, design in `docs/anti-slop-shield-v1.md`). Invoke it as `./bin/ass …` or `pnpm ass …` (`pnpm run` prints a preamble that breaks the harness's single-voice output; `./bin/ass` avoids it).
+- ASS is the declarative failure-reproduction harness (`ass/`, design in `docs/anti-slop-shield-v1.md`). Invoke it as `./bin/ass …` or `pnpm ass …` (`pnpm run` prints a preamble that breaks the harness's single-voice output; `./bin/ass` avoids it).
 - Check the machine: `./bin/ass doctor` — per-capability pass/fail with remediation; missing optional tools degrade one capability each. First-time setup: `make ass` hands the setup contract (`ass/bootstrap/SETUP.md`) to your agent harness.
 - Drafts live in `experiments/<slug>/` and run with `./bin/ass try <slug>`; persisted reproductions live in `repros/<slug>/` and run with `./bin/ass run <slug>`. `./bin/ass promote <slug>` graduates a draft, pinning it to what its last recorded run resolved.
 - Overrides are the same on both (D12): `--env`, `--cpus`, `--executor`, `--component <name>=<selector>`, with `--edge`/`--backend` as sugar. Overriding a component is how a fix is verified; it never edits the declaration.
@@ -51,7 +51,7 @@ Notes:
   - `source .local-platform/current/test-env.sh`
   - `pnpm exec jest tests/validation/log.test.ts --runInBand`
 - Stop the local stack: make local-platform-down
-- Local platform defaults come from `local.env` if present, otherwise `resolve_prod`; see `local.env.example`
+- Local platform configuration is layered TOML read by `cli.py` (`local-platform.local.toml` here, or `local-platform.toml`/`local-platform.local.toml` in a parent repo vendoring this one; env vars win); defaults otherwise `resolve_prod`. See `docs/local-environment-v1.md`.
 - The local platform tooling is dependency-free Python 3.12+ (`local-platform/cli.py` + `local-platform/localplatform/`); the make targets above are thin wrappers around it. The `.mjs` seeding/config helpers under `local-platform/scripts/` are Node and invoked by it.
 - Troubleshooting runbook (log/diagnostic locations, the `*.localhost` Edge-routing gotcha, validation-vs-jest timeouts, dev-vs-local comparison): see `docs/local-environment-v1.md` → "Troubleshooting (agent runbook)". Key rule: reach apps via `env.fetchApp`/`env.fetchAppUrlThroughEdge`, never a raw `fetch` — raw fetch works on dev but hangs on the local stack.
 

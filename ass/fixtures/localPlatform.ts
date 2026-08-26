@@ -1,8 +1,8 @@
-// Driver for the disposable local platform (QA-635): component pins via
-// local.env, local-only perturbations (compose CPU caps, cache wipes), stack
-// lifecycle through local-platform/cli.py, and run-dir readers. Every file it
-// mutates is backed up first and restored by restoreFiles(); a stale backup
-// from a crashed run is a loud error, never silently clobbered.
+// Driver for the disposable local platform (QA-635): component pins via the
+// boot environment, local-only perturbations (compose CPU caps, cache wipes),
+// stack lifecycle through local-platform/cli.py, and run-dir readers. Every
+// file it mutates is backed up first and restored by restoreFiles(); a stale
+// backup from a crashed run is a loud error, never silently clobbered.
 
 import {
   copyFileSync,
@@ -31,7 +31,7 @@ export type ExecFn = (
     env: NodeJS.ProcessEnv;
     cwd: string;
     /** Receives the child's output a line at a time so the presenter can
-     * render it in ass's own voice instead of it escaping to the terminal. */
+     * render it in ASS's own voice instead of it escaping to the terminal. */
     onLine?: (line: string) => void;
   },
 ) => Promise<number>;
@@ -92,10 +92,6 @@ function validateCacheName(service: string, name: string): void {
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
 /** Minimal reader for the generated env files (`export NAME='value'` lines,
  * shlex-quoted by write_env_file). Not a general shell parser. */
 export function parseGeneratedEnvFile(raw: string): Record<string, string> {
@@ -150,6 +146,8 @@ export class LocalPlatformDriver implements PlatformDriver {
   private readonly io: DriverIo;
   /** Files mutated this run, in mutation order. */
   private mutated: string[] = [];
+  /** Component pins for the next up(), passed through its environment. */
+  private pins: Record<string, string> = {};
 
   private readonly dockerWipe?: (dir: string) => void;
   private readonly onLine?: (line: string) => void;
@@ -170,10 +168,6 @@ export class LocalPlatformDriver implements PlatformDriver {
     this.dockerWipe = options.dockerWipe;
     this.onLine = options.onLine;
     this.io = options.io ?? { info: (line) => process.stderr.write(`${line}\n`) };
-  }
-
-  get localEnvPath(): string {
-    return path.join(this.repoDir, "local.env");
   }
 
   get composePath(): string {
@@ -236,21 +230,12 @@ export class LocalPlatformDriver implements PlatformDriver {
     return errors;
   }
 
-  /** Pin component versions by appending to local.env: appended values win
-   * over earlier lines (sequential-source semantics), and local.env itself
-   * wins over ambient env inside the local-platform tooling. */
+  /** Pin component versions for the next up() through its environment: env
+   * beats the developer's TOML config inside the local-platform tooling, and
+   * the spread order beats their ambient env. Nothing touches the disk, so
+   * pins leave no restore obligation. */
   applyPins(pins: Record<string, string>): void {
-    this.backup(this.localEnvPath);
-    const original = existsSync(this.localEnvPath)
-      ? readFileSync(this.localEnvPath, "utf8")
-      : "";
-    const lines = Object.entries(pins).map(
-      ([name, value]) => `export ${name}=${shellQuote(value)}`,
-    );
-    writeFileSync(
-      this.localEnvPath,
-      `${original.replace(/\n?$/, "\n")}# --- ass pins (restored after the run) ---\n${lines.join("\n")}\n`,
-    );
+    this.pins = { ...this.pins, ...pins };
   }
 
   /** Cap a compose service's CPUs by inserting `cpus:` under its service key
@@ -346,8 +331,9 @@ export class LocalPlatformDriver implements PlatformDriver {
       env: {
         ...process.env,
         // The run must stay up between fixture resolution and workload; the
-        // ass cleanup handle owns teardown.
+        // ASS cleanup handle owns teardown.
         LOCAL_PLATFORM_AUTO_DOWN: "0",
+        ...this.pins,
         ...extraEnv,
       },
     });

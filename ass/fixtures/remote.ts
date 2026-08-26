@@ -137,13 +137,13 @@ async function realPlatform(env: RemoteEnv): Promise<RemotePlatform> {
           "node:fs"
         );
         const os = await import("node:os");
-        const { dump } = await import("js-yaml");
         const dir = mkdtempSync(path.join(os.tmpdir(), "ass-probe-"));
         try {
           cpSync(source, dir, { recursive: true });
+          // JSON is valid YAML; app.yaml stays the product's format.
           writeFileSync(
             path.join(dir, "app.yaml"),
-            dump(
+            JSON.stringify(
               AppYaml.parse({
                 kind: "wasmer.io/App.v0",
                 name: randomAppName(),
@@ -151,6 +151,8 @@ async function realPlatform(env: RemoteEnv): Promise<RemotePlatform> {
                 package: ".",
                 ...scaling,
               }),
+              null,
+              2,
             ),
           );
           info = await testEnv.deployAppDir(dir);

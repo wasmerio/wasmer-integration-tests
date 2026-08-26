@@ -27,7 +27,6 @@ import process from "node:process";
 import { URL } from "node:url";
 
 import { execa } from "execa";
-import { dump } from "js-yaml";
 
 const DEFAULT_CONCURRENCY = 10;
 const DEFAULT_COUNT = 1;
@@ -262,14 +261,15 @@ function toRequestPath(url) {
 
 async function runArtillery(urls, concurrency, count, target) {
   const workDir = await mkdtemp(join(tmpdir(), "wordpress-load-test-"));
-  const configPath = join(workDir, "artillery.yml");
+  // Artillery accepts JSON scripts natively.
+  const configPath = join(workDir, "artillery.json");
   const requests = urls.map((url) => ({
     get: { url: toRequestPath(url) },
   }));
 
   await writeFile(
     configPath,
-    dump({
+    JSON.stringify({
       config: {
         target: target.origin,
         http: {
