@@ -4,7 +4,7 @@ ARG IMAGE_MIRROR=docker.io
 
 FROM ${IMAGE_MIRROR}/library/alpine:3.20 AS certs
 
-FROM ${IMAGE_MIRROR}/library/debian:bookworm-slim
+FROM ${IMAGE_MIRROR}/library/debian:trixie-slim
 
 # apt via https: CI egress is :443-only; slim ships no trust store
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
