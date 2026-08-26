@@ -151,7 +151,7 @@ export function summarizeExpansion(world: World): ExpansionPlan {
     throw new ExpansionError(
       `the plan projects ${rawRows.toLocaleString()} raw request rows inside the ` +
         `precision.raw window - over the row budget of ${budget.toLocaleString()}. ` +
-        "Cut `telemetry.rps.base`, shrink `telemetry.precision.raw`, or raise " +
+        "Cut `telemetry.rps.perAppBase`, shrink `telemetry.precision.raw`, or raise " +
         "`telemetry.rowBudget`.",
     );
   }

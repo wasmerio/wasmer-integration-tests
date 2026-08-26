@@ -16,7 +16,7 @@ export interface TrafficTelemetry {
   history: string;
   rawWindow: string;
   rps: {
-    base: number;
+    perAppBase: number;
     spikes: Array<{ at: string; multiplier: number; duration: string }>;
     perApp: Record<string, number>;
   };
@@ -76,6 +76,23 @@ function diurnalFactor(hourOfDay: number): number {
   return 1 + 0.35 * Math.sin(((hourOfDay - 9) / 24) * 2 * Math.PI);
 }
 
+/** Mean of a raw weight draw (`0.4 + uniform[0,1)`), the divisor that makes
+ * per-app shares average 1 so `perAppBase` is the expected per-app rps. */
+const MEAN_RAW_WEIGHT = 0.9;
+
+/** Count-stable per-app traffic shares (mean ~1). App `i`'s share depends
+ * only on its own draw — never on the portfolio size — so growing or
+ * shrinking `apps.count` appends or drops apps without re-declaring the
+ * survivors' traffic. The portfolio total is `perAppBase × count` by
+ * expectation, not a fixed pie. */
+export function appTrafficShares(seed: number, appCount: number): number[] {
+  const stream = seededRandom(seed).fork("app-weights");
+  return Array.from(
+    { length: Math.max(1, appCount) },
+    () => (0.4 + stream.next()) / MEAN_RAW_WEIGHT,
+  );
+}
+
 /** Largest-share split of an hour's total across apps: exact sum, stable
  * order. */
 export function splitCount(total: number, weights: number[]): number[] {
@@ -128,17 +145,11 @@ export function expandTraffic(
   const rawStartMs = nowMs - rawWindowMs;
 
   const root = seededRandom(seed);
-  const weightStream = root.fork("app-weights");
-  const weightsRaw = Array.from(
-    { length: Math.max(1, appCount) },
-    () => 0.4 + weightStream.next(),
-  );
-  const weightSum = weightsRaw.reduce((sum, weight) => sum + weight, 0);
-  const weights = weightsRaw.map((weight) => weight / weightSum);
-  if (multipliers !== undefined && multipliers.length !== weights.length) {
+  const shares = appTrafficShares(seed, appCount);
+  if (multipliers !== undefined && multipliers.length !== shares.length) {
     throw new Error(
       `per-app multipliers cover ${multipliers.length} apps but the ` +
-        `portfolio has ${weights.length}`,
+        `portfolio has ${shares.length}`,
     );
   }
 
@@ -160,10 +171,11 @@ export function expandTraffic(
     const hourStartMs = hour * HOUR_MS;
     const stream = root.fork(`traffic-h${hour}`);
     const jitter = 0.85 + 0.3 * stream.next();
-    let count = telemetry.rps.base * 3600 * diurnalFactor(hour % 24) * jitter;
+    let hourBase =
+      telemetry.rps.perAppBase * 3600 * diurnalFactor(hour % 24) * jitter;
     for (const spike of spikes) {
       if (hourStartMs >= spike.from - HOUR_MS + 1 && hourStartMs < spike.to) {
-        count *= spike.multiplier;
+        hourBase *= spike.multiplier;
       }
     }
     let errPermille = basePermille;
@@ -172,10 +184,11 @@ export function expandTraffic(
         errPermille = burst.permille;
       }
     }
-    let perApp = splitCount(Math.max(0, Math.round(count)), weights);
-    if (multipliers !== undefined) {
-      perApp = perApp.map((part, app) => Math.round(part * multipliers[app]));
-    }
+    // Each app's count is a pure function of its own share — the hour's
+    // portfolio total is the sum, never a pie that a count change re-splits.
+    const perApp = shares.map((share, app) =>
+      Math.max(0, Math.round(hourBase * share * (multipliers?.[app] ?? 1))),
+    );
     hours.push({
       start: hour * 3600,
       count: perApp.reduce((sum, part) => sum + part, 0),
@@ -253,7 +266,7 @@ export function expandTraffic(
 
   return {
     hours,
-    perApp: weights.map((weight) => ({ weight })),
+    perApp: shares.map((weight) => ({ weight })),
     workloadHours,
     daily: [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
     totalRequests,

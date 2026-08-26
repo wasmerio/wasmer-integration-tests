@@ -58,7 +58,7 @@ const V2_TOML = [
   'history = "2d"',
   'precision = { raw = "3h" }',
   "[telemetry.rps]",
-  "base = 2",
+  "perAppBase = 1",
   "[billing]",
   'plan = "scale"',
   'subscription = "active"',
@@ -69,10 +69,10 @@ const V2_TOML = [
 /** The v1 spelling of the same world: root assSchema = 1, inline account,
  * `rawWindow` instead of `precision.raw`. Auto-upgrade must make the two
  * indistinguishable. */
-const V1_SHAPED_TOML = V2_TOML.replace(
-  "assSchema = 2",
-  "assSchema = 1",
-).replace('precision = { raw = "3h" }', 'rawWindow = "3h"');
+const V1_SHAPED_TOML = V2_TOML.replace("assSchema = 2", "assSchema = 1")
+  .replace('precision = { raw = "3h" }', 'rawWindow = "3h"')
+  // v1 spells a portfolio total; base 2 over 2 apps upgrades to exactly 1.
+  .replace("perAppBase = 1", "base = 2");
 
 const MINIMAL_V1_TOML = [
   "assSchema = 1",

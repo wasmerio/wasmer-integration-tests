@@ -4,6 +4,7 @@
 // runs with no platform at all and every expansion is unit-testable.
 
 import {
+  appTrafficShares,
   splitCount,
   expandTraffic,
   type TrafficModel,
@@ -38,6 +39,7 @@ export interface WorldApp {
   /** section 13: "deployed" goes through the API, "fabricated" is a direct
    * write by definition. */
   realism: "deployed" | "fabricated";
+  /** Count-stable traffic share (mean ~1), from `appTrafficShares`. */
   weight: number;
   /** Per-app raw precision window in ms, from `telemetry.precision`. */
   rawWindowMs: number;
@@ -137,21 +139,15 @@ export function buildWorld(input: {
   const telemetry = declaration.telemetry;
   const defaultRawMs =
     telemetry === undefined ? 0 : parseDurationMs(telemetry.precision.raw);
-  // The traffic model's weight stream, mirrored exactly so the world and
-  // the model agree on per-app shares.
-  const weightStream = seededRandom(seed).fork("app-weights");
-  const rawWeights = Array.from(
-    { length: Math.max(1, count) },
-    () => 0.4 + weightStream.next(),
-  );
-  const weightSum = rawWeights.reduce((sum, weight) => sum + weight, 0);
+  // Count-stable per-app traffic shares, shared with the traffic model.
+  const shares = appTrafficShares(seed, count);
 
   const apps: WorldApp[] = names.map((name, index) => ({
     index,
     name,
     fixture: fixtures[index] ?? "static-site",
     realism: index < realCount ? "deployed" : "fabricated",
-    weight: rawWeights[index] / weightSum,
+    weight: shares[index],
     rawWindowMs:
       telemetry === undefined
         ? 0

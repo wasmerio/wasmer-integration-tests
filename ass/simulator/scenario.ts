@@ -219,7 +219,10 @@ const telemetrySchema = z.strictObject({
     apps: {},
   }),
   rps: z.strictObject({
-    base: z.number().positive(),
+    /** Expected requests/sec *per app* (count-stable): the portfolio total
+     * is `perAppBase × apps.count` by expectation, so changing the count
+     * never re-declares the surviving apps' traffic. */
+    perAppBase: z.number().positive(),
     spikes: z.array(spikeSchema).default([]),
     perApp: z.record(z.string(), z.number().positive()).default({}),
   }),
@@ -314,8 +317,13 @@ export function parseOffsetMs(text: string): number {
   return negative ? -total : total;
 }
 
-/** assSchema 1 -> 2. The only shape change is precision: the old
- * `rawWindow` becomes `precision.raw`; everything else is a superset. */
+/** assSchema 1 -> 2. Two shape changes: the old `rawWindow` becomes
+ * `precision.raw`, and the old portfolio-total `rps.base` becomes the
+ * count-stable `rps.perAppBase` (`base / apps.count`, so the file keeps its
+ * approximate total). Everything else is a superset. Note the conversion
+ * reads the count *after* `--set` overrides, so count tweaks on a v1 file
+ * still rebalance — migrate the file to assSchema 2 for count-stable
+ * tweaks. */
 export function upgradeV1(
   raw: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -338,6 +346,22 @@ export function upgradeV1(
         raw: typeof rawWindow === "string" ? rawWindow : "48h",
         apps: {},
       };
+    }
+    const rps = block["rps"];
+    if (rps !== undefined && rps !== null && typeof rps === "object") {
+      const rpsBlock = { ...(rps as Record<string, unknown>) };
+      const base = rpsBlock["base"];
+      if (typeof base === "number" && rpsBlock["perAppBase"] === undefined) {
+        const apps = raw["apps"];
+        const count =
+          apps !== null && typeof apps === "object"
+            ? (apps as Record<string, unknown>)["count"]
+            : undefined;
+        rpsBlock["perAppBase"] =
+          base / Math.max(1, typeof count === "number" ? count : 1);
+        delete rpsBlock["base"];
+      }
+      block["rps"] = rpsBlock;
     }
     upgraded["telemetry"] = block;
   }
@@ -381,6 +405,21 @@ export function validateDeclaration(
       `${sourcePath}: unsupported assSchema ${JSON.stringify(record["assSchema"])}; ` +
         `this ASS build supports assSchema = 1 and ${SUPPORTED_SCHEMA}.`,
     );
+  }
+  // A named refusal beats zod's "unrecognized key" for the one renamed
+  // field whose meaning also changed.
+  const telemetryBlock = record["telemetry"];
+  if (telemetryBlock !== null && typeof telemetryBlock === "object") {
+    const rps = (telemetryBlock as Record<string, unknown>)["rps"];
+    if (rps !== null && typeof rps === "object" && "base" in rps) {
+      throw new SimulatorLoadError(
+        `${sourcePath}: telemetry.rps.base (a portfolio-wide total, re-split ` +
+          "across apps on every count change) was replaced by rps.perAppBase " +
+          "(expected rps per app, count-stable). Declare " +
+          "`perAppBase = <old base> / apps.count`; assSchema = 1 files " +
+          "convert automatically.",
+      );
+    }
   }
   try {
     return declarationSchema.parse(record);

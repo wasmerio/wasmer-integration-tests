@@ -72,7 +72,7 @@ function declaration(
     telemetry: {
       history: "2d",
       precision: { raw: "2h" },
-      rps: { base: 1 },
+      rps: { perAppBase: 1 },
       errorRate: { base: 0.01 },
     },
     billing: {
@@ -214,7 +214,7 @@ describe("expansion (declaration half)", () => {
           telemetry: {
             history: "2d",
             precision: { raw: "2h", apps: { "noble-reef-1": { raw: "24h" } } },
-            rps: { base: 1 },
+            rps: { perAppBase: 1 },
           },
         }),
         "request-bucket",
@@ -238,7 +238,7 @@ describe("expansion (declaration half)", () => {
           telemetry: {
             history: "2d",
             precision: { raw: "48h" },
-            rps: { base: 500 },
+            rps: { perAppBase: 250 },
             rowBudget: 1000,
           },
         }),
@@ -253,7 +253,7 @@ describe("expansion (declaration half)", () => {
           telemetry: {
             history: "30d",
             precision: { raw: "2h" },
-            rps: { base: 1 },
+            rps: { perAppBase: 1 },
             logs: [{ app: "noble-reef-1", at: "-20d", message: "too old" }],
           },
         }),
@@ -267,11 +267,43 @@ describe("expansion (declaration half)", () => {
       assSchema: 1,
       name: "legacy",
       account: { username: "u", password: "p", namespace: "n" },
-      telemetry: { history: "90d", rawWindow: "48h", rps: { base: 1 } },
+      apps: { count: 4 },
+      telemetry: { history: "90d", rawWindow: "48h", rps: { base: 10 } },
     });
     const parsed = validateDeclaration(upgraded, "legacy.toml");
     expect(parsed.assSchema).toBe(2);
     expect(parsed.telemetry?.precision.raw).toBe("48h");
+    // The portfolio-total base becomes the count-stable per-app mean.
+    expect(parsed.telemetry?.rps.perAppBase).toBe(2.5);
+  });
+
+  it("refuses rps.base on an assSchema=2 declaration, naming the migration", () => {
+    expect(() =>
+      validateDeclaration(
+        declaration({
+          telemetry: { history: "2d", rps: { base: 40 } },
+        }),
+        "unit.toml",
+      ),
+    ).toThrow(/perAppBase/);
+  });
+
+  it("keeps existing apps' traffic verbatim when apps.count grows", () => {
+    const small = world();
+    const large = world({
+      apps: { count: 3, real: 0, deployments: { perApp: 2, failed: 1 } },
+    });
+    expect(large.traffic).not.toBeNull();
+    for (const [index, hour] of small.traffic!.hours.entries()) {
+      expect(large.traffic!.hours[index].perApp.slice(0, 2)).toEqual(
+        hour.perApp,
+      );
+    }
+    for (const [index, hour] of small.traffic!.workloadHours.entries()) {
+      expect(large.traffic!.workloadHours[index].perApp.slice(0, 2)).toEqual(
+        hour.perApp,
+      );
+    }
   });
 
   it("parses compound sub-second offsets", () => {
