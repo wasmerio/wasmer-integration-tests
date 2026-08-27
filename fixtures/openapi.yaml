@@ -211,9 +211,12 @@ paths:
         vars all present or all absent, never partially injected),
         `db-connect` (with credentials injected a real connection must
         succeed, mirroring checkDbConnection; without them the check passes
-        as cleanly database-less), `counter-default` and `counter-named`
-        (a read and an increment behave per durable-state; the named check
-        uses the reserved counter name `self-test`), `counter-invalid-name`
+        as cleanly database-less), `counter-durability` (a read and an
+        increment round-trip through the durable volume, on a counter named
+        `self-test-<random>` that belongs to this workload alone — the
+        shared counters carry concurrent writes from every other instance
+        and no cross-node read coherence, so their value supports no
+        invariant a probe could assert), `counter-invalid-name`
         (a name outside `^[a-z-]+$` is rejected), and `echo` (the
         catch-all payload is well-formed, unique hash included).
         Implementations may not add further checks; a report is comparable
@@ -226,9 +229,8 @@ paths:
         outbound-http and WebSocket capabilities are deliberately excluded
         here and covered by their own endpoints instead.
 
-        The counter checks mutate durable state — each run increments the
-        default counter and the `self-test` counter — every other check is
-        side-effect free. Like `/ws`, this path is excluded from the
+        The counter check mutates durable state — each run increments this
+        workload's own counter — every other check is side-effect free. Like `/ws`, this path is excluded from the
         catch-all and emits no catch-all log line.
       responses:
         "200":
