@@ -1,7 +1,7 @@
 [
   {
     "id": "general",
-    "test_command": "npx jest ./tests/general/ ./tests/utils/ ./tests/validation/fixture-contract-specs.test.ts"
+    "test_command": "npx jest ./tests/general/ ./tests/utils/ ./tests/validation/fixture-contract-specs.test.ts ./tests/validation/fixture-self-test.test.ts"
   },
   {
     "id": "jobs",

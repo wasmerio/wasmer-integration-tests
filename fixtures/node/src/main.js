@@ -180,8 +180,9 @@ async function checkDbConnection() {
 
 // --- durable-state --------------------------------------------------------
 
-// The server is a single process, so a per-counter promise chain makes
-// read-modify-write cycles atomic under concurrent requests.
+// A per-counter promise chain serialises read-modify-write cycles inside
+// this process. It says nothing about the other instances sharing the
+// volume, so the write itself has to be atomic: see counterValue.
 const COUNTER_NAME_RE = /^[a-z-]+$/;
 
 const counterLocks = new Map();
@@ -198,7 +199,13 @@ function counterValue(name, increment) {
     const file = path.join(DATA_DIR, name);
     let value = 0;
     try {
-      value = parseInt(await fs.readFile(file, "utf-8"), 10) || 0;
+      const raw = (await fs.readFile(file, "utf-8")).trim();
+      // A torn read must not look like a fresh counter, or the file gets
+      // reset to 1 and every concurrent probe sees it go backwards.
+      if (!/^\d+$/.test(raw)) {
+        throw new Error(`counter ${name} holds a non-integer value: ${raw}`);
+      }
+      value = parseInt(raw, 10);
     } catch (err) {
       if (err.code !== "ENOENT") {
         throw err;
@@ -206,7 +213,11 @@ function counterValue(name, increment) {
     }
     if (increment) {
       value++;
-      await fs.writeFile(file, String(value));
+      // Instances on other nodes read this file concurrently and rename is
+      // atomic, so none of them can observe the truncated intermediate.
+      const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+      await fs.writeFile(tmp, String(value));
+      await fs.rename(tmp, file);
     }
     return value;
   });
@@ -548,18 +559,35 @@ function checkExpect(condition, message) {
   }
 }
 
-async function checkCounter(name) {
-  const before = await counterValue(name, false);
-  const after = await counterValue(name, true);
-  checkExpect(
-    Number.isInteger(before) && Number.isInteger(after),
-    `counter ${name} did not read as an integer`,
-  );
-  // Strictly greater rather than +1: concurrent probes may interleave.
-  checkExpect(
-    after > before,
-    `counter ${name} did not advance (${before} -> ${after})`,
-  );
+// The shared counters cannot be asserted from a probe: every instance on the
+// volume increments them concurrently, and the volume gives no cross-node
+// read coherence, so no invariant over their value holds however the write
+// is implemented. Sharing and restart durability stay in the contract suite,
+// which controls the environment.
+//
+// A counter nobody else can name is enough to prove the volume round-trips a
+// write: the second increment can only read 2 if the first one persisted and
+// came back. Removed afterwards, so probing leaves nothing behind.
+function probeCounterName() {
+  let suffix = "";
+  while (suffix.length < 12) {
+    suffix += String.fromCharCode(97 + Math.floor(Math.random() * 26));
+  }
+  return `self-test-${suffix}`;
+}
+
+async function checkDurableCounter() {
+  const name = probeCounterName();
+  try {
+    const first = await counterValue(name, true);
+    const second = await counterValue(name, true);
+    checkExpect(
+      first === 1 && second === 2,
+      `durable counter did not round-trip: expected 1 then 2, got ${first} then ${second}`,
+    );
+  } finally {
+    await fs.unlink(path.join(DATA_DIR, name)).catch(() => {});
+  }
 }
 
 async function handleSelfTest(res) {
@@ -592,12 +620,7 @@ async function handleSelfTest(res) {
       }
     }),
   );
-  checks.push(
-    await runCheck("counter-default", () => checkCounter("counter")),
-  );
-  checks.push(
-    await runCheck("counter-named", () => checkCounter("self-test")),
-  );
+  checks.push(await runCheck("counter-durability", checkDurableCounter));
   checks.push(
     await runCheck("counter-invalid-name", () => {
       checkExpect(

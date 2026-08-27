@@ -6,8 +6,10 @@
 import asyncio
 import json
 import os
+import random
 import re
 import ssl
+import string
 import sys
 import time
 from datetime import datetime
@@ -165,8 +167,9 @@ async def check_db_connection_endpoint():
 
 # --- durable-state ----------------------------------------------------------
 
-# The server is a single process, so a per-counter asyncio lock makes
-# read-modify-write cycles atomic under concurrent requests.
+# A per-counter asyncio lock serialises read-modify-write cycles inside this
+# process. It says nothing about the other instances sharing the volume, so
+# the write itself has to be atomic: see counter_value.
 _counter_locks = {}
 
 
@@ -182,15 +185,22 @@ async def counter_value(name, increment):
         value = 0
         try:
             with open(file, "r", encoding="utf-8") as handle:
-                value = int(handle.read() or "0")
+                raw = handle.read().strip()
+            # A torn read must not look like a fresh counter, or the file gets
+            # reset to 1 and every concurrent probe sees it go backwards.
+            if not re.fullmatch(r"\d+", raw):
+                raise ValueError(f"counter {name} holds a non-integer value: {raw!r}")
+            value = int(raw)
         except FileNotFoundError:
             pass
-        except ValueError:
-            value = 0
         if increment:
             value += 1
-            with open(file, "w", encoding="utf-8") as handle:
+            # Instances on other nodes read this file concurrently and replace
+            # is atomic, so none of them can observe the truncated intermediate.
+            tmp = f"{file}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
                 handle.write(str(value))
+            os.replace(tmp, file)
         return value
 
 
@@ -557,11 +567,36 @@ async def check_db_connect():
         )
 
 
-async def check_counter(name):
-    before = await counter_value(name, increment=False)
-    after = await counter_value(name, increment=True)
-    # Strictly greater rather than +1: concurrent probes may interleave.
-    check_expect(after > before, f"counter {name} did not advance ({before} -> {after})")
+# The shared counters cannot be asserted from a probe: every instance on the
+# volume increments them concurrently, and the volume gives no cross-node read
+# coherence, so no invariant over their value holds however the write is
+# implemented. Sharing and restart durability stay in the contract suite,
+# which controls the environment.
+#
+# A counter nobody else can name is enough to prove the volume round-trips a
+# write: the second increment can only read 2 if the first one persisted and
+# came back. Removed afterwards, so probing leaves nothing behind.
+def probe_counter_name():
+    return "self-test-" + "".join(
+        random.choice(string.ascii_lowercase) for _ in range(12)
+    )
+
+
+async def check_durable_counter():
+    name = probe_counter_name()
+    try:
+        first = await counter_value(name, increment=True)
+        second = await counter_value(name, increment=True)
+        check_expect(
+            first == 1 and second == 2,
+            f"durable counter did not round-trip: expected 1 then 2, "
+            f"got {first} then {second}",
+        )
+    finally:
+        try:
+            os.remove(os.path.join(DATA_DIR, name))
+        except OSError:
+            pass
 
 
 async def check_counter_invalid_name():
@@ -589,8 +624,7 @@ async def self_test():
     checks = [
         await run_check("db-env", check_db_env),
         await run_check("db-connect", check_db_connect),
-        await run_check("counter-default", lambda: check_counter("counter")),
-        await run_check("counter-named", lambda: check_counter("self-test")),
+        await run_check("counter-durability", check_durable_counter),
         await run_check("counter-invalid-name", check_counter_invalid_name),
         await run_check("echo", check_echo),
     ]

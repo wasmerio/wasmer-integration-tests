@@ -175,26 +175,44 @@ function checkDbConnection(): string
 
 // --- durable-state ----------------------------------------------------------
 
-// flock-based: phpix runs a pool of PHP worker threads, and instances share
-// the volume, so the exclusive lock is what makes increments atomic.
+// phpix runs a pool of PHP worker threads, so an exclusive lock serialises
+// increments inside this instance. It does not reach the other instances
+// sharing the volume, so the write itself has to be atomic as well. The lock
+// lives on its own file because rename() swaps the counter's inode out.
 function counterValue(string $name, bool $increment): int
 {
-    $counter = fopen(dataDir() . '/' . $name, 'c+');
-    if ($counter === false || !flock($counter, LOCK_EX)) {
+    $file = dataDir() . '/' . $name;
+    $lock = fopen(dataDir() . '/.lock-' . $name, 'c');
+    if ($lock === false || !flock($lock, LOCK_EX)) {
         throw new Exception('Failed to access durable counter storage');
     }
-    rewind($counter);
-    $value = (int) stream_get_contents($counter);
-    if ($increment) {
-        $value++;
-        ftruncate($counter, 0);
-        rewind($counter);
-        fwrite($counter, (string) $value);
-        fflush($counter);
+    try {
+        $value = 0;
+        clearstatcache(true, $file);
+        if (is_file($file)) {
+            $raw = trim((string) file_get_contents($file));
+            // A torn read must not look like a fresh counter, or the file gets
+            // reset to 1 and every concurrent probe sees it go backwards.
+            if (!preg_match('/^\d+$/', $raw)) {
+                throw new Exception("counter $name holds a non-integer value: $raw");
+            }
+            $value = (int) $raw;
+        }
+        if ($increment) {
+            $value++;
+            // Instances on other nodes read this file concurrently and rename
+            // is atomic, so none can observe the truncated intermediate.
+            $tmp = $file . '.' . getmypid() . '.' . hrtime(true) . '.tmp';
+            if (file_put_contents($tmp, (string) $value) === false || !rename($tmp, $file)) {
+                @unlink($tmp);
+                throw new Exception('Failed to access durable counter storage');
+            }
+        }
+        return $value;
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
     }
-    flock($counter, LOCK_UN);
-    fclose($counter);
-    return $value;
 }
 
 function handleCounter(array $segments, string $method): void
@@ -337,12 +355,38 @@ function runCheck(string $name, callable $fn): array
     }
 }
 
-function checkCounter(string $name): void
+// The shared counters cannot be asserted from a probe: every instance on the
+// volume increments them concurrently, and the volume gives no cross-node
+// read coherence, so no invariant over their value holds however the write is
+// implemented. Sharing and restart durability stay in the contract suite,
+// which controls the environment.
+//
+// A counter nobody else can name is enough to prove the volume round-trips a
+// write: the second increment can only read 2 if the first one persisted and
+// came back. Removed afterwards, so probing leaves nothing behind.
+function probeCounterName(): string
 {
-    $before = counterValue($name, false);
-    $after = counterValue($name, true);
-    // Strictly greater rather than +1: concurrent probes may interleave.
-    checkExpect($after > $before, "counter $name did not advance ($before -> $after)");
+    $suffix = '';
+    for ($i = 0; $i < 12; $i++) {
+        $suffix .= chr(97 + random_int(0, 25));
+    }
+    return "self-test-$suffix";
+}
+
+function checkDurableCounter(): void
+{
+    $name = probeCounterName();
+    try {
+        $first = counterValue($name, true);
+        $second = counterValue($name, true);
+        checkExpect(
+            $first === 1 && $second === 2,
+            "durable counter did not round-trip: expected 1 then 2, got $first then $second",
+        );
+    } finally {
+        @unlink(dataDir() . '/' . $name);
+        @unlink(dataDir() . '/.lock-' . $name);
+    }
 }
 
 function handleSelfTest(): void
@@ -371,8 +415,7 @@ function handleSelfTest(): void
             );
         }
     });
-    $checks[] = runCheck('counter-default', fn() => checkCounter('counter'));
-    $checks[] = runCheck('counter-named', fn() => checkCounter('self-test'));
+    $checks[] = runCheck('counter-durability', fn() => checkDurableCounter());
     $checks[] = runCheck('counter-invalid-name', function (): void {
         checkExpect(
             preg_match(COUNTER_NAME_PATTERN, 'NOT-VALID') !== 1

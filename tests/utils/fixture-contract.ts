@@ -338,9 +338,8 @@ export interface SelfTestReport {
  * node. Outbound HTTP and WebSocket stay covered by their own endpoints.
  */
 export const SELF_TEST_CHECKS = [
-  "counter-default",
+  "counter-durability",
   "counter-invalid-name",
-  "counter-named",
   "db-connect",
   "db-env",
   "echo",
