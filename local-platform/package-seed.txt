@@ -27,6 +27,7 @@ wasmer/edgejs-quickjs@=0.0.7
 wasmer/edgejs-quickjs@=0.0.6
 wasmer/edgejs-quickjs@=0.1.0
 wasmer/edgejs-quickjs@=0.1.4
+wasmer/edgejs-quickjs@=0.2.0
 wasmer/pandoc@=0.0.1
 phpix/phpix-83-32bit@=0.3.0-rc.5
 phpix/phpix-83-64bit@=0.3.0-rc.5
