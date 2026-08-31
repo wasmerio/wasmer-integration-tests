@@ -421,6 +421,12 @@ export async function runScenario(
       title: scenario.meta.title,
       slug: loaded.slug,
       lifecycle: scenario.meta.lifecycle,
+      ...(scenario.meta.links === undefined
+        ? {}
+        : { links: scenario.meta.links }),
+      ...(scenario.meta.details === undefined
+        ? {}
+        : { details: scenario.meta.details }),
     },
     target: { env: overrides.env, mode },
     selectors: effective.components,

@@ -45,6 +45,11 @@ const metaSchema = z.strictObject({
   title: z.string().min(1),
   lifecycle: lifecycleSchema.optional(),
   links: z.record(z.string().min(1)).optional(),
+  /** What a reader needs to interpret the verdict: what the run already rules
+   * out, and where to look next. Shown in the summary, because a repro is read
+   * by someone who was not in the investigation. Keep it to a few lines — the
+   * long version belongs in the README the links point at. */
+  details: z.string().min(1).optional(),
 });
 
 // fixtures
@@ -448,6 +453,7 @@ export interface Scenario {
     title: string;
     lifecycle: Lifecycle;
     links?: Record<string, string>;
+    details?: string;
   };
   fixtures: z.infer<typeof fixturesSchema>;
   load: Load;

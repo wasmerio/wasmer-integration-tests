@@ -1,0 +1,75 @@
+[meta]
+id = "WAX-609"
+title = "Repeated database connect/close never plateaus in the guest"
+lifecycle = { state = "open" }
+
+details = """
+Three arms run every time; the verdict is the difference between them.
+  workload   wasix Node, TLS      expect reproduced
+  baseline   host Node, TLS       expect not-reproduced - rules out the fixture's JS
+  plaintext  wasix Node, no TLS   expect not-reproduced - rules out sockets
+
+Under test: connect -> SSLRequest -> TLS handshake -> StartupMessage -> close.
+Growth survives a forced collection on both sides, so it is native allocator
+memory, not JS heap. The memory curve and a CSV of the samples are in the
+workload output below.
+
+Verify a fix:  PROBE_JS_PACKAGE=/path/to/build pnpm ass run <this scenario>
+If a control flips, distrust the measurement before the runtime: unforced, a
+healthy host reads as a leak.
+"""
+
+[meta.links]
+linear = "https://linear.app/wasmer/issue/WAX-609"
+kb = "https://github.com/wasmerio/hivemind/blob/main/knowledge/06-observability/2026-08-31-cloudprober-node-probe-fixture-oom-flake.md"
+
+# probe/repro.mjs is the connect/close cycle from fixtures/node/src/main.js and
+# nothing else. It only generates load; measure.mjs watches it from the host
+# and issues the verdict, because the guest cannot see its own memory (rss 0,
+# heapTotal below heapUsed, no globalThis.gc) and a JS-heap figure would miss a
+# leak that lives in native allocator memory.
+[fixtures.probes.leak]
+source = "package:./probe"
+executors = ["jest"]
+
+[load]
+executor = "jest"
+
+# A jest workload, not raw-wasmer: the measurement has to happen outside the
+# guest, and raw-wasmer only spawns it and reads its output. The cost is that
+# `load.jest` has no env: of its own, so --component cannot reach the runtime;
+# name it with PROBE_JS_PACKAGE instead (default wasmer/edgejs-quickjs@=0.2.0,
+# which despite the name is Node 24.13.2 built for wasix).
+#
+# No setup: measure.mjs starts the TLS database peer in-process (peer.mjs).
+# jest matches `spec` as a regex against test paths, so this is a distinctive
+# filename rather than a path — a path would have to name experiments/ or
+# repros/ and would break on promotion.
+[load.jest]
+spec = "wax-609-leak.test.ts"
+timeoutSeconds = 1200
+
+# The A/B arm: identical cycle, peer without TLS. Declared as a control so
+# every run proves the localisation instead of asking the reader to take it on
+# trust — sockets alone leak ~1.1 KB/cycle and plateau.
+[load.plaintext]
+executor = "jest"
+spec = "wax-609-plaintext-control.test.ts"
+timeoutSeconds = 600
+
+[verdict.probe]
+channels = [{ type = "log", stream = "stderr" }]
+
+# The whole claim, as a measured divergence rather than an assertion. Both
+# sides run the same probe for the same wall-clock time against the same
+# database; only the runtime differs. The baseline's 300 s harness backstop is
+# why the probe is time-bounded at 180 s rather than cycle-bounded.
+[verdict.controls.plaintext]
+executor = "plaintext"
+expect = "not-reproduced"
+
+[verdict.baseline]
+engine = "node"
+entry = ["measure.mjs", "--target", "host"]
+workdir = "{{ leak.path }}/.."
+expect = "not-reproduced"

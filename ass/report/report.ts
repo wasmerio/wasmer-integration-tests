@@ -63,6 +63,12 @@ export interface RunReport {
     title: string;
     slug: string;
     lifecycle: Lifecycle;
+    /** meta.links — where a reader goes to understand the finding. Surfaced
+     * in the summary because a repro handed to someone else is only as useful
+     * as the context it can point at. */
+    links?: Record<string, string>;
+    /** meta.details — how to read the verdict. */
+    details?: string;
   };
   target: { env: TargetEnv; mode: RunMode };
   /** Effective selectors (declaration + overrides) per component. */
@@ -107,6 +113,9 @@ const runReportSchema = z.object({
     title: z.string(),
     slug: z.string().min(1),
     lifecycle: z.unknown(),
+    // Optional so reports written before links were carried stay valid.
+    links: z.record(z.string()).optional(),
+    details: z.string().optional(),
   }),
   target: z.object({
     env: z.enum(["local", "dev", "bugtopia", "prod"]),
@@ -406,9 +415,27 @@ export function formatSummary(
   blocks.push({ key: "assessment", lines: assessment });
 
   if (report.verdict !== null) {
+    // Wrapped, not truncated: this is the sentence the whole run exists to
+    // produce, and its numbers live at the end of it.
     blocks.push({
       key: "verdict",
-      lines: [truncate(report.verdict.reason, valueWidth)],
+      lines: wrap(report.verdict.reason, valueWidth),
+    });
+  }
+
+  // How to read that verdict, from the scenario author to whoever is holding
+  // the terminal.
+  if (report.scenario.details !== undefined) {
+    const detail = report.scenario.details.split("\n");
+    while (detail.length > 0 && detail[0].trim() === "") detail.shift();
+    while (detail.length > 0 && detail[detail.length - 1].trim() === "") detail.pop();
+    blocks.push({
+      key: "details",
+      // Author-formatted prose: a line that fits keeps its spacing, so small
+      // tables survive. An over-long line still has to reflow.
+      lines: detail.flatMap((line) =>
+        line.trim() === "" ? [null] : wrap(line, valueWidth),
+      ),
     });
   }
 
@@ -466,6 +493,22 @@ export function formatSummary(
     });
   }
 
+  // Everything the workload printed, on every run. A reproduction that says
+  // only "reproduced" leaves its reader with nowhere to go next; the captured
+  // streams are where the detail already is.
+  const workloadLogs = Object.entries(report.workload?.logs ?? {});
+  if (workloadLogs.length > 0) {
+    const pad = Math.max(...workloadLogs.map(([name]) => name.length)) + 2;
+    blocks.push({
+      key: "output",
+      lines: workloadLogs.map(
+        ([name, logPath]) =>
+          `${tint(name.padEnd(pad), KEY_RGB, { color: s.enabled, depth })}` +
+          relativizePath(logPath, options.cwd),
+      ),
+    });
+  }
+
   const componentNames = Object.keys(report.components);
   if (componentNames.length > 0) {
     const pad = Math.max(...componentNames.map((name) => name.length)) + 2;
@@ -512,6 +555,24 @@ export function formatSummary(
       }
     });
     blocks.push({ key: "evidence", lines });
+  }
+
+  // Where to read more. A reproduction is handed to someone who was not in the
+  // investigation, so the ticket and the write-up belong in the run output, not
+  // only in the scenario file they may never open.
+  const linkNames = Object.keys(report.scenario.links ?? {});
+  if (linkNames.length > 0) {
+    const links = report.scenario.links ?? {};
+    const pad = Math.max(...linkNames.map((name) => name.length)) + 2;
+    blocks.push({
+      key: "links",
+      // Never truncated: a cut URL cannot be opened.
+      lines: linkNames.map(
+        (name) =>
+          `${tint(name.padEnd(pad), KEY_RGB, { color: s.enabled, depth })}` +
+          links[name],
+      ),
+    });
   }
 
   const pairOptions = { color: s.enabled, depth, width: valueWidth };
