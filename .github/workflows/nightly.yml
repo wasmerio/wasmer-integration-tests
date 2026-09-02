@@ -19,6 +19,7 @@ jobs:
     uses: ./.github/workflows/integration-test-workflow.yaml
     with:
       test_branch: ${{ github.head_ref }}
+      provide_quality_assessment: true
     secrets:
       token: ${{ secrets.DEV_BACKEND_CIUSER_TOKEN }}
       test_failure_webhook: ${{ secrets.SLACK_DEV_ENV_FAILURE_WEBHOOK }}
@@ -27,6 +28,7 @@ jobs:
     with:
       test_branch: ${{ github.head_ref }}
       registry: wasmer.io
+      provide_quality_assessment: true
     secrets:
       token: ${{ secrets.PROD_BACKEND_CIUSER_TOKEN }}
       test_failure_webhook: ${{ secrets.SLACK_PROD_ENV_FAILURE_WEBHOOK }}
