@@ -12,7 +12,7 @@
 // Env contract (set by integration-test-workflow.yaml):
 //   GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_SERVER_URL,
 //   GITHUB_SHA, GITHUB_REF, GITHUB_EVENT_NAME, GITHUB_EVENT_PATH,
-//   GITHUB_STEP_SUMMARY
+//   GITHUB_STEP_SUMMARY, RUNNER_NAME
 //   SLACK_WEBHOOK_URL   optional — compose-only when absent
 //   TEST_RUNS_DIR       default "test-runs"
 //   TESTED_REGISTRY     environment label (e.g. wasmer.wtf)
@@ -146,7 +146,29 @@ interface JobsResponse {
     status: string;
     conclusion: string | null;
     html_url: string;
+    runner_name: string | null;
   }>;
+}
+
+// Called as a reusable workflow, job names carry a "<caller job> / "
+// prefix — always match on the bare suffix.
+function bareName(name: string): string {
+  return name.split(" / ").pop() ?? name;
+}
+
+function callerOf(name: string): string {
+  const i = name.lastIndexOf(" / ");
+  return i === -1 ? "" : name.slice(0, i);
+}
+
+// test-run-<registry>-<suite>; older runs lack the registry segment.
+function suiteFromArtifactDir(dir: string): string {
+  const registry = env("TESTED_REGISTRY");
+  const prefix = registry ? `test-run-${registry}-` : "";
+  if (prefix && dir.startsWith(prefix)) {
+    return dir.slice(prefix.length);
+  }
+  return dir.replace(/^test-run-/, "");
 }
 
 // Maps a job display name ("Run apps tests", "Run templates (1/6) tests")
@@ -177,7 +199,7 @@ function readRunRecords(
     return bySuite;
   }
   for (const dir of fs.readdirSync(testRunsDir)) {
-    const suite = dir.replace(/^test-run-/, "");
+    const suite = suiteFromArtifactDir(dir);
     const file = path.join(testRunsDir, dir, ".jest-run-summary.jsonl");
     if (!fs.existsSync(file)) {
       continue;
@@ -203,12 +225,18 @@ async function classify(testRunsDir: string): Promise<Classification> {
   const { jobs } = await gh<JobsResponse>(
     `/repos/${owner}/${repo}/actions/runs/${env("GITHUB_RUN_ID")}/jobs?per_page=100`,
   );
-  // Called as a reusable workflow, job names carry a "<caller job> / "
-  // prefix — always match on the bare suffix.
-  const bareName = (name: string): string => name.split(" / ").pop() ?? name;
+  // Only jobs under our own caller: a run may call this workflow per environment.
+  const self = jobs.find(
+    (job) =>
+      SELF_JOB_NAMES.has(bareName(job.name)) &&
+      job.runner_name === env("RUNNER_NAME"),
+  );
+  const caller = self ? callerOf(self.name) : null;
   const failedJobs = jobs.filter(
     (job) =>
-      job.conclusion === "failure" && !SELF_JOB_NAMES.has(bareName(job.name)),
+      job.conclusion === "failure" &&
+      !SELF_JOB_NAMES.has(bareName(job.name)) &&
+      (caller === null || callerOf(job.name) === caller),
   );
 
   const untracked: Finding[] = [];

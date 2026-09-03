@@ -152,11 +152,12 @@ jobs:
             ${{ matrix.test_command }}
           } 2>&1 | tee jest-output.log
       # Full run info for debugging + the machine summary Barmin aggregates.
+      # Registry in the name: per-environment callers would otherwise collide.
       - name: Upload test run artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-run-${{ matrix.id }}
+          name: test-run-${{ inputs.registry }}-${{ matrix.id }}
           retention-days: 14
           if-no-files-found: warn
           # The summary/registry files are dotfiles; upload-artifact@v4
@@ -195,8 +196,12 @@ jobs:
               'Provide quality assessment', 'provide-quality-assessment',
               context.job, process.env.GITHUB_JOB,
             ]);
-            // Reusable-workflow jobs are named "<caller job> / <name>".
+            // Reusable-workflow jobs are named "<caller job> / <name>";
+            // wait only for our own caller's jobs, found via our runner.
             const bare = name => name.split(' / ').pop();
+            const callerOf = name =>
+              name.includes(' / ') ? name.slice(0, name.lastIndexOf(' / ')) : '';
+            let caller = null;
             // 600 * 5s = 50 minutes — must outlast the 45-minute suite
             // timeout, or Barmin reports a run its slowest suite is
             // still writing.
@@ -205,17 +210,25 @@ jobs:
                 owner: context.repo.owner, repo: context.repo.repo,
                 run_id: context.runId, per_page: 100,
               });
-              const others = (res.data.jobs || []).filter(
-                j => !selfNames.has(bare(j.name))
+              const jobs = res.data.jobs || [];
+              if (caller === null) {
+                const self = jobs.find(
+                  j => selfNames.has(bare(j.name)) && j.runner_name === process.env.RUNNER_NAME
+                );
+                caller = self ? callerOf(self.name) : '';
+                core.info(`Waiting for sibling jobs of caller "${caller || '<root>'}"`);
+              }
+              const others = jobs.filter(
+                j => !selfNames.has(bare(j.name)) && callerOf(j.name) === caller
               );
               if (others.every(j => j.status === 'completed')) return;
               await new Promise(r => setTimeout(r, 5000));
             }
-            core.warning('Sibling jobs still running after 15 minutes');
+            core.warning('Sibling jobs still running after 50 minutes');
       - name: Download test run artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: test-run-*
+          pattern: test-run-${{ inputs.registry }}-*
           path: test-runs
       # All assessment logic (classification against known issues, message
       # composition, Slack posting, job summary) lives in scripts/barmin.ts.
