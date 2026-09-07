@@ -48,6 +48,7 @@ test.concurrent(
       await assertFixtureContract(target, {
         uniqueSuffix: randomContractSuffix(),
         checkLogs: true,
+        asyncQuery: false,
       });
       console.log("== The reserved /ws path answers 426 without upgrade ==");
       await assertUpgradeRequired(targetFromAppUrl(env, app.url));

@@ -178,7 +178,9 @@ function resolveProbeVariables(
   scenarioDir: string,
 ): Record<string, string> {
   const variables: Record<string, string> = {};
-  for (const [name, fixture] of Object.entries(scenario.fixtures.probes ?? {})) {
+  for (const [name, fixture] of Object.entries(
+    scenario.fixtures.probes ?? {},
+  )) {
     const source = parseAppSource(name, fixture.source);
     if (source.kind === "fixture") {
       const dir = path.join(scenarioDir, source.path);

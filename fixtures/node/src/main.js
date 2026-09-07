@@ -140,6 +140,82 @@ async function connectMysql(config) {
   await conn.end();
 }
 
+async function dbConfig() {
+  if (REQUIRED_DB_VARS.some((name) => process.env[name] == null)) {
+    return null;
+  }
+  return {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  };
+}
+
+async function selectOne(config, candidate) {
+  if (candidate === "postgres") {
+    const { default: pg } = await import("pg");
+    const base = { ...config, connectionTimeoutMillis: 10_000 };
+    const withTls = new pg.Client({
+      ...base,
+      ssl: { rejectUnauthorized: false },
+    });
+    try {
+      await withTls.connect();
+      const result = await withTls.query("SELECT 1 AS value");
+      return Number(result.rows[0].value);
+    } catch (err) {
+      // Same fallback rule as connectPostgres: only a TLS refusal retries.
+      if (!/ssl/i.test(err instanceof Error ? err.message : String(err))) {
+        throw err;
+      }
+    } finally {
+      await withTls.end().catch(() => {});
+    }
+    const plaintext = new pg.Client(base);
+    try {
+      await plaintext.connect();
+      const result = await plaintext.query("SELECT 1 AS value");
+      return Number(result.rows[0].value);
+    } finally {
+      await plaintext.end().catch(() => {});
+    }
+  }
+  const mysql = await import("mysql2/promise");
+  const conn = await mysql.createConnection({
+    ...config,
+    connectTimeout: 10_000,
+  });
+  try {
+    const [rows] = await conn.query("SELECT 1 AS value");
+    return Number(rows[0].value);
+  } finally {
+    await conn.end();
+  }
+}
+
+// asyncapi.yaml query.request: one round-trip through the async DB stack.
+async function runContractQuery() {
+  const config = await dbConfig();
+  if (config === null) {
+    return { engine: "none", value: null };
+  }
+  const engine = dbEngine();
+  const candidates = engine ? [engine] : ["postgres", "mysql"];
+  const errors = [];
+  for (const candidate of candidates) {
+    try {
+      const value = await selectOne(config, candidate);
+      if (value !== 1) throw new Error(`SELECT 1 returned ${value}`);
+      return { engine: candidate, value };
+    } catch (err) {
+      errors.push(`${candidate}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  throw new Error(errors.join("; "));
+}
+
 async function checkDbConnection() {
   const missing = REQUIRED_DB_VARS.filter((name) => process.env[name] == null);
   if (missing.length > 0) {
@@ -170,9 +246,7 @@ async function checkDbConnection() {
       }
       return "OK";
     } catch (err) {
-      errors.push(
-        `${candidate}: ${err instanceof Error ? err.message : err}`,
-      );
+      errors.push(`${candidate}: ${err instanceof Error ? err.message : err}`);
     }
   }
   return `Connection failed: ${errors.join("; ")}`;
@@ -386,6 +460,11 @@ function validateRequest(payload) {
         payload.delay_ms <= 10000
         ? null
         : "delay_ms must be an integer between 0 and 10000";
+    case "query.request":
+      if (!hasExactKeys(payload, ["type", "requestId"])) {
+        return "query.request accepts exactly type and requestId";
+      }
+      return null;
     case "error.request":
       if (!hasExactKeys(payload, ["type", "requestId", "code"])) {
         return "error.request accepts exactly type, requestId and code";
@@ -410,7 +489,11 @@ function handleTextFrame(socket, raw) {
       "Frame is not valid JSON",
     );
   }
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
     return wsError(
       socket,
       UNKNOWN_REQUEST_ID,
@@ -423,6 +506,7 @@ function handleTextFrame(socket, raw) {
     "echo.request",
     "notification.request",
     "error.request",
+    "query.request",
   ].includes(payload.type);
   if (!known) {
     return wsError(
@@ -453,6 +537,25 @@ function handleTextFrame(socket, raw) {
           message: payload.message,
         });
       }, payload.delay_ms);
+      return undefined;
+    case "query.request":
+      // Not awaited: the channel stays open to other messages meanwhile.
+      runContractQuery().then(
+        ({ engine, value }) =>
+          wsSend(socket, {
+            type: "query.response",
+            requestId: payload.requestId,
+            engine,
+            value,
+          }),
+        (err) =>
+          wsError(
+            socket,
+            payload.requestId,
+            "query_failed",
+            err instanceof Error ? err.message : String(err),
+          ),
+      );
       return undefined;
     case "error.request":
       return wsError(
@@ -627,6 +730,22 @@ async function handleSelfTest(res) {
         !COUNTER_NAME_RE.test("NOT-VALID") && COUNTER_NAME_RE.test("self-test"),
         "counter name validation does not enforce ^[a-z-]+$",
       );
+    }),
+  );
+  checks.push(
+    await runCheck("query-async", async () => {
+      const { engine, value } = await runContractQuery();
+      if (dbEnvReport().missing.length === 0) {
+        checkExpect(
+          ["postgres", "mysql"].includes(engine) && value === 1,
+          `async query returned ${engine}/${value}`,
+        );
+      } else {
+        checkExpect(
+          engine === "none" && value === null,
+          `no credentials injected, but the query reported ${engine}/${value}`,
+        );
+      }
     }),
   );
   checks.push(
