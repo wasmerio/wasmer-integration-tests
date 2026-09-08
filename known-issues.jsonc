@@ -48,12 +48,12 @@
   },
   "tests/app/python-fixture-contract.test.ts::python-fixture-contract-endpoints": {
     "ticket": "WAX-615",
-    "envs": ["local"],
+    "envs": ["local", "dev", "bugt", "prod"],
     "note": "query-async canary: greenlet 3.5.3+wasix.2 (.so 067D5146…) traps `out of bounds memory access at green_traverse` under the LLVM engine the local platform now routes python/python through — the production herman failure, reproduced 2026-09-08 (run 34222780535); green on cranelift",
   },
   "tests/app/python-fixture-ws-contract.test.ts::python-fixture-ws-contract": {
     "ticket": "WAX-615",
-    "envs": ["local"],
+    "envs": ["local", "dev", "bugt", "prod"],
     "note": "query.request canary: same greenlet LLVM trap as python-fixture-contract-endpoints — the instance is tainted mid-query and the echo never arrives; reproduced 2026-09-08 (run 34222780535)",
   },
 }
