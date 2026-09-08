@@ -33,6 +33,8 @@ PLATFORM_KEYS: dict[str, tuple[str, type]] = {
     "edge_version": ("EDGE_VERSION", str),
     "stripe_mock": ("LOCAL_PLATFORM_STRIPE_MOCK", bool),
     "ensure_compiled": ("LOCAL_PLATFORM_ENSURE_COMPILED", bool),
+    "edge_engine": ("LOCAL_PLATFORM_EDGE_ENGINE", str),
+    "edge_llvm_packages": ("LOCAL_PLATFORM_EDGE_LLVM_PACKAGES", list),
     "seed_packages": ("LOCAL_PLATFORM_SEED_PACKAGES", bool),
     "seed_templates": ("LOCAL_PLATFORM_SEED_TEMPLATES", bool),
     "package_concurrency": ("LOCAL_PLATFORM_PACKAGE_CONCURRENCY", int),

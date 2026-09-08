@@ -60,6 +60,17 @@ def _build_package_list(
     return packages
 
 
+def ensure_compiled_engines(ctx: Ctx) -> list[str]:
+    """Explicit `--engine` values, or empty to let platform_config's engine
+    filters pick the engine per package (cranelift default, LLVM for the
+    packages in LOCAL_PLATFORM_EDGE_LLVM_PACKAGES)."""
+    return [
+        engine.strip()
+        for engine in ctx.get("LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES").split(",")
+        if engine.strip()
+    ]
+
+
 def ensure_compiled(ctx: Ctx) -> None:
     if not ctx.truthy("LOCAL_PLATFORM_ENSURE_COMPILED", "1"):
         log(
@@ -111,13 +122,7 @@ def ensure_compiled(ctx: Ctx) -> None:
     ):
         fail(f"Expected Compose network {edge_network} before precompilation")
 
-    engines = [
-        engine.strip()
-        for engine in (
-            ctx.get("LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES") or "wasmer-cranelift"
-        ).split(",")
-        if engine.strip()
-    ]
+    engines = ensure_compiled_engines(ctx)
     threads_cli: list[str] = []
     threads = ctx.get("LOCAL_PLATFORM_ENSURE_COMPILED_THREADS")
     if threads:
@@ -133,11 +138,12 @@ def ensure_compiled(ctx: Ctx) -> None:
     timeout = ctx.getint("LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS", 1800)
     edge_cache_dir = ctx.edge_cache_dir()
 
-    for engine in engines:
-        safe_engine = re.sub(r"[^A-Za-z0-9_.-]", "_", engine)
+    for engine in engines or [None]:
+        label = engine or "platform-config"
+        safe_engine = re.sub(r"[^A-Za-z0-9_.-]", "_", label)
         compile_log = run_dir / "logs" / f"ensure-compiled.{safe_engine}.log"
         log(
-            f"Ensuring Edge compiler cache is warm for engine={engine} "
+            f"Ensuring Edge compiler cache is warm for engine={label} "
             f"({len(packages)} package(s))"
         )
 
@@ -176,8 +182,7 @@ def ensure_compiled(ctx: Ctx) -> None:
                 "--data-dir",
                 "/data",
                 "--scan-filesystem",
-                "--engine",
-                engine,
+                *(["--engine", engine] if engine else []),
                 *threads_cli,
                 *packages,
             ],
@@ -187,7 +192,7 @@ def ensure_compiled(ctx: Ctx) -> None:
         )
         if status != 0:
             fail(
-                f"Edge precompilation failed for engine={engine} with status "
+                f"Edge precompilation failed for engine={label} with status "
                 f"{status}; see {compile_log}",
                 status,
             )

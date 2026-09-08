@@ -17,6 +17,16 @@ on:
         required: false
         default: main
         description: "Branch of wasmerio/wasmer-integration-tests to run the suite from."
+      edge_engine:
+        type: string
+        required: false
+        default: wasmer_cranelift
+        description: "Edge default engine for the local platform."
+      edge_llvm_packages:
+        type: string
+        required: false
+        default: python/python
+        description: "Packages routed to a filtered LLVM engine (production's engine) on top of the default."
       runner:
         type: string
         required: false
@@ -68,10 +78,14 @@ jobs:
       backend_version: ${{ inputs.backend_version }}
       edge_version: ${{ inputs.edge_version }}
       test_branch: ${{ inputs.test_branch }}
+      edge_engine: ${{ inputs.edge_engine }}
+      edge_llvm_packages: ${{ inputs.edge_llvm_packages }}
       prepare_only: true
       suite_id: cache-warmup
       job_name: Prepare local platform test environment cache
-      timeout_minutes: 45
+      # The LLVM-routed packages (~5 min each) are precompiled here on a cold
+      # cache; the rest stays on cranelift.
+      timeout_minutes: 60
       runner: ${{ inputs.runner }}
     secrets:
       pat: ${{ secrets.pat }}
@@ -92,6 +106,8 @@ jobs:
       backend_version: ${{ inputs.backend_version }}
       edge_version: ${{ inputs.edge_version }}
       test_branch: ${{ inputs.test_branch }}
+      edge_engine: ${{ inputs.edge_engine }}
+      edge_llvm_packages: ${{ inputs.edge_llvm_packages }}
       test_command: ${{ matrix.test_command }}
       suite_id: ${{ matrix.id }}
       job_name: Run ${{ matrix.display_id || matrix.id }} tests

@@ -24,6 +24,8 @@ from .lib import (
     ANSI_GREEN,
     ANSI_RESET,
     ANSI_YELLOW,
+    EDGE_ENGINE_FLAG,
+    EDGE_LLVM_PACKAGES_FLAG,
     STRIPE_MOCK_FLAG,
     Ctx,
     Fail,
@@ -35,6 +37,8 @@ from .lib import (
     compose_service_is_running,
     describe_backend_version,
     describe_edge_version,
+    edge_engine,
+    edge_llvm_packages,
     ensure_github_token,
     fail,
     is_truthy,
@@ -276,17 +280,23 @@ def reuse_existing_run_if_running(ctx: Ctx) -> bool:
         # The flag reshapes backend.env and the compose service set, so a
         # change needs a re-bootstrap exactly like a version-selector change.
         or is_truthy(existing.get(STRIPE_MOCK_FLAG)) != stripe_mock_enabled(ctx)
+        or existing.get(EDGE_ENGINE_FLAG) != edge_engine(ctx)
+        or existing.get(EDGE_LLVM_PACKAGES_FLAG) != ",".join(edge_llvm_packages(ctx))
     ):
         log("Stopping existing local platform run because the requested selectors changed")
         log(
             f"Existing selectors: backend={existing.get('BACKEND_VERSION', '')} "
             f"edge={existing.get('EDGE_VERSION', '')} "
-            f"stripe_mock={is_truthy(existing.get(STRIPE_MOCK_FLAG))}"
+            f"stripe_mock={is_truthy(existing.get(STRIPE_MOCK_FLAG))} "
+            f"edge_engine={existing.get(EDGE_ENGINE_FLAG, '')} "
+            f"llvm_packages={existing.get(EDGE_LLVM_PACKAGES_FLAG, '')}"
         )
         log(
             f"Requested selectors: backend={ctx.get('BACKEND_VERSION')} "
             f"edge={ctx.get('EDGE_VERSION')} "
-            f"stripe_mock={stripe_mock_enabled(ctx)}"
+            f"stripe_mock={stripe_mock_enabled(ctx)} "
+            f"edge_engine={edge_engine(ctx)} "
+            f"llvm_packages={','.join(edge_llvm_packages(ctx))}"
         )
         # Tear down with a separate context: down() loads the OLD run's
         # resolved env, which must not clobber the freshly requested selectors
