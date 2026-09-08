@@ -428,7 +428,8 @@ export function formatSummary(
   if (report.scenario.details !== undefined) {
     const detail = report.scenario.details.split("\n");
     while (detail.length > 0 && detail[0].trim() === "") detail.shift();
-    while (detail.length > 0 && detail[detail.length - 1].trim() === "") detail.pop();
+    while (detail.length > 0 && detail[detail.length - 1].trim() === "")
+      detail.pop();
     blocks.push({
       key: "details",
       // Author-formatted prose: a line that fits keeps its spacing, so small

@@ -3,9 +3,13 @@ import * as pathModule from "node:path";
 
 import { projectRoot } from "../utils/path";
 import { parseYaml } from "../../src/yaml";
-import { SELF_TEST_CHECKS } from "../utils/fixture-contract";
+import {
+  ASYNC_SELF_TEST_CHECKS,
+  SELF_TEST_CHECKS,
+} from "../utils/fixture-contract";
 import {
   BINARY_HEADER_BYTES,
+  ERROR_CODES,
   MAX_BINARY_PAYLOAD,
   UNKNOWN_REQUEST_ID,
   randomRequestId,
@@ -95,7 +99,7 @@ test("the self-test operation reports both outcomes and the fixed checks", () =>
 
   // The operation description is the only place the fixed check names are
   // stated; the shared assertions must not drift from it.
-  for (const name of SELF_TEST_CHECKS) {
+  for (const name of [...SELF_TEST_CHECKS, ...ASYNC_SELF_TEST_CHECKS]) {
     expect(selfTest.get.description).toContain(`\`${name}\``);
   }
   // The self-test must never dial the instance itself (guest loopback is
@@ -135,12 +139,8 @@ test("ws-contract constants match the AsyncAPI schema they came from", () => {
   );
 });
 
-test("the error code enum matches what the assertions exercise", () => {
-  expect(asyncapi.components.schemas.errorCode.enum).toEqual([
-    "requested_failure",
-    "unknown_message_type",
-    "invalid_payload",
-  ]);
+test("the error code enum matches the codes the client models", () => {
+  expect(asyncapi.components.schemas.errorCode.enum).toEqual([...ERROR_CODES]);
   // Only the client-requested failure may be asked for by name.
   expect(
     asyncapi.components.schemas.errorRequestPayload.properties.code.const,

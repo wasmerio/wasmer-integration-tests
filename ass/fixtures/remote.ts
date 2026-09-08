@@ -133,9 +133,8 @@ async function realPlatform(env: RemoteEnv): Promise<RemotePlatform> {
         // published standalone; `wasmer deploy` with `package: "."`
         // publishes and deploys it in one step — the same shape the
         // hand-written app.yaml files used.
-        const { cpSync, mkdtempSync, rmSync, writeFileSync } = await import(
-          "node:fs"
-        );
+        const { cpSync, mkdtempSync, rmSync, writeFileSync } =
+          await import("node:fs");
         const os = await import("node:os");
         const dir = mkdtempSync(path.join(os.tmpdir(), "ass-probe-"));
         try {

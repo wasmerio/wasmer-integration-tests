@@ -345,13 +345,21 @@ export const SELF_TEST_CHECKS = [
   "echo",
 ];
 
+/** Reported only by fixtures with an async I/O stack; phpix has none. */
+export const ASYNC_SELF_TEST_CHECKS = ["query-async"];
+
 /**
  * GET /self-test runs every inside-runnable contract check and reports 200
  * with an all-green report: the shape probes (e.g. cloudprober) rely on.
  */
 export async function assertSelfTest(
   target: FixtureContractTarget,
+  options: { asyncQuery?: boolean } = {},
 ): Promise<SelfTestReport> {
+  const expected = [
+    ...SELF_TEST_CHECKS,
+    ...(options.asyncQuery === false ? [] : ASYNC_SELF_TEST_CHECKS),
+  ];
   const res = await target.fetch("/self-test");
   const report = (await res.json()) as SelfTestReport;
   // The report first: on failure it names the failing check, which is far
@@ -362,7 +370,7 @@ export async function assertSelfTest(
 
   const names = report.checks.map((c) => c.name);
   expect(new Set(names).size).toBe(names.length);
-  expect([...names].sort()).toEqual([...SELF_TEST_CHECKS].sort());
+  expect([...names].sort()).toEqual([...expected].sort());
 
   for (const check of report.checks) {
     expect(typeof check.elapsed_ms).toBe("number");
@@ -386,6 +394,8 @@ export async function assertFixtureContract(
     uniqueSuffix: string;
     /** Assert the catch-all log line via platform logs (needs appName). */
     checkLogs?: boolean;
+    /** False for fixtures with no async I/O stack (phpix). */
+    asyncQuery?: boolean;
   },
 ): Promise<void> {
   console.log("== contract: liveness ==");
@@ -406,7 +416,7 @@ export async function assertFixtureContract(
   await assertOutboundHttp(target);
 
   console.log("== contract: self-test ==");
-  await assertSelfTest(target);
+  await assertSelfTest(target, { asyncQuery: options.asyncQuery });
 
   console.log("== contract: catch-all ==");
   const echoPath = await assertCatchAllEcho(target, {

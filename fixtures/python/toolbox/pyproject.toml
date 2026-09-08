@@ -11,4 +11,9 @@ dependencies = [
     "uvicorn>=0.35.0",
     "pg8000>=1.31.2",
     "pymysql>=1.1.1",
+    # /results also connects over SQLAlchemy's asyncio layer, which runs the
+    # DBAPI inside a greenlet: the only fixture path loading that wheel.
+    "sqlalchemy[asyncio]>=2.0.36",
+    "aiomysql>=0.2.0",
+    "asyncpg>=0.30.0",
 ]

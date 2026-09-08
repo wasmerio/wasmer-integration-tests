@@ -1,12 +1,19 @@
 wasmopticon
 node_modules
+# Fixtures are formatted; these are the parts Prettier has no parser for.
+fixtures/**/*.php
+fixtures/**/*.py
+fixtures/**/*.toml
+fixtures/**/uv.lock
+fixtures/**/Anybuild
+fixtures/**/.gitignore
+fixtures/**/.venv/**
 .gitignore
 .gitmodules
 .crush
 .prettierignore
 tests/ssh/id_rsa_test
 tests/ssh/id_rsa_test.pub
-fixtures
 repros
 flake.nix
 flake.lock

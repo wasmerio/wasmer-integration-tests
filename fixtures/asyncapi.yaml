@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 info:
   title: Integration Test Fixture WebSocket Contract
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Language-agnostic WebSocket contract for the integration-test fixture app.
     A fixture that implements this contract must also implement the HTTP
@@ -49,6 +49,20 @@ info:
 
     When the server cannot read a `requestId` from the offending frame, it
     reports the reserved id `unknown`.
+
+    ## Asynchronous work
+
+    `query.request` runs a real database query on the connection's event
+    loop, or the runtime's equivalent, and answers on the same multiplexed
+    channel. It exists because a fixture can satisfy every other message
+    type without ever leaving the runtime: echo, notification and error are
+    pure in-process work. A database round-trip forces the implementation
+    through its asynchronous I/O stack, which in some runtimes is a separate
+    native layer that the synchronous drivers never load.
+
+    Where credentials are not injected the operation is still in-contract
+    and answers `engine: none`, matching how `db-connect` in `openapi.yaml`
+    treats a cleanly database-less deployment.
 
     ## Connection lifecycle
 
@@ -116,6 +130,10 @@ channels:
         $ref: "#/components/messages/errorRequest"
       errorResponse:
         $ref: "#/components/messages/errorResponse"
+      queryRequest:
+        $ref: "#/components/messages/queryRequest"
+      queryResponse:
+        $ref: "#/components/messages/queryResponse"
 operations:
   receiveClientMessages:
     action: receive
@@ -127,6 +145,7 @@ operations:
       - $ref: "#/channels/fixtureWebSocket/messages/binaryRequest"
       - $ref: "#/channels/fixtureWebSocket/messages/notificationRequest"
       - $ref: "#/channels/fixtureWebSocket/messages/errorRequest"
+      - $ref: "#/channels/fixtureWebSocket/messages/queryRequest"
   sendServerMessages:
     action: send
     summary: Send messages to the WebSocket client.
@@ -137,6 +156,7 @@ operations:
       - $ref: "#/channels/fixtureWebSocket/messages/binaryResponse"
       - $ref: "#/channels/fixtureWebSocket/messages/notificationEvent"
       - $ref: "#/channels/fixtureWebSocket/messages/errorResponse"
+      - $ref: "#/channels/fixtureWebSocket/messages/queryResponse"
 components:
   messages:
     echoRequest:
@@ -253,6 +273,48 @@ components:
             type: notification.event
             requestId: notification-1
             message: Work complete
+    queryRequest:
+      name: queryRequest
+      title: Asynchronous database query request
+      summary: >-
+        Ask the server to run one database query on its event loop and reply
+        on the same channel. Takes no parameters: the statement is fixed by
+        the contract so the reply is comparable across implementations.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/queryRequestPayload"
+      examples:
+        - name: plain
+          payload:
+            type: query.request
+            requestId: query-1
+    queryResponse:
+      name: queryResponse
+      title: Asynchronous database query response
+      summary: >-
+        Report the engine the query reached and the integer it returned. The
+        server must not block the channel while the query is in flight:
+        other messages sent afterwards may be answered first.
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/requestId
+      payload:
+        $ref: "#/components/schemas/queryResponsePayload"
+      examples:
+        - name: mysql
+          payload:
+            type: query.response
+            requestId: query-1
+            engine: mysql
+            value: 1
+        - name: withoutCredentials
+          payload:
+            type: query.response
+            requestId: query-1
+            engine: none
+            value: null
     errorRequest:
       name: errorRequest
       title: Error request
@@ -302,6 +364,39 @@ components:
             code: invalid_payload
             message: Frame is not valid JSON
   schemas:
+    queryRequestPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: query.request
+        requestId:
+          $ref: "#/components/schemas/requestId"
+      required: [type, requestId]
+    queryResponsePayload:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: query.response
+        requestId:
+          $ref: "#/components/schemas/requestId"
+        engine:
+          type: string
+          enum: [postgres, mysql, none]
+          description: >-
+            The engine the query ran against, or `none` when the deployment
+            carries no database credentials.
+        value:
+          type: [integer, "null"]
+          description: >-
+            The single integer the server selected, always `1`, or `null`
+            when `engine` is `none`. A literal rather than stored data: the
+            operation proves the asynchronous path completes a round-trip,
+            not that any particular row exists.
+      required: [type, requestId, engine, value]
     echoRequestPayload:
       type: object
       additionalProperties: false
@@ -399,10 +494,14 @@ components:
         - requested_failure
         - unknown_message_type
         - invalid_payload
+        - query_failed
       description: |
         `requested_failure` — the client asked for this error.
         `unknown_message_type` — valid JSON, but `type` is not in this contract.
         `invalid_payload` — the frame is not valid JSON, or fails this schema.
+        `query_failed` — credentials were injected but the query did not
+        complete. Server-originated and never requestable; the connection
+        stays usable, like every other error.
     requestId:
       type: string
       pattern: "^[A-Za-z0-9-]{1,16}$"

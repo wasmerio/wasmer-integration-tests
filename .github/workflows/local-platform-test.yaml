@@ -9,6 +9,14 @@ on:
       edge_version:
         type: string
         required: true
+      edge_engine:
+        type: string
+        default: wasmer_cranelift
+        description: "Edge default engine. LLVM for everything is hours of cold precompile; use edge_llvm_packages instead."
+      edge_llvm_packages:
+        type: string
+        default: python/python
+        description: "Comma-separated packages routed to a filtered LLVM engine (what production runs) on top of the default."
       test_command:
         type: string
         default: pnpm exec jest
@@ -130,9 +138,14 @@ jobs:
         id: edge-cache-key
         env:
           EDGE_VERSION: ${{ inputs.edge_version }}
+          EDGE_ENGINE: ${{ inputs.edge_engine }}
+          EDGE_LLVM_PACKAGES: ${{ inputs.edge_llvm_packages }}
           GH_TOKEN: ${{ secrets.pat || github.token }}
         run: |
           set -euo pipefail
+          # Cache keys reject commas and the package list carries slashes.
+          engine_key="$(printf '%s-%s' "$EDGE_ENGINE" "$EDGE_LLVM_PACKAGES" | tr -c 'A-Za-z0-9._-' '_')"
+          echo "engine_key=$engine_key" >> "$GITHUB_OUTPUT"
           resolved="$EDGE_VERSION"
           case "$EDGE_VERSION" in
             resolve_dev)
@@ -155,13 +168,13 @@ jobs:
             .local-platform/package-cache
             .local-platform/cache/edge/compiler_cache
             .local-platform/cache/edge/webc_cache
-          key: local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml') }}
+          key: local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ steps.edge-cache-key.outputs.engine_key }}-${{ hashFiles('.github/integration-test-suites.json', 'local-platform/package-seed.txt', 'local-platform/package-compilation-list.txt', 'local-platform/scripts/seed-packages.mjs', 'wasmopticon/**/wasmer.toml') }}
           # Prefix fallbacks still help: the package-cache (downloaded webc
           # files) is edge-version-independent, so restoring a neighboring
           # entry saves the package downloads even when compiled artifacts
           # need to be rebuilt for a new Edge release.
           restore-keys: |
-            local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-
+            local-platform-v2-${{ runner.os }}-${{ steps.edge-cache-key.outputs.resolved }}-${{ steps.edge-cache-key.outputs.engine_key }}-
             local-platform-v2-${{ runner.os }}-
 
       - name: Log local platform selection
@@ -244,6 +257,9 @@ jobs:
           BACKEND_VERSION: ${{ inputs.backend_version }}
           BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY  }}
           EDGE_VERSION: ${{ inputs.edge_version }}
+          LOCAL_PLATFORM_EDGE_ENGINE: ${{ inputs.edge_engine }}
+          LOCAL_PLATFORM_EDGE_LLVM_PACKAGES: ${{ inputs.edge_llvm_packages }}
+          LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS: "3600"
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
           GH_TOKEN: ${{ secrets.pat }}
@@ -257,6 +273,9 @@ jobs:
           BACKEND_IMAGE_REPOSITORY: ${{ vars.LOCAL_PLATFORM_BACKEND_IMAGE_REPOSITORY }}
           EDGE_VERSION: ${{ inputs.edge_version }}
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
+          LOCAL_PLATFORM_EDGE_ENGINE: ${{ inputs.edge_engine }}
+          LOCAL_PLATFORM_EDGE_LLVM_PACKAGES: ${{ inputs.edge_llvm_packages }}
+          LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS: "3600"
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
           GH_TOKEN: ${{ secrets.pat }}

@@ -44,6 +44,26 @@ class TestPrecedence(ConfigTestCase):
         self.assertEqual(ctx.env["LOCAL_PLATFORM_STRIPE_MOCK"], "1")
         self.assertEqual(ctx.env["BACKEND_VERSION"], "resolve_dev")
 
+    def test_edge_engine_translates_onto_env_knob(self) -> None:
+        self.write(
+            self.parent / "local-platform.toml",
+            '[platform]\nedge_engine = "wasmer_cranelift"\n',
+        )
+        ctx = self.make_ctx()
+        apply_config(ctx)
+        self.assertEqual(ctx.env["LOCAL_PLATFORM_EDGE_ENGINE"], "wasmer_cranelift")
+
+    def test_edge_llvm_packages_list_joins_with_commas(self) -> None:
+        self.write(
+            self.parent / "local-platform.toml",
+            '[platform]\nedge_llvm_packages = ["python/python", "wasmer/python"]\n',
+        )
+        ctx = self.make_ctx()
+        apply_config(ctx)
+        self.assertEqual(
+            ctx.env["LOCAL_PLATFORM_EDGE_LLVM_PACKAGES"], "python/python,wasmer/python"
+        )
+
     def test_local_file_overrides_consumer_file(self) -> None:
         self.write(
             self.parent / "local-platform.toml", "[platform]\nstripe_mock = true\n"

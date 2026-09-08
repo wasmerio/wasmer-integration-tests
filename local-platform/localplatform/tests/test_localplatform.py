@@ -37,16 +37,18 @@ from localplatform.fetch import (
     parse_ecr_registry,
     select_ecr_profile,
 )
-from localplatform.ensure_compiled import _build_package_list
+from localplatform.ensure_compiled import _build_package_list, ensure_compiled_engines
 from localplatform.lib import (
-    RESOLVED_ENV_KEYS,
-    STRIPE_MOCK_FLAG,
     Ctx,
     Fail,
+    RESOLVED_ENV_KEYS,
+    STRIPE_MOCK_FLAG,
     apply_stripe_mock_profile,
     check_required_ports_available,
     describe_artifact_source,
     describe_backend_version,
+    edge_engine,
+    edge_llvm_packages,
     format_duration,
     human_bytes,
     is_truthy,
@@ -197,6 +199,26 @@ class TestCtxDefaults(unittest.TestCase):
         self.assertTrue(ctx.truthy("ON"))
         self.assertTrue(ctx.truthy("ABSENT", "1"))
         self.assertFalse(ctx.truthy("ABSENT"))
+
+    def test_edge_engine_defaults_to_cranelift_and_rejects_unknown(self) -> None:
+        self.assertEqual(edge_engine(Ctx(env={})), "wasmer_cranelift")
+        self.assertEqual(
+            edge_engine(Ctx(env={"LOCAL_PLATFORM_EDGE_ENGINE": "wasmer_llvm"})),
+            "wasmer_llvm",
+        )
+        with self.assertRaises(Fail):
+            edge_engine(Ctx(env={"LOCAL_PLATFORM_EDGE_ENGINE": "singlepass"}))
+
+    def test_edge_llvm_packages_default_custom_and_explicit_empty(self) -> None:
+        self.assertEqual(edge_llvm_packages(Ctx(env={})), ["python/python"])
+        custom = Ctx(env={"LOCAL_PLATFORM_EDGE_LLVM_PACKAGES": " python/python, wasmer/python ,python/python"})
+        self.assertEqual(edge_llvm_packages(custom), ["python/python", "wasmer/python"])
+        self.assertEqual(edge_llvm_packages(Ctx(env={"LOCAL_PLATFORM_EDGE_LLVM_PACKAGES": ""})), [])
+
+    def test_ensure_compiled_engines_follow_platform_config_unless_explicit(self) -> None:
+        self.assertEqual(ensure_compiled_engines(Ctx(env={})), [])
+        explicit = Ctx(env={"LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES": "wasmer-cranelift, wasmer-llvm"})
+        self.assertEqual(ensure_compiled_engines(explicit), ["wasmer-cranelift", "wasmer-llvm"])
 
     def test_is_truthy_spellings(self) -> None:
         for falsy in ("", "0", "false", "FALSE", "no", "No", "off", "OFF"):

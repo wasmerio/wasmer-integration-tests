@@ -70,6 +70,13 @@ UDP_PORT_VARS = frozenset({"EDGE_DNS_PORT"})
 STRIPE_MOCK_FLAG = "LOCAL_PLATFORM_STRIPE_MOCK"
 STRIPE_MOCK_PROFILE = "stripe-mock"
 
+# Cranelift default; LLVM (what production runs) only for the listed packages.
+EDGE_ENGINE_FLAG = "LOCAL_PLATFORM_EDGE_ENGINE"
+EDGE_ENGINES = ("wasmer_cranelift", "wasmer_llvm")
+DEFAULT_EDGE_ENGINE = "wasmer_cranelift"
+EDGE_LLVM_PACKAGES_FLAG = "LOCAL_PLATFORM_EDGE_LLVM_PACKAGES"
+DEFAULT_EDGE_LLVM_PACKAGES = "python/python"
+
 # Ports bound only when their gating flag is on; the availability preflight
 # skips them otherwise so an unrelated process on the port cannot block a
 # default boot.
@@ -87,6 +94,8 @@ RESOLVED_ENV_KEYS = (
     "DOCKER_CLI_PATH",
     "DOCKER_BUILDX_PATH",
     STRIPE_MOCK_FLAG,
+    EDGE_ENGINE_FLAG,
+    EDGE_LLVM_PACKAGES_FLAG,
     *PORT_DEFAULTS.keys(),
 )
 
@@ -109,6 +118,23 @@ def is_truthy(value: str | None) -> bool:
 
 def stripe_mock_enabled(ctx: "Ctx") -> bool:
     return ctx.truthy(STRIPE_MOCK_FLAG)
+
+
+def edge_engine(ctx: "Ctx") -> str:
+    engine = ctx.get(EDGE_ENGINE_FLAG) or DEFAULT_EDGE_ENGINE
+    if engine not in EDGE_ENGINES:
+        fail(
+            f"{EDGE_ENGINE_FLAG}={engine!r} is not a supported Edge engine "
+            f"(expected one of: {', '.join(EDGE_ENGINES)})"
+        )
+    return engine
+
+
+def edge_llvm_packages(ctx: "Ctx") -> list[str]:
+    raw = ctx.env.get(EDGE_LLVM_PACKAGES_FLAG)
+    if raw is None:
+        raw = DEFAULT_EDGE_LLVM_PACKAGES
+    return list(dict.fromkeys(p.strip() for p in raw.split(",") if p.strip()))
 
 
 def apply_stripe_mock_profile(ctx: "Ctx") -> None:
@@ -281,6 +307,8 @@ def read_resolved_json(path: Path) -> dict[str, str]:
         ("docker_cli_path", "DOCKER_CLI_PATH"),
         ("docker_buildx_path", "DOCKER_BUILDX_PATH"),
         ("stripe_mock", STRIPE_MOCK_FLAG),
+        ("edge_engine", EDGE_ENGINE_FLAG),
+        ("edge_llvm_packages", EDGE_LLVM_PACKAGES_FLAG),
     ):
         if json_key in data:
             flat[env_key] = str(data[json_key])

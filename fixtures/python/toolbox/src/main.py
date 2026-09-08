@@ -1,7 +1,7 @@
 # Python implementation of the fixture contract (fixtures/openapi.yaml for
 # HTTP, fixtures/asyncapi.yaml for the /ws WebSocket channel), served by
-# FastAPI/uvicorn. The pg8000/PyMySQL drivers are imported lazily inside the
-# /results handler so every other endpoint works without them.
+# FastAPI/uvicorn. The database drivers and SQLAlchemy are imported lazily
+# inside the /results handler so every other endpoint works without them.
 
 import asyncio
 import json
@@ -22,6 +22,9 @@ app = FastAPI()
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 PORT = int(os.environ.get("PORT", "8000"))
+
+# aiomysql resolves a default user at import time; the guest has no passwd entry.
+os.environ.setdefault("USER", "wasmer")
 
 # Replaced per deployment by the test harness, like the other fixtures.
 UNIQUE_HASH = "__TEMPLATE__"
@@ -128,18 +131,76 @@ def connect_mysql(config):
     conn.close()
 
 
-def check_db_connection():
-    missing = [name for name in REQUIRED_DB_VARS if os.environ.get(name) is None]
-    if missing:
-        return "Missing required SQL environment variables: " + ", ".join(missing)
+def connect_blocking(config, candidate):
+    if candidate == "postgres":
+        connect_postgres(config)
+    else:
+        connect_mysql(config)
 
-    config = {
+
+async def select_one_on_loop(config, candidate):
+    from sqlalchemy import text
+    from sqlalchemy.engine import URL
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    if candidate == "postgres":
+        driver, connect_args = "postgresql+asyncpg", {"timeout": 10}
+        # Managed endpoints enforce TLS and present a certificate the guest
+        # cannot chain; the local platform serves plaintext.
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        attempts = [{**connect_args, "ssl": ctx}, connect_args]
+    else:
+        driver, connect_args = "mysql+aiomysql", {"connect_timeout": 10}
+        attempts = [connect_args]
+
+    url = URL.create(
+        driver,
+        username=config["user"],
+        password=config["password"],
+        host=config["host"],
+        port=config["port"],
+        database=config["database"],
+    )
+
+    for index, args in enumerate(attempts):
+        engine = create_async_engine(url, connect_args=args, poolclass=NullPool)
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("SELECT 1"))
+                check = result.scalar_one()
+            if check != 1:
+                raise RuntimeError(f"SELECT 1 returned {check!r}")
+            return check
+        except Exception as exc:
+            # Same fallback rule as connect_postgres: only a TLS refusal is
+            # worth a second attempt.
+            if index == len(attempts) - 1 or "ssl" not in str(exc).lower():
+                raise
+        finally:
+            await engine.dispose()
+
+
+def db_config():
+    if [name for name in REQUIRED_DB_VARS if os.environ.get(name) is None]:
+        return None
+    return {
         "host": os.environ["DB_HOST"],
         "port": int(os.environ["DB_PORT"]),
         "user": os.environ["DB_USERNAME"],
         "password": os.environ["DB_PASSWORD"],
         "database": os.environ["DB_NAME"],
     }
+
+
+async def check_db_connection():
+    missing = [name for name in REQUIRED_DB_VARS if os.environ.get(name) is None]
+    if missing:
+        return "Missing required SQL environment variables: " + ", ".join(missing)
+
+    config = db_config()
 
     # When the engine is ambiguous, probe postgres first: pg8000 fails fast
     # against a MySQL server, while a MySQL client waits out its whole
@@ -150,10 +211,7 @@ def check_db_connection():
     errors = []
     for candidate in candidates:
         try:
-            if candidate == "postgres":
-                connect_postgres(config)
-            else:
-                connect_mysql(config)
+            await asyncio.to_thread(connect_blocking, config, candidate)
             return "OK"
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
@@ -162,7 +220,7 @@ def check_db_connection():
 
 @app.get("/results")
 async def check_db_connection_endpoint():
-    return PlainTextResponse(await asyncio.to_thread(check_db_connection))
+    return PlainTextResponse(await check_db_connection())
 
 
 # --- durable-state ----------------------------------------------------------
@@ -379,6 +437,10 @@ def validate_ws_request(payload):
         ):
             return "delay_ms must be an integer between 0 and 10000"
         return None
+    if kind == "query.request":
+        if not has_exact_keys(payload, ["type", "requestId"]):
+            return "query.request accepts exactly type and requestId"
+        return None
     if kind == "error.request":
         if not has_exact_keys(payload, ["type", "requestId", "code"]):
             return "error.request accepts exactly type, requestId and code"
@@ -386,6 +448,38 @@ def validate_ws_request(payload):
             return "code must be requested_failure"
         return None
     return None
+
+
+async def run_contract_query():
+    config = db_config()
+    if config is None:
+        return "none", None
+    engine = db_engine()
+    candidates = [engine] if engine else ["postgres", "mysql"]
+    errors = []
+    for candidate in candidates:
+        try:
+            return candidate, await select_one_on_loop(config, candidate)
+        except Exception as exc:
+            errors.append(f"{candidate}: {exc}")
+    raise RuntimeError("; ".join(errors))
+
+
+async def send_query_result(socket, request_id):
+    try:
+        engine, value = await run_contract_query()
+    except Exception as exc:
+        await ws_error(socket, request_id, "query_failed", str(exc))
+        return
+    await ws_send(
+        socket,
+        {
+            "type": "query.response",
+            "requestId": request_id,
+            "engine": engine,
+            "value": value,
+        },
+    )
 
 
 async def send_delayed_notification(socket, request_id, message, delay_ms):
@@ -418,7 +512,12 @@ async def handle_ws_text(socket, raw, tasks):
         return
 
     kind = payload.get("type")
-    if kind not in ("echo.request", "notification.request", "error.request"):
+    if kind not in (
+        "echo.request",
+        "notification.request",
+        "error.request",
+        "query.request",
+    ):
         await ws_error(
             socket,
             payload.get("requestId"),
@@ -450,6 +549,10 @@ async def handle_ws_text(socket, raw, tasks):
                 payload["delay_ms"],
             )
         )
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+    elif kind == "query.request":
+        task = asyncio.create_task(send_query_result(socket, payload["requestId"]))
         tasks.add(task)
         task.add_done_callback(tasks.discard)
     elif kind == "error.request":
@@ -558,12 +661,26 @@ async def check_db_env():
 
 
 async def check_db_connect():
-    result = await asyncio.to_thread(check_db_connection)
+    result = await check_db_connection()
     if not db_env_report()["missing"]:
         check_expect(result == "OK", result)
     else:
         check_expect(
             result.startswith("Missing required SQL environment variables"), result
+        )
+
+
+async def check_query_async():
+    engine, value = await run_contract_query()
+    if db_env_report()["missing"]:
+        check_expect(
+            engine == "none" and value is None,
+            f"no credentials injected, but the query reported {engine}/{value}",
+        )
+    else:
+        check_expect(
+            engine in ("postgres", "mysql") and value == 1,
+            f"async query returned {engine}/{value}",
         )
 
 
@@ -626,6 +743,7 @@ async def self_test():
         await run_check("db-connect", check_db_connect),
         await run_check("counter-durability", check_durable_counter),
         await run_check("counter-invalid-name", check_counter_invalid_name),
+        await run_check("query-async", check_query_async),
         await run_check("echo", check_echo),
     ]
     ok = all(check["ok"] for check in checks)

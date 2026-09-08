@@ -21,8 +21,14 @@ export const UNKNOWN_REQUEST_ID = "unknown";
 const DEFAULT_MESSAGE_TIMEOUT_MS = 30_000;
 const HANDSHAKE_TIMEOUT_MS = 60_000;
 
-export type ErrorCode =
-  "requested_failure" | "unknown_message_type" | "invalid_payload";
+export const ERROR_CODES = [
+  "requested_failure",
+  "unknown_message_type",
+  "invalid_payload",
+  "query_failed",
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export interface EchoResponse {
   type: "echo.response";
@@ -36,6 +42,13 @@ export interface NotificationEvent {
   message: string;
 }
 
+export interface QueryResponse {
+  type: "query.response";
+  requestId: string;
+  engine: "postgres" | "mysql" | "none";
+  value: number | null;
+}
+
 export interface ErrorResponse {
   type: "error.response";
   requestId: string;
@@ -43,7 +56,8 @@ export interface ErrorResponse {
   message: string;
 }
 
-export type ServerMessage = EchoResponse | NotificationEvent | ErrorResponse;
+export type ServerMessage =
+  EchoResponse | NotificationEvent | ErrorResponse | QueryResponse;
 
 export interface WsContractTarget {
   env: TestEnv;
@@ -465,6 +479,59 @@ async function assertConnectionUsable(session: WsSession): Promise<void> {
  * must receive it last — an implementation that answers strictly in
  * receive order cannot pass this.
  */
+/**
+ * query.request completes a real database round-trip on the connection's
+ * event loop. Every other message type is satisfiable without leaving the
+ * runtime, so this is the only assertion that forces the implementation
+ * through its asynchronous I/O stack — which in some runtimes is a separate
+ * native layer the synchronous drivers never load (BE-1773).
+ *
+ * Three requests go out before any reply is read, and an echo behind them
+ * must come back while they are still in flight: a fixture that serialises
+ * the channel on a query fails here rather than silently degrading.
+ */
+export async function assertAsyncQuery(session: WsSession): Promise<void> {
+  const queryIds = [0, 1, 2].map(() => randomRequestId("q"));
+  const echoId = randomRequestId("q-e");
+
+  for (const requestId of queryIds) {
+    session.send({ type: "query.request", requestId });
+  }
+  session.send({ type: "echo.request", requestId: echoId, value: "in flight" });
+
+  const echo = (await session.nextJson((m) => m.requestId === echoId, {
+    description: "echo.response while queries are in flight",
+  })) as EchoResponse;
+  expect(echo.value).toBe("in flight");
+
+  const replies = await Promise.all(
+    queryIds.map((requestId) =>
+      session.nextJson((m) => m.requestId === requestId, {
+        timeoutMs: 40_000,
+        description: `query.response for ${requestId}`,
+      }),
+    ),
+  );
+
+  for (const reply of replies) {
+    // A query_failed here is the point of the check, so say what broke.
+    if (reply.type === "error.response") {
+      throw new Error(
+        `query.request failed: ${(reply as ErrorResponse).code} - ` +
+          `${(reply as ErrorResponse).message}`,
+      );
+    }
+    const query = reply as QueryResponse;
+    expect(query.type).toBe("query.response");
+    expect(["postgres", "mysql", "none"]).toContain(query.engine);
+    expect(query.value).toBe(query.engine === "none" ? null : 1);
+  }
+
+  // Every reply describes the same deployment, so the engine cannot vary.
+  const engines = new Set(replies.map((r) => (r as QueryResponse).engine));
+  expect(engines.size).toBe(1);
+}
+
 export async function assertMultiplexing(session: WsSession): Promise<void> {
   const echoId = randomRequestId("mx-e");
   const binaryId = randomRequestId("mx-b");
@@ -564,6 +631,9 @@ export async function assertWsContract(
 
     console.log("== ws contract: recoverable errors ==");
     await assertRecoverableErrors(session);
+
+    console.log("== ws contract: asynchronous database query ==");
+    await assertAsyncQuery(session);
 
     console.log("== ws contract: multiplexing ==");
     await assertMultiplexing(session);

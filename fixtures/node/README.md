@@ -18,6 +18,12 @@ Contract notes specific to this implementation:
   `fetch` (undici).
 - Counter atomicity comes from a per-counter promise chain (single
   process) rather than file locks.
+- `query.request` on `/ws` runs one `SELECT 1` through `pg`/`mysql2`
+  without awaiting it in the read loop, so other messages are answered
+  while the query is in flight; failures answer `query_failed`. The
+  `query-async` self-test check runs the same query directly. Node has no
+  separate native async layer, so both stay green where a runtime that does
+  have one can fail `query-async` while `db-connect` passes.
 - `__TEMPLATE__` in `src/main.js` is the per-deployment unique hash
   placeholder, replaced by the test harness like in the other fixtures.
 - `/ws` runs on a `noServer` `WebSocketServer` driven from the HTTP

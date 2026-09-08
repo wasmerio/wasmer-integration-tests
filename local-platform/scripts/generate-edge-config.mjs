@@ -68,9 +68,47 @@ const clickhouseUrl =
   "http://default:root@clickhouse:8123";
 const clickhouseDatabase =
   process.env.LOCAL_PLATFORM_EDGE_CLICKHOUSE_DATABASE ?? "edge_metrics_local";
-const useLlvmEngine = /^(1|true|yes|on)$/i.test(
-  process.env.LOCAL_PLATFORM_EDGE_ENABLE_LLVM ?? "",
-);
+const EDGE_ENGINES = ["wasmer_cranelift", "wasmer_llvm"];
+const edgeEngine = process.env.LOCAL_PLATFORM_EDGE_ENGINE || "wasmer_cranelift";
+if (!EDGE_ENGINES.includes(edgeEngine)) {
+  throw new Error(
+    `LOCAL_PLATFORM_EDGE_ENGINE=${edgeEngine} is not one of ${EDGE_ENGINES.join(", ")}`,
+  );
+}
+// LOCAL_PLATFORM_EDGE_ENABLE_LLVM=1 keeps the broad legacy routing list.
+const LEGACY_LLVM_PACKAGES = [
+  "php/php-eh",
+  "php/php-32",
+  "php/php-64",
+  "php/php",
+  "wasmer/bash",
+  "wasmer/coreutils",
+  "wasmer/python",
+  "python/python",
+  "wasmer/static-web-server",
+  "wasmer/winterjs",
+  "wasmer/s3-server",
+  "wasmer/edgejs",
+  "wasmer/phpix-32",
+  "wasmer/phpix-64",
+];
+const llvmPackages = [
+  ...new Set(
+    [
+      ...(
+        process.env.LOCAL_PLATFORM_EDGE_LLVM_PACKAGES ?? "python/python"
+      ).split(","),
+      ...(/^(1|true|yes|on)$/i.test(
+        process.env.LOCAL_PLATFORM_EDGE_ENABLE_LLVM ?? "",
+      )
+        ? LEGACY_LLVM_PACKAGES
+        : []),
+    ]
+      .map((p) => p.trim())
+      .filter(Boolean),
+  ),
+];
+const useLlvmEngine = edgeEngine !== "wasmer_llvm" && llvmPackages.length > 0;
 const additionalEngines = useLlvmEngine
   ? `
       - kind: wasmer_llvm
@@ -78,20 +116,7 @@ const additionalEngines = useLlvmEngine
         filter:
           or:
             - artifact_cached
-            - package_match: php/php-eh
-            - package_match: php/php-32
-            - package_match: php/php-64
-            - package_match: php/php
-            - package_match: wasmer/bash
-            - package_match: wasmer/coreutils
-            - package_match: wasmer/python
-            - package_match: python/python
-            - package_match: wasmer/static-web-server
-            - package_match: wasmer/winterjs
-            - package_match: wasmer/s3-server
-            - package_match: wasmer/edgejs
-            - package_match: wasmer/phpix-32
-            - package_match: wasmer/phpix-64`
+${llvmPackages.map((p) => `            - package_match: ${p}`).join("\n")}`
   : " []";
 
 const config = `listen_mode: wildcard
@@ -135,7 +160,7 @@ runtime:
   pingora_graceful_shutdown_timeout: 20s
   engines:
     default_engine:
-      kind: wasmer_cranelift
+      kind: ${edgeEngine}
       threads_per_compilation: 1
     engines:${additionalEngines}
 
@@ -383,5 +408,5 @@ cluster:
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, config);
 console.log(
-  `[local-platform] wrote Edge config ${outputPath} (compile profile: ${useLlvmEngine ? "cranelift+llvm" : "cranelift-only"})`,
+  `[local-platform] wrote Edge config ${outputPath} (compile profile: ${useLlvmEngine ? `cranelift+llvm[${llvmPackages.join(",")}]` : edgeEngine.replace("wasmer_", "") + "-only"})`,
 );

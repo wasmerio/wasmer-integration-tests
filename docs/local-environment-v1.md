@@ -176,9 +176,29 @@ unset the local-platform vars (`WASMER_REGISTRY`, `WASMER_NAMESPACE`,
 `LOCAL_PLATFORM_*`, `CLICKHOUSE_*`), point at the dev registry/token, and rerun.
 If it fails on dev too, it's a test bug; if only locally, it's a wiring issue.
 
+## Edge engine
+
+Edge runs `wasmer_cranelift` by default, with a second, filtered
+`wasmer_llvm` engine for the packages in `LOCAL_PLATFORM_EDGE_LLVM_PACKAGES`
+(toml: `[platform] edge_llvm_packages`, default `python/python`). LLVM is
+what production runs (`llvm-opta-non_vol_mem-ro_ftable`), so those packages
+see production's module-load and trap behaviour; everything else keeps the
+fast engine. A full LLVM default (`LOCAL_PLATFORM_EDGE_ENGINE=wasmer_llvm`)
+works but precompiles the seeded set roughly 10x slower — hours on a cold
+cache, and dev releases would invalidate it daily. The compiler-cache warm-up
+follows the same routing unless `LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES`
+forces engines. Changing either knob re-bootstraps the stack, and the CI
+compiler cache is keyed by both.
+
+Only registry packages are precompiled: an app's own native modules (for
+example `_pydantic_core` in a FastAPI app) are compiled by Edge on first
+contact, about a minute under LLVM, during which Edge answers 5xx. The
+template validator waits `WASMER_TEST_COLD_START_SECS` (default 180) for
+that; other tests should poll rather than assert on the first response.
+
 ## Reuse behavior
 
-`make local-platform-up` reuses `.local-platform/current` only when the requested `BACKEND_VERSION`, `EDGE_VERSION`, and `LOCAL_PLATFORM_STRIPE_MOCK` state match the already running stack.
+`make local-platform-up` reuses `.local-platform/current` only when the requested `BACKEND_VERSION`, `EDGE_VERSION`, `LOCAL_PLATFORM_EDGE_ENGINE`, `LOCAL_PLATFORM_EDGE_LLVM_PACKAGES`, and `LOCAL_PLATFORM_STRIPE_MOCK` state match the already running stack.
 
 If any of these selectors changed, the old stack is automatically stopped before a new one is created.
 

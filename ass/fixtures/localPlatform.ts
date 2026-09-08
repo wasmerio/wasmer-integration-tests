@@ -68,9 +68,7 @@ const defaultExec: ExecFn = (argv, opts) =>
         new DriverError(`failed to spawn ${argv.join(" ")}: ${err.message}`),
       ),
     );
-    child.on("exit", (code, signal) =>
-      resolve(code ?? (signal ? 128 : 1)),
-    );
+    child.on("exit", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
   });
 
 const BACKUP_SUFFIX = ".ass-bak";
@@ -167,7 +165,9 @@ export class LocalPlatformDriver implements PlatformDriver {
     this.exec = options.exec ?? defaultExec;
     this.dockerWipe = options.dockerWipe;
     this.onLine = options.onLine;
-    this.io = options.io ?? { info: (line) => process.stderr.write(`${line}\n`) };
+    this.io = options.io ?? {
+      info: (line) => process.stderr.write(`${line}\n`),
+    };
   }
 
   get composePath(): string {

@@ -19,6 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .lib import (
+    EDGE_ENGINE_FLAG,
+    EDGE_LLVM_PACKAGES_FLAG,
+    edge_engine,
+    edge_llvm_packages,
     Ctx,
     DEFAULT_TEST_COMMAND,
     Fail,
@@ -574,6 +578,8 @@ def resolve(ctx: Ctx) -> None:
             or DEFAULT_TEST_COMMAND,
             "DOCKER_CLI_PATH": docker_cli_path,
             "DOCKER_BUILDX_PATH": docker_buildx_path,
+            EDGE_ENGINE_FLAG: edge_engine(ctx),
+            EDGE_LLVM_PACKAGES_FLAG: ",".join(edge_llvm_packages(ctx)),
         }
     )
 
@@ -593,6 +599,8 @@ def resolve(ctx: Ctx) -> None:
                 "docker_cli_path": docker_cli_path,
                 "docker_buildx_path": docker_buildx_path,
                 "stripe_mock": ctx.get("LOCAL_PLATFORM_STRIPE_MOCK"),
+                "edge_engine": ctx.get(EDGE_ENGINE_FLAG),
+                "edge_llvm_packages": ctx.get(EDGE_LLVM_PACKAGES_FLAG),
                 "ports": {
                     name.removesuffix("_PORT").lower(): ctx.get(name)
                     for name in (

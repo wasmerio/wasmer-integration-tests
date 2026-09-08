@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 
 import type { AppInfo, AppTemplate } from "../../src/backend";
 import { createTempDir } from "../../src/fs";
+import { sleep } from "../../src/util";
 import {
   TestEnv,
   markCurrentJestTestFailed,
@@ -77,6 +78,11 @@ export function shardTemplates(
   return [...templates]
     .sort((left, right) => left.slug.localeCompare(right.slug))
     .filter((_, index) => index % shardCount === shardIndex - 1);
+}
+
+function coldStartBudgetMs(): number {
+  const parsed = Number(process.env.WASMER_TEST_COLD_START_SECS);
+  return (Number.isFinite(parsed) && parsed > 0 ? parsed : 180) * 1000;
 }
 
 function parsePositiveInteger(raw: string, name: string): number {
@@ -161,9 +167,17 @@ export async function deployAndValidateTemplate(
     // Serving check: the app must respond without a server error. 4xx is
     // accepted because several templates intentionally do not serve "/"
     // (e.g. API-only starters), but a 5xx means the instance is crashing.
-    const response = await env.fetchApp(appInfo, "/", {
-      noAssertSuccess: true,
-    });
+    // Edge compiles modules on first contact; LLVM-routed packages take ~1 min.
+    const deadline = Date.now() + coldStartBudgetMs();
+    let response = await env.fetchApp(appInfo, "/", { noAssertSuccess: true });
+    while (response.status >= 500 && Date.now() < deadline) {
+      await response.body?.cancel();
+      console.info(
+        `Template '${tpl.slug}' returned ${response.status}; waiting for the instance to cold-start...`,
+      );
+      await sleep(2000);
+      response = await env.fetchApp(appInfo, "/", { noAssertSuccess: true });
+    }
     await response.body?.cancel();
     if (KNOWN_BROKEN_SERVING.has(tpl.slug)) {
       console.warn(

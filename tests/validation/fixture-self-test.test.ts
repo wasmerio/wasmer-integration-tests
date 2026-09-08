@@ -5,7 +5,10 @@ import * as os from "node:os";
 import * as pathModule from "node:path";
 
 import { projectRoot } from "../utils/path";
-import { SELF_TEST_CHECKS } from "../utils/fixture-contract";
+import {
+  ASYNC_SELF_TEST_CHECKS,
+  SELF_TEST_CHECKS,
+} from "../utils/fixture-contract";
 
 // Runs the Node fixture the way Edge runs it: several instances sharing one
 // /data volume. The durable-counter checks are the only part of /self-test
@@ -93,7 +96,7 @@ describe("node fixture /self-test", () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.checks.map((check) => check.name).sort()).toEqual(
-      [...SELF_TEST_CHECKS].sort(),
+      [...SELF_TEST_CHECKS, ...ASYNC_SELF_TEST_CHECKS].sort(),
     );
     expect(body.checks.every((check) => check.ok)).toBe(true);
     expect(typeof body.unique_hash).toBe("string");
