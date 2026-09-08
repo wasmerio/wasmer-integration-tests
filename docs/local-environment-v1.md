@@ -190,6 +190,12 @@ follows the same routing unless `LOCAL_PLATFORM_ENSURE_COMPILED_ENGINES`
 forces engines. Changing either knob re-bootstraps the stack, and the CI
 compiler cache is keyed by both.
 
+Only registry packages are precompiled: an app's own native modules (for
+example `_pydantic_core` in a FastAPI app) are compiled by Edge on first
+contact, about a minute under LLVM, during which Edge answers 5xx. The
+template validator waits `WASMER_TEST_COLD_START_SECS` (default 180) for
+that; other tests should poll rather than assert on the first response.
+
 ## Reuse behavior
 
 `make local-platform-up` reuses `.local-platform/current` only when the requested `BACKEND_VERSION`, `EDGE_VERSION`, `LOCAL_PLATFORM_EDGE_ENGINE`, `LOCAL_PLATFORM_EDGE_LLVM_PACKAGES`, and `LOCAL_PLATFORM_STRIPE_MOCK` state match the already running stack.
