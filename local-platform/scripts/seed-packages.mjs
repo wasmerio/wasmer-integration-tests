@@ -478,6 +478,7 @@ const packageVersionQuery = `
       version
       manifest
       package { name }
+      distribution { webcSha256Hash }
       dependencies {
         edges {
           node {
@@ -532,6 +533,7 @@ async function resolveSourceRequirement(requirement) {
     ...requirement,
     resolvedName: version.package.name,
     resolvedVersion: version.version,
+    webcSha256: version.distribution?.webcSha256Hash,
     manifest: version.manifest,
     dependencies,
   };
@@ -839,30 +841,26 @@ async function downloadPackage(pkg) {
   }
 
   const tempPath = `${outputPath}.${crypto.randomUUID()}.tmp`;
+  // A version requirement cannot carry build metadata (`8.4.0+build.05`), which
+  // the registry does report, so fetch by hash whenever one is published.
+  const downloadSpec = pkg.webcSha256
+    ? `sha256:${pkg.webcSha256}`
+    : `${pkg.resolvedName}@=${pkg.resolvedVersion}`;
   log(
     `Downloading ${pkg.resolvedName}@${pkg.resolvedVersion} from ${sourceRegistry} to ${tempPath}`,
   );
   await appendDownloadLog(
-    `$ wasmer package download ${pkg.resolvedName}@=${pkg.resolvedVersion} -o ${tempPath}`,
+    `$ wasmer package download ${downloadSpec} -o ${tempPath}`,
   );
   try {
-    await runWasmer(
-      [
-        "package",
-        "download",
-        `${pkg.resolvedName}@=${pkg.resolvedVersion}`,
-        "-o",
-        tempPath,
-      ],
-      {
-        WASMER_REGISTRY: sourceRegistry,
-        // Do not leak the disposable local-registry WASMER_TOKEN into source
-        // package downloads. Public packages should be fetched anonymously unless
-        // LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN is explicitly provided.
-        WASMER_TOKEN: sourceToken ?? "",
-        RUST_LOG: process.env.LOCAL_PLATFORM_WASMER_DOWNLOAD_RUST_LOG ?? "info",
-      },
-    );
+    await runWasmer(["package", "download", downloadSpec, "-o", tempPath], {
+      WASMER_REGISTRY: sourceRegistry,
+      // Do not leak the disposable local-registry WASMER_TOKEN into source
+      // package downloads. Public packages should be fetched anonymously unless
+      // LOCAL_PLATFORM_PACKAGE_SOURCE_TOKEN is explicitly provided.
+      WASMER_TOKEN: sourceToken ?? "",
+      RUST_LOG: process.env.LOCAL_PLATFORM_WASMER_DOWNLOAD_RUST_LOG ?? "info",
+    });
   } catch (err) {
     let tempPathStatus = "missing";
     try {

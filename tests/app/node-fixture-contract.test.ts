@@ -39,6 +39,7 @@ test.concurrent(
   - name: data
     mount: /data
 `,
+      { includeDatabaseDrivers: false },
     );
 
     try {
