@@ -26,6 +26,7 @@ export async function prepareNodeFixtureDir(
   env: TestEnv,
   appName: string,
   appYamlExtra: string,
+  options: { includeDatabaseDrivers?: boolean } = {},
 ): Promise<string> {
   const dir = await createTempDir();
   for (const entry of ["package.json", "src"]) {
@@ -33,6 +34,20 @@ export async function prepareNodeFixtureDir(
       pathModule.join(NODE_FIXTURE_DIR, entry),
       pathModule.join(dir, entry),
       { recursive: true },
+    );
+  }
+  if (options.includeDatabaseDrivers === false) {
+    // Anybuild detects database capabilities from package dependencies. Keep
+    // DB-less scenarios DB-less; these drivers are only loaded by /results.
+    const manifestPath = pathModule.join(dir, "package.json");
+    const manifest = JSON.parse(
+      await fs.promises.readFile(manifestPath, "utf8"),
+    );
+    delete manifest.dependencies.mysql2;
+    delete manifest.dependencies.pg;
+    await fs.promises.writeFile(
+      manifestPath,
+      JSON.stringify(manifest, null, 2),
     );
   }
   const appYaml = `kind: wasmer.io/App.v0
@@ -47,7 +62,13 @@ ${appYamlExtra}`;
 export async function deployNodeFixture(
   env: TestEnv,
   appYamlExtra: string,
+  options: { includeDatabaseDrivers?: boolean } = {},
 ): Promise<AppInfo> {
-  const dir = await prepareNodeFixtureDir(env, randomAppName(), appYamlExtra);
+  const dir = await prepareNodeFixtureDir(
+    env,
+    randomAppName(),
+    appYamlExtra,
+    options,
+  );
   return env.deployAppDir(dir, { extraCliArgs: ["--build-remote"] });
 }

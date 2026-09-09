@@ -17,19 +17,19 @@ interface AppEnvironmentResponse {
 test("autobuild imports dotenv variables and warns without overwriting app variables", async () => {
   const env = TestEnv.fromEnv();
   const client = await env.stackmachineSdk();
-  const uploadUrl = await client.uploadFile(
+  const uploadUrl = await client.files.upload(
     await createZip({
       "index.html": "<html>environment import</html>",
       ".env": "ENV_IMPORT_NEW=from-file\nENV_IMPORT_EXISTING=from-file\n",
     }),
   );
   const messages: string[] = [];
-  const build = await client.deployApp({
+  const build = await client.deployments.create({
     appName: randomAppName(),
     owner: env.namespace,
     uploadUrl,
     waitForScreenshotGeneration: false,
-    secrets: [{ name: "ENV_IMPORT_EXISTING", value: "keep-original" }],
+    envVars: [{ name: "ENV_IMPORT_EXISTING", value: "keep-original" }],
   });
   build.subscribeToProgress((event) => {
     if (
@@ -71,6 +71,6 @@ test("autobuild imports dotenv variables and warns without overwriting app varia
       expect(message).not.toContain("keep-original");
     }
   } finally {
-    await client.deleteApp({ id: app.id });
+    await client.apps.del(app.id);
   }
 });
