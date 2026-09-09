@@ -229,7 +229,7 @@ before starting the stack.
 
 ## CI shape
 
-The reusable workflow `.github/workflows/local-platform-test.yaml` accepts only:
+The reusable workflow `.github/workflows/local-platform-test.yaml` accepts these core inputs:
 
 - `backend_version`
 - `edge_version`
@@ -239,6 +239,38 @@ The reusable workflow `.github/workflows/local-platform-test.yaml` accepts only:
 - `job_name`
 
 Code QA first warms the shared local-platform caches once, then fans out the suite matrix using the same reusable workflow.
+
+### GitHub App authentication for local-platform CI
+
+Edge CI selects `backend_version: resolve_prod` and downloads the candidate Edge
+binary from the caller's workflow run. Both downloads use a GitHub App token.
+
+Install the App on `wasmerio/backend` and `wasmerio/edge`. Give it repository
+permissions **Actions: read** and **Contents: read**. Create these GitHub
+organization Actions secrets and allow the `edge`, `backend`, and
+`wasmer-integration-tests` callers to access them:
+
+- `LOCAL_PLATFORM_GITHUB_APP_CLIENT_ID`: the App's Client ID.
+- `LOCAL_PLATFORM_GITHUB_APP_PRIVATE_KEY`: the complete PEM private key,
+  including the header, footer, and newlines.
+
+Every caller must pass the required secrets `github_app_client_id` and
+`github_app_private_key`. The suite forwards them to
+both cache preparation and every matrix job. Each job creates its own token
+after setup, before resolving versions or downloading artifacts. The token has
+read access to Backend and Edge only. The action revokes it when the job ends.
+Missing App credentials or token creation errors fail the job.
+
+The workflows accept only GitHub App credentials; there is no PAT or
+`GITHUB_TOKEN` fallback for artifact downloads. Publish the shared workflow and
+its Code QA caller together, then update the Edge and Backend callers. Existing
+PAT callers will fail workflow validation after the interface changes, so
+coordinate the rollout across all three repositories.
+
+Keep these credentials restricted to trusted CI. Approving an ordinary public
+fork PR run does not make repository secrets available to it. Do not execute
+untrusted contributor code in a privileged job with the App key or confidential
+artifacts. Keep embargoed security repositories on a separate App.
 
 ## Implementation
 

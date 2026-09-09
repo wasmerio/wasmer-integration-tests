@@ -33,9 +33,12 @@ on:
         default: depot-ubuntu-24.04-16
         description: "Runner label for the suite jobs. Callers without depot must override (e.g. ubuntu-24.04)."
     secrets:
-      pat:
-        required: false
-        description: "PAT with actions:read on the artifact source repo and contents:read on private release repos."
+      github_app_client_id:
+        required: true
+        description: "GitHub App Client ID."
+      github_app_private_key:
+        required: true
+        description: "GitHub App PEM private key."
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -88,7 +91,8 @@ jobs:
       timeout_minutes: 60
       runner: ${{ inputs.runner }}
     secrets:
-      pat: ${{ secrets.pat }}
+      github_app_client_id: ${{ secrets.github_app_client_id }}
+      github_app_private_key: ${{ secrets.github_app_private_key }}
 
   tests:
     name: Local platform integration test / ${{ matrix.display_id || matrix.id }}
@@ -114,4 +118,5 @@ jobs:
       timeout_minutes: ${{ matrix.timeout_minutes || 45 }}
       runner: ${{ inputs.runner }}
     secrets:
-      pat: ${{ secrets.pat }}
+      github_app_client_id: ${{ secrets.github_app_client_id }}
+      github_app_private_key: ${{ secrets.github_app_private_key }}

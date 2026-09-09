@@ -52,7 +52,8 @@ jobs:
       # keep the suite's depot-16 default.
       runner: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || 'aux-test-runners' }}
     secrets:
-      pat: ${{ secrets.LOCAL_PLATFORM_ARTIFACT_FETCH_PAT }}
+      github_app_client_id: ${{ secrets.LOCAL_PLATFORM_GITHUB_APP_CLIENT_ID }}
+      github_app_private_key: ${{ secrets.LOCAL_PLATFORM_GITHUB_APP_PRIVATE_KEY }}
 
   fmt:
     name: File format check

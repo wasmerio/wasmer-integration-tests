@@ -274,7 +274,7 @@ def resolve_backend_dev_github_release(ctx: Ctx) -> str:
                     f"(GitHub API error or missing access; see "
                     f"logs/backend-release-list.err). This is usually transient "
                     f"— retry, or set BACKEND_DEV_GITHUB_TAG explicitly. Ensure "
-                    f"LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on "
+                    f"the GitHub token has Contents: Read on "
                     f"{repo}."
                 )
             fail(
@@ -480,7 +480,7 @@ def resolve_edge_dev_github_release(ctx: Ctx) -> str:
                 f"(GitHub API error or missing access; see "
                 f"logs/edge-release-list.err). This is usually transient — "
                 f"retry, or set EDGE_DEV_GITHUB_TAG explicitly. Ensure "
-                f"LOCAL_PLATFORM_ARTIFACT_FETCH_PAT has Contents: Read on "
+                f"the GitHub token has Contents: Read on "
                 f"{repo}."
             )
         fail(
