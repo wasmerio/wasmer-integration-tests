@@ -730,9 +730,7 @@ def up(ctx: Ctx) -> None:
     if _needs_github_token(ctx):
         ensure_github_token(ctx)
 
-    if ctx.truthy("LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT"):
-        log("Custom artifact fetch PAT is present for private artifact/release fetches")
-    elif ctx.get("GH_TOKEN") or ctx.get("GITHUB_TOKEN"):
+    if ctx.get("GH_TOKEN") or ctx.get("GITHUB_TOKEN"):
         log("GitHub token is available for artifact/release fetches")
     else:
         log_warn(

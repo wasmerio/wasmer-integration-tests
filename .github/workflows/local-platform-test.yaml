@@ -52,8 +52,12 @@ on:
           heavy concurrent template builds can kill the runner outright. A
           larger depot runner gives the co-resident stack headroom.
     secrets:
-      pat:
-        required: false
+      github_app_client_id:
+        required: true
+        description: "GitHub App Client ID."
+      github_app_private_key:
+        required: true
+        description: "GitHub App PEM private key."
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -69,6 +73,18 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
+      - name: Validate GitHub App credentials
+        env:
+          APP_CLIENT_ID: ${{ secrets.github_app_client_id }}
+          APP_PRIVATE_KEY: ${{ secrets.github_app_private_key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+            echo "::error::GitHub App authentication requires LOCAL_PLATFORM_GITHUB_APP_CLIENT_ID and LOCAL_PLATFORM_GITHUB_APP_PRIVATE_KEY. Make both Actions secrets available to the caller and pass them to this workflow."
+            exit 1
+          fi
+
       # Always check out the integration-tests repo itself (public), even when
       # this reusable workflow is called from another repository (e.g. a service
       # building its own image artifact). Without an explicit repository the
@@ -128,6 +144,32 @@ jobs:
 
       - run: make setup
 
+      # Mint inside each job, after setup: installation tokens expire after
+      # one hour and the action revokes its token when this job finishes.
+      - name: Create artifact access token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.github_app_client_id }}
+          private-key: ${{ secrets.github_app_private_key }}
+          owner: wasmerio
+          repositories: |
+            backend
+            edge
+          permission-actions: read
+          permission-contents: read
+
+      - name: Validate artifact access token
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::GitHub App token creation returned no token."
+            exit 1
+          fi
+
       # Edge's compiled-module artifacts are only valid for the Edge build that
       # produced them (they live under a per-runtime-hash directory), so the
       # cache key must contain the RESOLVED release tag, not a floating
@@ -140,7 +182,7 @@ jobs:
           EDGE_VERSION: ${{ inputs.edge_version }}
           EDGE_ENGINE: ${{ inputs.edge_engine }}
           EDGE_LLVM_PACKAGES: ${{ inputs.edge_llvm_packages }}
-          GH_TOKEN: ${{ secrets.pat || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           # Cache keys reject commas and the package list carries slashes.
@@ -184,7 +226,7 @@ jobs:
           LOCAL_TEST_COMMAND: ${{ inputs.test_command }}
           LOCAL_PLATFORM_PREPARE_ONLY: ${{ inputs.prepare_only }}
           LOCAL_PLATFORM_SUITE_ID: ${{ inputs.suite_id }}
-          HAS_ARTIFACT_FETCH_PAT: ${{ secrets.pat != '' }}
+          HAS_ARTIFACT_FETCH_TOKEN: ${{ steps.app-token.outputs.token != '' }}
         run: |
           echo "Local platform requested versions:"
           echo "  backend_version=$BACKEND_VERSION"
@@ -192,28 +234,7 @@ jobs:
           echo "  suite_id=$LOCAL_PLATFORM_SUITE_ID"
           echo "  prepare_only=$LOCAL_PLATFORM_PREPARE_ONLY"
           echo "  test_command=$LOCAL_TEST_COMMAND"
-          echo "  artifact_fetch_pat_present=$HAS_ARTIFACT_FETCH_PAT"
-
-      - name: Validate private artifact/release access token
-        env:
-          BACKEND_VERSION: ${{ inputs.backend_version }}
-          EDGE_VERSION: ${{ inputs.edge_version }}
-          GH_TOKEN: ${{ secrets.pat }}
-        run: |
-          set -euo pipefail
-          needs_pat=0
-          case "$BACKEND_VERSION" in
-            github-artifact:*|artifact:*|github-release:*|resolve_prod|resolve_dev|latest_dev|latest-dev) needs_pat=1 ;;
-          esac
-          case "$EDGE_VERSION" in
-            resolve_dev|latest_dev|latest-dev|github-artifact:*|artifact:*|github-release:*) needs_pat=1 ;;
-          esac
-
-          if [ "$needs_pat" = "1" ] && [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::LOCAL_PLATFORM_ARTIFACT_FETCH_PAT is required for private wasmerio/backend artifacts or wasmerio/edge dev releases, but it was not passed to the workflow."
-            echo "Create repository/org secret LOCAL_PLATFORM_ARTIFACT_FETCH_PAT and make sure it is available to this repository/event."
-            exit 1
-          fi
+          echo "  artifact_fetch_token_present=$HAS_ARTIFACT_FETCH_TOKEN"
 
       # The dind sidecar resolves bind-mount sources in its own filesystem, where
       # the runner's docker CLI paths do not exist and become empty dirs instead.
@@ -262,8 +283,7 @@ jobs:
           LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS: "3600"
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
-          GH_TOKEN: ${{ secrets.pat }}
-          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: make local-platform-prepare
 
       - name: Run local platform tests
@@ -278,8 +298,7 @@ jobs:
           LOCAL_PLATFORM_ENSURE_COMPILED_TIMEOUT_SECONDS: "3600"
           LOCAL_PLATFORM_TEST_TIMEOUT_SECONDS: "7200"
           WASMER_TEST_FETCH_TIMEOUT_MS: "180000"
-          GH_TOKEN: ${{ secrets.pat }}
-          LOCAL_PLATFORM_ARTIFACT_FETCH_PAT_PRESENT: ${{ secrets.pat != '' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: make local-test
 
       # The stack must be down before the save: a live edge keeps writing
