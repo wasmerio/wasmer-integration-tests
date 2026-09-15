@@ -28,23 +28,37 @@
 // the moment the bug is fixed.
 {
   "tests/job/cronjob-execute.test.ts::a cronjob execute action increments its durable counter": {
-    "ticket": "BE-1705",
+    "ticket": "EDGE-2077",
     "envs": ["prod"],
-    "note": "pre-existing orphan schedules starve fresh cronjobs on prod even after fix 51e05bb reached production 2026-08-21 (execute counter timed out in that run); dev green — bugt dropped from scope with the nightly sweep 2026-08-24",
+    "note": "prod cron nodes run every assigned job as a 15-min batch under resource backoff; a fresh cronjob lands on fr-pari1-bm-0 (5.5k jobs) and first fires 7–16 min after deploy — red 1 of 7 prod runs Sep 10-14, dev green",
   },
   "tests/job/cronjob-app-deletion.test.ts::deleting an app stops its cronjob from invoking another app": {
-    "ticket": "BE-1705",
+    "ticket": "EDGE-2077",
     "envs": ["prod"],
-    "note": "pre-existing orphan schedules starve fresh cronjobs; prod red 2 of 6 nights Aug 12-18 and only one green prod leg since fix 51e05bb shipped 2026-08-21 — bugt dropped from scope with the nightly sweep 2026-08-24",
+    "note": "same 15-min batch starvation on fr-pari1-bm-0: the counter never increments inside the 6-min start window — red 3 of 7 prod runs Sep 10-14 (one of them the us-hillsboro-3 gateway wedge, SRE-1769), dev green",
   },
-  "tests/app/cdn-cache.test.ts::app CDN cache smoke cdn cache honors HTTP semantics, purge, and cache key isolation": {
-    "ticket": "EDGE-1994",
+  "tests/job/cronjob-config-update.test.ts::a cronjob config update replaces its prior fetch action": {
+    "ticket": "EDGE-2077",
     "envs": ["prod"],
-    "note": "prod never serves a cached response even pinned to one node — red 7 of 7 nights Aug 12-18 and again in the 2026-08-21 production deploy run; bugt dropped from scope with the nightly sweep 2026-08-24",
+    "note": "fresh `* * * * *` jobs on fr-pari1-bm-0 first fire 7–16 min after deploy and then only twice per 15 min (edge jobs table: no rows between deploy 04:14Z and 04:27Z on Sep 14); the replaced job stops correctly — red 4 of 7 prod runs Sep 10-14, dev green",
+  },
+  "tests/job/cronjob-config-removal.test.ts::removing a cronjob from config stops it without deleting its app": {
+    "ticket": "EDGE-2077",
+    "envs": ["prod"],
+    "note": "same starvation: configured cronjob never increments the counter within 6 min — red 3 of 7 prod runs Sep 10-14, dev green",
+  },
+  "tests/job/cronjob-fetch.test.ts::a cronjob fetch increments a durable counter in its target app": {
+    "ticket": "EDGE-2077",
+    "envs": ["prod"],
+    "note": "same starvation: prod push run 34849258103 deployed counter+cron 14:44:38Z/14:44:49Z, first POST /inc 15:07:55Z (23 min) from fr-pari1-bm-0, then 216 fires in 15.5 h (~23 % of minutes)",
   },
   "tests/app/templates.test.ts::app templates deploy Template remote build: next-react-server-components": {
     "ticket": "BE-1789",
     "note": "anybuild Node preset runs an unpinned `pnpm dlx next-bundle@1.0.0`, which now aborts on ERR_PNPM_IGNORED_BUILDS for esbuild@0.27.0 — first seen in the 2026-09-07 nightly (2026-09-04 green), reproduced on dev, prod and the local platform",
+  },
+  "tests/app/templates.test.ts::app templates deploy Template remote build: mcp-chatgpt-starter": {
+    "ticket": "ECO-496",
+    "note": "BE-1799 (duplicate) — boots into `No module named 'pydantic_core._pydantic_core'`: wasix index rebuilt pydantic-core on Sep 14 with the `-wasi.so` suffix of python 3.13.20 while backend anybuild 0.28.4 pins 3.13.17 — red dev+prod since nightly 34927892479, green Sep 14",
   },
   "tests/app/python-fixture-contract.test.ts::python-fixture-contract-endpoints": {
     "ticket": "WAX-615",
